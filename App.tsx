@@ -1,20 +1,32 @@
+// App.tsx - Point d'entrée principal de l'application
+import React, { useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { AuthProvider } from './src/contexts/AuthContext';
+import AppNavigator from './src/navigation/AppNavigator';
+import { initializeDefaultData } from './src/services/equipmentService';
 
 export default function App() {
+  useEffect(() => {
+    // Initialiser les données par défaut au démarrage
+    const initData = async () => {
+      try {
+        await initializeDefaultData();
+        console.log('App initialized successfully');
+      } catch (error) {
+        console.error('Error initializing app:', error);
+      }
+    };
+    
+    initData();
+  }, []);
+
   return (
-    <View style={styles.container}>
-      <Text>Open up App.tsx to start working on your app!</Text>
-      <StatusBar style="auto" />
-    </View>
+    <SafeAreaProvider>
+      <AuthProvider>
+        <StatusBar style="light" />
+        <AppNavigator />
+      </AuthProvider>
+    </SafeAreaProvider>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});

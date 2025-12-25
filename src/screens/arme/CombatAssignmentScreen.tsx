@@ -1,0 +1,894 @@
+// Écran de signature pour ציוד לחימה - Combat Equipment Assignment
+import React, { useRef, useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  Alert,
+  ActivityIndicator,
+  ScrollView,
+  TextInput,
+} from 'react-native';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import SignatureCanvas from 'react-native-signature-canvas';
+import { RootStackParamList } from '../../types';
+import { assignmentService, soldierService } from '../../services/firebaseService';
+import { useAuth } from '../../contexts/AuthContext';
+import { Colors, Shadows } from '../../theme/colors';
+
+type CombatAssignmentRouteProp = RouteProp<RootStackParamList, 'CombatAssignment'>;
+
+interface SubEquipment {
+  id: string;
+  name: string;
+  selected: boolean;
+}
+
+interface EquipmentItem {
+  id: string;
+  name: string;
+  category: string;
+  quantity: number;
+  selected: boolean;
+  serial?: string;
+  needsSerial: boolean;
+  subEquipments?: SubEquipment[];
+}
+
+const CombatAssignmentScreen: React.FC = () => {
+  const navigation = useNavigation();
+  const route = useRoute<CombatAssignmentRouteProp>();
+  const { soldierId } = route.params;
+  const { user } = useAuth();
+
+  const signatureRef = useRef<any>(null);
+  const [signature, setSignature] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [soldier, setSoldier] = useState<any>(null);
+  const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
+
+  // Équipements par catégorie
+  const [equipment, setEquipment] = useState<EquipmentItem[]>([
+    // נשק ראשי
+    { id: 'w1', name: 'M16', category: 'נשק ראשי', quantity: 1, selected: false, needsSerial: true,
+      subEquipments: [
+        { id: 'w1s1', name: 'מחסנית', selected: false },
+        { id: 'w1s2', name: 'רצועה', selected: false },
+        { id: 'w1s3', name: 'כלי טעינה', selected: false },
+      ]
+    },
+    { id: 'w2', name: 'M203', category: 'נשק ראשי', quantity: 1, selected: false, needsSerial: true,
+      subEquipments: [
+        { id: 'w2s1', name: 'מחסנית', selected: false },
+        { id: 'w2s2', name: 'רצועה', selected: false },
+        { id: 'w2s3', name: 'כלי טעינה', selected: false },
+        { id: 'w2s4', name: 'קנה M203', selected: false },
+      ]
+    },
+    { id: 'w3', name: 'קלע', category: 'נשק ראשי', quantity: 1, selected: false, needsSerial: true },
+    { id: 'w4', name: 'נגב', category: 'נשק ראשי', quantity: 1, selected: false, needsSerial: true,
+      subEquipments: [
+        { id: 'w4s1', name: 'מחסנית', selected: false },
+        { id: 'w4s2', name: 'רצועה', selected: false },
+        { id: 'w4s3', name: 'חצובה', selected: false },
+      ]
+    },
+    { id: 'w5', name: 'מאג', category: 'נשק ראשי', quantity: 1, selected: false, needsSerial: true,
+      subEquipments: [
+        { id: 'w5s1', name: 'מחסנית', selected: false },
+        { id: 'w5s2', name: 'רצועה', selected: false },
+        { id: 'w5s3', name: 'חצובה', selected: false },
+      ]
+    },
+    { id: 'w6', name: 'נגמ"ש', category: 'נשק ראשי', quantity: 1, selected: false, needsSerial: true },
+
+    // אביזרי נשק
+    { id: 'a1', name: 'אופטיקה (טריג\'יקון)', category: 'אביזרי נשק', quantity: 1, selected: false, needsSerial: true },
+    { id: 'a2', name: 'אופטיקה (מאורס)', category: 'אביזרי נשק', quantity: 1, selected: false, needsSerial: true },
+    { id: 'a3', name: 'לייזר', category: 'אביזרי נשק', quantity: 1, selected: false, needsSerial: true },
+    { id: 'a4', name: 'פנס נשק', category: 'אביזרי נשק', quantity: 1, selected: false, needsSerial: true },
+    { id: 'a5', name: 'ידית אחיזה', category: 'אביזרי נשק', quantity: 1, selected: false, needsSerial: false },
+    { id: 'a6', name: 'רתע', category: 'אביזרי נשק', quantity: 1, selected: false, needsSerial: false },
+
+    // ציוד לוחם
+    { id: 'c1', name: 'אפוד טקטי', category: 'ציוד לוחם', quantity: 1, selected: false, needsSerial: false },
+    { id: 'c2', name: 'וסט קרמי', category: 'ציוד לוחם', quantity: 1, selected: false, needsSerial: true },
+    { id: 'c3', name: 'קסדה', category: 'ציוד לוחם', quantity: 1, selected: false, needsSerial: true },
+    { id: 'c4', name: 'מוביל מחסניות', category: 'ציוד לוחם', quantity: 1, selected: false, needsSerial: false },
+    { id: 'c5', name: 'פאוץ\' רימונים', category: 'ציוד לוחם', quantity: 1, selected: false, needsSerial: false },
+    { id: 'c6', name: 'תיק גב לחימה', category: 'ציוד לוחם', quantity: 1, selected: false, needsSerial: false },
+    { id: 'c7', name: 'חגורת לחימה', category: 'ציוד לוחם', quantity: 1, selected: false, needsSerial: false },
+
+    // אופטיקה ותצפית
+    { id: 'o1', name: 'משקפי לילה', category: 'אופטיקה ותצפית', quantity: 1, selected: false, needsSerial: true },
+    { id: 'o2', name: 'דרבן תצפית', category: 'אופטיקה ותצפית', quantity: 1, selected: false, needsSerial: true },
+    { id: 'o3', name: 'מצפן', category: 'אופטיקה ותצפית', quantity: 1, selected: false, needsSerial: true },
+
+    // קשר
+    { id: 'r1', name: 'מכשיר קשר', category: 'קשר', quantity: 1, selected: false, needsSerial: true },
+    { id: 'r2', name: 'אוזניות קשר', category: 'קשר', quantity: 1, selected: false, needsSerial: true },
+    { id: 'r3', name: 'סוללות קשר', category: 'קשר', quantity: 2, selected: false, needsSerial: false },
+  ]);
+
+  // Manot prédéfinies
+  const manot = [
+    {
+      id: 'mana1',
+      name: 'מנת מפקד',
+      items: ['w1', 'a1', 'c1', 'c3'],
+    },
+    {
+      id: 'mana2',
+      name: 'מנת לוחם',
+      items: ['w1', 'c1', 'c3'],
+    },
+    {
+      id: 'mana3',
+      name: 'מנת רימונאי',
+      items: ['w2', 'c1', 'c3'],
+    },
+    {
+      id: 'mana4',
+      name: 'מנת מאגיסט',
+      items: ['w5', 'c1', 'c3'],
+    },
+    {
+      id: 'mana5',
+      name: 'מנת קלע',
+      items: ['w3', 'c1', 'c3'],
+    },
+  ];
+
+  const categories = [
+    { name: 'נשק ראשי', color: '#e74c3c' },
+    { name: 'אביזרי נשק', color: '#e67e22' },
+    { name: 'ציוד לוחם', color: '#27ae60' },
+    { name: 'אופטיקה ותצפית', color: '#9b59b6' },
+    { name: 'קשר', color: '#3498db' },
+  ];
+
+  useEffect(() => {
+    loadSoldierData();
+  }, []);
+
+  const loadSoldierData = async () => {
+    try {
+      const soldierData = await soldierService.getById(soldierId);
+      setSoldier(soldierData);
+    } catch (error) {
+      Alert.alert('שגיאה', 'נכשל בטעינת נתוני החייל');
+      console.error('Error loading soldier:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const webStyle = `.m-signature-pad {
+    box-shadow: none;
+    border: none;
+    background-color: #ffffff;
+  }
+  .m-signature-pad--body {
+    border: none;
+  }
+  .m-signature-pad--footer {
+    display: none;
+  }
+  body,html {
+    width: 100%;
+    height: 100%;
+  }`;
+
+  const handleOK = (sig: string) => {
+    setSignature(sig);
+  };
+
+  const handleClear = () => {
+    signatureRef.current?.clearSignature();
+    setSignature(null);
+  };
+
+  const selectMana = (manaId: string) => {
+    const mana = manot.find(m => m.id === manaId);
+    if (!mana) return;
+
+    setEquipment(prev =>
+      prev.map(item => ({
+        ...item,
+        selected: mana.items.includes(item.id),
+        subEquipments: item.subEquipments?.map(sub => ({ ...sub, selected: mana.items.includes(item.id) })),
+      }))
+    );
+
+    Alert.alert('הצלחה', `${mana.name} נבחרה`);
+  };
+
+  const toggleCategory = (categoryName: string) => {
+    setCollapsedCategories(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(categoryName)) {
+        newSet.delete(categoryName);
+      } else {
+        newSet.add(categoryName);
+      }
+      return newSet;
+    });
+  };
+
+  const toggleEquipment = (id: string) => {
+    setEquipment(prev =>
+      prev.map(item =>
+        item.id === id ? { ...item, selected: !item.selected } : item
+      )
+    );
+  };
+
+  const updateQuantity = (id: string, delta: number) => {
+    setEquipment(prev =>
+      prev.map(item => {
+        if (item.id === id) {
+          const newQuantity = Math.max(0, item.quantity + delta);
+          return { ...item, quantity: newQuantity };
+        }
+        return item;
+      })
+    );
+  };
+
+  const updateSerial = (id: string, serial: string) => {
+    setEquipment(prev =>
+      prev.map(item =>
+        item.id === id ? { ...item, serial } : item
+      )
+    );
+  };
+
+  const toggleSubEquipment = (equipmentId: string, subId: string) => {
+    setEquipment(prev =>
+      prev.map(item => {
+        if (item.id === equipmentId && item.subEquipments) {
+          return {
+            ...item,
+            subEquipments: item.subEquipments.map(sub =>
+              sub.id === subId ? { ...sub, selected: !sub.selected } : sub
+            ),
+          };
+        }
+        return item;
+      })
+    );
+  };
+
+  const handleSaveAndSign = async () => {
+    const selectedItems = equipment.filter(item => item.selected);
+    if (selectedItems.length === 0) {
+      Alert.alert('שגיאה', 'אנא בחר לפחות פריט אחד');
+      return;
+    }
+
+    const missingSerials = selectedItems.filter(
+      item => item.needsSerial && !item.serial
+    );
+    if (missingSerials.length > 0) {
+      Alert.alert(
+        'שגיאה',
+        `אנא הזן מסטב עבור: ${missingSerials.map(i => i.name).join(', ')}`
+      );
+      return;
+    }
+
+    if (!signature) {
+      Alert.alert('שגיאה', 'אנא חתום לפני שמירה');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const assignmentItems = selectedItems.map(item => ({
+        equipmentId: item.id,
+        equipmentName: item.name,
+        quantity: item.quantity,
+        serial: item.serial || undefined,
+        subEquipments: item.subEquipments
+          ?.filter(sub => sub.selected)
+          .map(sub => ({ name: sub.name, serial: undefined })),
+      }));
+
+      await assignmentService.create({
+        soldierId,
+        soldierName: soldier.name,
+        soldierPersonalNumber: soldier.personalNumber,
+        type: 'combat',
+        items: assignmentItems,
+        signature,
+        status: 'נופק לחייל',
+        assignedBy: user?.id || '',
+      });
+
+      Alert.alert('הצלחה', 'החתימה נשמרה בהצלחה', [
+        {
+          text: 'אישור',
+          onPress: () => {
+            (navigation as any).reset({
+              index: 0,
+              routes: [{ name: 'Home' }],
+            });
+          },
+        },
+      ]);
+    } catch (error) {
+      Alert.alert('שגיאה', 'נכשל בשמירת החתימה');
+      console.error('Error saving signature:', error);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Text style={styles.backButtonText}>←</Text>
+          </TouchableOpacity>
+          <View style={styles.headerContent}>
+            <Text style={styles.title}>החתמת ציוד לחימה</Text>
+          </View>
+        </View>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={Colors.modules.arme} />
+        </View>
+      </View>
+    );
+  }
+
+  if (!soldier) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.emptyText}>החייל לא נמצא</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+          disabled={saving}
+        >
+          <Text style={styles.backButtonText}>←</Text>
+        </TouchableOpacity>
+        <View style={styles.headerContent}>
+          <Text style={styles.title}>החתמת ציוד לחימה</Text>
+          <Text style={styles.subtitle}>🔫 נשקיה</Text>
+        </View>
+      </View>
+
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        {/* 1. פרטי החייל */}
+        <View style={styles.soldierCard}>
+          <View style={styles.soldierRow}>
+            <Text style={styles.soldierValue}>{soldier.name}</Text>
+            <Text style={styles.soldierLabel}>שם החייל:</Text>
+          </View>
+          <View style={styles.soldierRow}>
+            <Text style={styles.soldierValue}>{soldier.personalNumber}</Text>
+            <Text style={styles.soldierLabel}>מספר אישי:</Text>
+          </View>
+          <View style={styles.soldierRow}>
+            <Text style={styles.soldierValue}>{soldier.company}</Text>
+            <Text style={styles.soldierLabel}>פלוגה:</Text>
+          </View>
+          {soldier.phone && (
+            <View style={styles.soldierRow}>
+              <Text style={styles.soldierValue}>{soldier.phone}</Text>
+              <Text style={styles.soldierLabel}>טלפון:</Text>
+            </View>
+          )}
+        </View>
+
+        {/* 2. בחירת מנה */}
+        <Text style={styles.sectionTitle}>בחירת מנה (אופציונלי)</Text>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.manaScroll}
+          contentContainerStyle={styles.manaContainer}
+        >
+          {manot.map(mana => (
+            <TouchableOpacity
+              key={mana.id}
+              style={styles.manaChip}
+              onPress={() => selectMana(mana.id)}
+            >
+              <Text style={styles.manaChipText}>{mana.name}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+
+        {/* 3. רשימת ציוד לפי קטגוריות */}
+        <Text style={styles.sectionTitle}>בחירת ציוד</Text>
+
+        {categories.map(category => {
+          const categoryEquipment = equipment.filter(e => e.category === category.name);
+          const isCollapsed = collapsedCategories.has(category.name);
+
+          return (
+            <View key={category.name} style={styles.categorySection}>
+              <TouchableOpacity
+                style={[styles.categoryHeader, { borderRightColor: category.color }]}
+                onPress={() => toggleCategory(category.name)}
+              >
+                <Text style={styles.categoryToggle}>{isCollapsed ? '▼' : '▲'}</Text>
+                <Text style={styles.categoryTitle}>{category.name}</Text>
+              </TouchableOpacity>
+
+              {!isCollapsed && (
+                <View style={styles.categoryContent}>
+                  {categoryEquipment.map(item => (
+                    <View key={item.id} style={styles.equipmentItem}>
+                      <View style={styles.equipmentRow}>
+                        {/* Checkbox */}
+                        <TouchableOpacity
+                          style={styles.checkbox}
+                          onPress={() => toggleEquipment(item.id)}
+                        >
+                          {item.selected && <Text style={styles.checkmark}>✓</Text>}
+                        </TouchableOpacity>
+
+                        {/* Info */}
+                        <View style={styles.equipmentMain}>
+                          <View style={styles.equipmentInfo}>
+                            <Text style={styles.equipmentName}>{item.name}</Text>
+                          </View>
+
+                          {/* Quantité */}
+                          {item.selected && (
+                            <View style={styles.quantityControls}>
+                              <TouchableOpacity
+                                style={styles.quantityButton}
+                                onPress={() => updateQuantity(item.id, 1)}
+                              >
+                                <Text style={styles.quantityButtonText}>+</Text>
+                              </TouchableOpacity>
+                              <Text style={styles.quantityText}>{item.quantity}</Text>
+                              <TouchableOpacity
+                                style={styles.quantityButton}
+                                onPress={() => updateQuantity(item.id, -1)}
+                              >
+                                <Text style={styles.quantityButtonText}>-</Text>
+                              </TouchableOpacity>
+                            </View>
+                          )}
+                        </View>
+
+                        {/* מסטב */}
+                        {item.selected && item.needsSerial && (
+                          <TextInput
+                            style={styles.serialInput}
+                            placeholder="מסטב"
+                            placeholderTextColor={Colors.text.light}
+                            value={item.serial || ''}
+                            onChangeText={(text) => updateSerial(item.id, text)}
+                            textAlign="right"
+                          />
+                        )}
+                      </View>
+
+                      {/* תת-ציוד */}
+                      {item.selected && item.subEquipments && item.subEquipments.length > 0 && (
+                        <View style={styles.subEquipmentContainer}>
+                          <Text style={styles.subEquipmentTitle}>תת-ציוד:</Text>
+                          {item.subEquipments.map(sub => (
+                            <TouchableOpacity
+                              key={sub.id}
+                              style={styles.subEquipmentRow}
+                              onPress={() => toggleSubEquipment(item.id, sub.id)}
+                            >
+                              <View style={styles.subCheckbox}>
+                                {sub.selected && <Text style={styles.subCheckmark}>✓</Text>}
+                              </View>
+                              <Text style={styles.subEquipmentName}>{sub.name}</Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      )}
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
+          );
+        })}
+
+        {/* 4. חתימה */}
+        <Text style={styles.sectionTitle}>חתימה</Text>
+        <View style={styles.signatureContainer}>
+          <SignatureCanvas
+            ref={signatureRef}
+            onOK={handleOK}
+            descriptionText=""
+            clearText="נקה"
+            confirmText="אשר"
+            webStyle={webStyle}
+            backgroundColor="#ffffff"
+            penColor="#000000"
+          />
+        </View>
+
+        <TouchableOpacity
+          style={styles.clearSignatureButton}
+          onPress={handleClear}
+          disabled={saving}
+        >
+          <Text style={styles.clearSignatureText}>🗑️ נקה חתימה</Text>
+        </TouchableOpacity>
+
+        {/* 5. כפתורי פעולה */}
+        <View style={styles.actionButtons}>
+          <TouchableOpacity
+            style={[styles.saveButton, saving && styles.saveButtonDisabled]}
+            onPress={handleSaveAndSign}
+            disabled={saving}
+          >
+            {saving ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.saveButtonText}>✓ שמור והחתם</Text>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.pdfButton}
+            onPress={() => Alert.alert('בקרוב', 'יצירת טופס 982 תהיה זמינה בקרוב')}
+          >
+            <Text style={styles.pdfButtonText}>📄 צור טופס 982</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.cancelButton}
+            onPress={() => navigation.goBack()}
+            disabled={saving}
+          >
+            <Text style={styles.cancelButtonText}>❌ ביטול</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    </View>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: Colors.background.primary,
+  },
+  header: {
+    backgroundColor: Colors.background.header,
+    paddingTop: 60,
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    ...Shadows.medium,
+  },
+  backButton: {
+    position: 'absolute',
+    left: 20,
+    bottom: 20,
+    padding: 5,
+  },
+  backButtonText: {
+    fontSize: 28,
+    color: Colors.text.white,
+  },
+  headerContent: {
+    alignItems: 'flex-end',
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: Colors.text.white,
+    marginBottom: 5,
+  },
+  subtitle: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.8)',
+  },
+  content: {
+    flex: 1,
+    padding: 20,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyText: {
+    fontSize: 16,
+    color: Colors.text.secondary,
+    textAlign: 'center',
+    marginTop: 50,
+  },
+  soldierCard: {
+    backgroundColor: Colors.background.card,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: Colors.border.light,
+    ...Shadows.small,
+  },
+  soldierRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border.light,
+  },
+  soldierLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: Colors.text.secondary,
+  },
+  soldierValue: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: Colors.text.primary,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: Colors.text.primary,
+    marginBottom: 15,
+    marginTop: 10,
+    textAlign: 'right',
+  },
+  manaScroll: {
+    marginBottom: 20,
+  },
+  manaContainer: {
+    gap: 10,
+    paddingVertical: 5,
+  },
+  manaChip: {
+    backgroundColor: Colors.modules.arme,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    ...Shadows.small,
+  },
+  manaChipText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: Colors.text.white,
+  },
+  categorySection: {
+    marginBottom: 15,
+  },
+  categoryHeader: {
+    backgroundColor: Colors.background.card,
+    borderRadius: 10,
+    padding: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderRightWidth: 4,
+    borderWidth: 1,
+    borderColor: Colors.border.light,
+    ...Shadows.small,
+  },
+  categoryTitle: {
+    fontSize: 17,
+    fontWeight: 'bold',
+    color: Colors.text.primary,
+    flex: 1,
+    textAlign: 'right',
+  },
+  categoryToggle: {
+    fontSize: 14,
+    color: Colors.text.secondary,
+    marginRight: 10,
+  },
+  categoryContent: {
+    marginTop: 10,
+    gap: 8,
+  },
+  equipmentItem: {
+    backgroundColor: Colors.background.card,
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: Colors.border.light,
+    ...Shadows.small,
+  },
+  equipmentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  checkbox: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: Colors.border.dark,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 12,
+  },
+  checkmark: {
+    fontSize: 18,
+    color: Colors.status.success,
+    fontWeight: 'bold',
+  },
+  equipmentMain: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  equipmentInfo: {
+    flex: 1,
+    alignItems: 'flex-end',
+  },
+  equipmentName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.text.primary,
+  },
+  quantityControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  quantityButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: Colors.modules.arme,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  quantityButtonText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: Colors.text.white,
+  },
+  quantityText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: Colors.text.primary,
+    minWidth: 30,
+    textAlign: 'center',
+  },
+  serialInput: {
+    borderWidth: 1,
+    borderColor: Colors.border.medium,
+    borderRadius: 8,
+    padding: 8,
+    fontSize: 14,
+    color: Colors.text.primary,
+    backgroundColor: Colors.background.secondary,
+    minWidth: 100,
+    marginRight: 10,
+  },
+  subEquipmentContainer: {
+    marginTop: 12,
+    marginRight: 40,
+    backgroundColor: Colors.background.secondary,
+    borderRadius: 8,
+    padding: 10,
+  },
+  subEquipmentTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: Colors.text.secondary,
+    marginBottom: 8,
+    textAlign: 'right',
+  },
+  subEquipmentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    justifyContent: 'flex-end',
+  },
+  subCheckbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 4,
+    borderWidth: 2,
+    borderColor: Colors.border.medium,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 10,
+  },
+  subCheckmark: {
+    fontSize: 14,
+    color: Colors.status.success,
+    fontWeight: 'bold',
+  },
+  subEquipmentName: {
+    fontSize: 14,
+    color: Colors.text.primary,
+  },
+  signatureContainer: {
+    height: 200,
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: Colors.military.navyBlue,
+    marginBottom: 15,
+    ...Shadows.medium,
+  },
+  clearSignatureButton: {
+    backgroundColor: Colors.background.card,
+    borderRadius: 10,
+    padding: 12,
+    alignItems: 'center',
+    marginBottom: 15,
+    borderWidth: 2,
+    borderColor: Colors.status.danger,
+  },
+  clearSignatureText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: Colors.status.danger,
+  },
+  actionButtons: {
+    gap: 12,
+    marginBottom: 30,
+  },
+  saveButton: {
+    backgroundColor: Colors.status.success,
+    borderRadius: 12,
+    padding: 18,
+    alignItems: 'center',
+    ...Shadows.medium,
+  },
+  saveButtonDisabled: {
+    opacity: 0.5,
+  },
+  saveButtonText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: Colors.text.white,
+  },
+  pdfButton: {
+    backgroundColor: Colors.status.info,
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    ...Shadows.small,
+  },
+  pdfButtonText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: Colors.text.white,
+  },
+  cancelButton: {
+    backgroundColor: Colors.background.card,
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: Colors.status.danger,
+  },
+  cancelButtonText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: Colors.status.danger,
+  },
+});
+
+export default CombatAssignmentScreen;

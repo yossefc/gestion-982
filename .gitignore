@@ -32,6 +32,7 @@ yarn-error.*
 
 # local env files
 .env*.local
+.env
 
 # typescript
 *.tsbuildinfo
@@ -39,3 +40,10 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Firebase config files (sensitive)
+google-services.json
+GoogleService-Info.plist
+
+# Claude AI
+.claude/
