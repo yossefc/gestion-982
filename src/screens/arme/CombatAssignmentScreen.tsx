@@ -13,7 +13,7 @@ import {
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import SignatureCanvas from 'react-native-signature-canvas';
 import { RootStackParamList } from '../../types';
-import { assignmentService, soldierService } from '../../services/firebaseService';
+import { assignmentService, soldierService, combatEquipmentService, manaService } from '../../services/firebaseService';
 import { useAuth } from '../../contexts/AuthContext';
 import { Colors, Shadows } from '../../theme/colors';
 
@@ -48,106 +48,9 @@ const CombatAssignmentScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [soldier, setSoldier] = useState<any>(null);
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
-
-  // Équipements par catégorie
-  const [equipment, setEquipment] = useState<EquipmentItem[]>([
-    // נשק ראשי
-    { id: 'w1', name: 'M16', category: 'נשק ראשי', quantity: 1, selected: false, needsSerial: true,
-      subEquipments: [
-        { id: 'w1s1', name: 'מחסנית', selected: false },
-        { id: 'w1s2', name: 'רצועה', selected: false },
-        { id: 'w1s3', name: 'כלי טעינה', selected: false },
-      ]
-    },
-    { id: 'w2', name: 'M203', category: 'נשק ראשי', quantity: 1, selected: false, needsSerial: true,
-      subEquipments: [
-        { id: 'w2s1', name: 'מחסנית', selected: false },
-        { id: 'w2s2', name: 'רצועה', selected: false },
-        { id: 'w2s3', name: 'כלי טעינה', selected: false },
-        { id: 'w2s4', name: 'קנה M203', selected: false },
-      ]
-    },
-    { id: 'w3', name: 'קלע', category: 'נשק ראשי', quantity: 1, selected: false, needsSerial: true },
-    { id: 'w4', name: 'נגב', category: 'נשק ראשי', quantity: 1, selected: false, needsSerial: true,
-      subEquipments: [
-        { id: 'w4s1', name: 'מחסנית', selected: false },
-        { id: 'w4s2', name: 'רצועה', selected: false },
-        { id: 'w4s3', name: 'חצובה', selected: false },
-      ]
-    },
-    { id: 'w5', name: 'מאג', category: 'נשק ראשי', quantity: 1, selected: false, needsSerial: true,
-      subEquipments: [
-        { id: 'w5s1', name: 'מחסנית', selected: false },
-        { id: 'w5s2', name: 'רצועה', selected: false },
-        { id: 'w5s3', name: 'חצובה', selected: false },
-      ]
-    },
-    { id: 'w6', name: 'נגמ"ש', category: 'נשק ראשי', quantity: 1, selected: false, needsSerial: true },
-
-    // אביזרי נשק
-    { id: 'a1', name: 'אופטיקה (טריג\'יקון)', category: 'אביזרי נשק', quantity: 1, selected: false, needsSerial: true },
-    { id: 'a2', name: 'אופטיקה (מאורס)', category: 'אביזרי נשק', quantity: 1, selected: false, needsSerial: true },
-    { id: 'a3', name: 'לייזר', category: 'אביזרי נשק', quantity: 1, selected: false, needsSerial: true },
-    { id: 'a4', name: 'פנס נשק', category: 'אביזרי נשק', quantity: 1, selected: false, needsSerial: true },
-    { id: 'a5', name: 'ידית אחיזה', category: 'אביזרי נשק', quantity: 1, selected: false, needsSerial: false },
-    { id: 'a6', name: 'רתע', category: 'אביזרי נשק', quantity: 1, selected: false, needsSerial: false },
-
-    // ציוד לוחם
-    { id: 'c1', name: 'אפוד טקטי', category: 'ציוד לוחם', quantity: 1, selected: false, needsSerial: false },
-    { id: 'c2', name: 'וסט קרמי', category: 'ציוד לוחם', quantity: 1, selected: false, needsSerial: true },
-    { id: 'c3', name: 'קסדה', category: 'ציוד לוחם', quantity: 1, selected: false, needsSerial: true },
-    { id: 'c4', name: 'מוביל מחסניות', category: 'ציוד לוחם', quantity: 1, selected: false, needsSerial: false },
-    { id: 'c5', name: 'פאוץ\' רימונים', category: 'ציוד לוחם', quantity: 1, selected: false, needsSerial: false },
-    { id: 'c6', name: 'תיק גב לחימה', category: 'ציוד לוחם', quantity: 1, selected: false, needsSerial: false },
-    { id: 'c7', name: 'חגורת לחימה', category: 'ציוד לוחם', quantity: 1, selected: false, needsSerial: false },
-
-    // אופטיקה ותצפית
-    { id: 'o1', name: 'משקפי לילה', category: 'אופטיקה ותצפית', quantity: 1, selected: false, needsSerial: true },
-    { id: 'o2', name: 'דרבן תצפית', category: 'אופטיקה ותצפית', quantity: 1, selected: false, needsSerial: true },
-    { id: 'o3', name: 'מצפן', category: 'אופטיקה ותצפית', quantity: 1, selected: false, needsSerial: true },
-
-    // קשר
-    { id: 'r1', name: 'מכשיר קשר', category: 'קשר', quantity: 1, selected: false, needsSerial: true },
-    { id: 'r2', name: 'אוזניות קשר', category: 'קשר', quantity: 1, selected: false, needsSerial: true },
-    { id: 'r3', name: 'סוללות קשר', category: 'קשר', quantity: 2, selected: false, needsSerial: false },
-  ]);
-
-  // Manot prédéfinies
-  const manot = [
-    {
-      id: 'mana1',
-      name: 'מנת מפקד',
-      items: ['w1', 'a1', 'c1', 'c3'],
-    },
-    {
-      id: 'mana2',
-      name: 'מנת לוחם',
-      items: ['w1', 'c1', 'c3'],
-    },
-    {
-      id: 'mana3',
-      name: 'מנת רימונאי',
-      items: ['w2', 'c1', 'c3'],
-    },
-    {
-      id: 'mana4',
-      name: 'מנת מאגיסט',
-      items: ['w5', 'c1', 'c3'],
-    },
-    {
-      id: 'mana5',
-      name: 'מנת קלע',
-      items: ['w3', 'c1', 'c3'],
-    },
-  ];
-
-  const categories = [
-    { name: 'נשק ראשי', color: '#e74c3c' },
-    { name: 'אביזרי נשק', color: '#e67e22' },
-    { name: 'ציוד לוחם', color: '#27ae60' },
-    { name: 'אופטיקה ותצפית', color: '#9b59b6' },
-    { name: 'קשר', color: '#3498db' },
-  ];
+  const [equipment, setEquipment] = useState<EquipmentItem[]>([]);
+  const [manot, setManot] = useState<any[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
 
   useEffect(() => {
     loadSoldierData();
@@ -155,11 +58,56 @@ const CombatAssignmentScreen: React.FC = () => {
 
   const loadSoldierData = async () => {
     try {
-      const soldierData = await soldierService.getById(soldierId);
+      // Charger toutes les données en parallèle
+      const [soldierData, combatEquipment, manotData] = await Promise.all([
+        soldierService.getById(soldierId),
+        combatEquipmentService.getAll(),
+        manaService.getAll(),
+      ]);
+
       setSoldier(soldierData);
+
+      // Transformer les équipements Firebase en EquipmentItem pour l'UI
+      const equipmentItems: EquipmentItem[] = combatEquipment.map(eq => ({
+        id: eq.id,
+        name: eq.name,
+        category: eq.category,
+        quantity: 1,
+        selected: false,
+        needsSerial: eq.serial !== undefined || ['נשק', 'אופטיקה'].includes(eq.category),
+        subEquipments: eq.hasSubEquipment && eq.subEquipments
+          ? eq.subEquipments.map(sub => ({
+              id: sub.id,
+              name: sub.name,
+              selected: false,
+            }))
+          : undefined,
+      }));
+
+      setEquipment(equipmentItems);
+      setManot(manotData);
+
+      // Extraire les catégories uniques depuis les équipements
+      const uniqueCategories = Array.from(
+        new Set(combatEquipment.map(e => e.category))
+      );
+
+      const categoryColors: { [key: string]: string } = {
+        'נשק': '#e74c3c',
+        'אופטיקה': '#9b59b6',
+        'ציוד מגן': '#27ae60',
+        'ציוד נוסף': '#3498db',
+      };
+
+      const categoriesData = uniqueCategories.map(cat => ({
+        name: cat,
+        color: categoryColors[cat] || '#95a5a6',
+      }));
+
+      setCategories(categoriesData);
     } catch (error) {
-      Alert.alert('שגיאה', 'נכשל בטעינת נתוני החייל');
-      console.error('Error loading soldier:', error);
+      Alert.alert('שגיאה', 'נכשל בטעינת הנתונים');
+      console.error('Error loading data:', error);
     } finally {
       setLoading(false);
     }
@@ -194,12 +142,26 @@ const CombatAssignmentScreen: React.FC = () => {
     const mana = manot.find(m => m.id === manaId);
     if (!mana) return;
 
+    // Créer un Set des noms d'équipements dans la מנה
+    const manaEquipmentNames = new Set(
+      mana.equipments.map((eq: any) => eq.equipmentName)
+    );
+
     setEquipment(prev =>
-      prev.map(item => ({
-        ...item,
-        selected: mana.items.includes(item.id),
-        subEquipments: item.subEquipments?.map(sub => ({ ...sub, selected: mana.items.includes(item.id) })),
-      }))
+      prev.map(item => {
+        const isInMana = manaEquipmentNames.has(item.name);
+        return {
+          ...item,
+          selected: isInMana,
+          quantity: isInMana
+            ? mana.equipments.find((eq: any) => eq.equipmentName === item.name)?.quantity || 1
+            : item.quantity,
+          subEquipments: item.subEquipments?.map(sub => ({
+            ...sub,
+            selected: isInMana,
+          })),
+        };
+      })
     );
 
     Alert.alert('הצלחה', `${mana.name} נבחרה`);
@@ -350,7 +312,68 @@ const CombatAssignmentScreen: React.FC = () => {
   if (!soldier) {
     return (
       <View style={styles.container}>
-        <Text style={styles.emptyText}>החייל לא נמצא</Text>
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Text style={styles.backButtonText}>←</Text>
+          </TouchableOpacity>
+          <View style={styles.headerContent}>
+            <Text style={styles.title}>שגיאה</Text>
+          </View>
+        </View>
+        <View style={styles.loadingContainer}>
+          <Text style={styles.emptyText}>החייל לא נמצא</Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (equipment.length === 0) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Text style={styles.backButtonText}>←</Text>
+          </TouchableOpacity>
+          <View style={styles.headerContent}>
+            <Text style={styles.title}>החתמת ציוד לחימה</Text>
+          </View>
+        </View>
+        <View style={styles.loadingContainer}>
+          <Text style={styles.emptyText}>אין ציוד במערכת</Text>
+          <Text style={{
+            fontSize: 14,
+            color: Colors.text.secondary,
+            marginTop: 10,
+            textAlign: 'center',
+          }}>
+            אנא הוסף ציוד דרך ניהול ציוד
+          </Text>
+          <TouchableOpacity
+            style={{
+              backgroundColor: Colors.status.info,
+              paddingHorizontal: 24,
+              paddingVertical: 12,
+              borderRadius: 10,
+              marginTop: 20,
+              ...Shadows.small,
+            }}
+            onPress={() => navigation.navigate('CombatEquipmentList' as never)}
+          >
+            <Text style={{
+              fontSize: 16,
+              fontWeight: 'bold',
+              color: Colors.text.white,
+            }}>
+              ⚙️ ניהול ציוד
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
     );
   }
