@@ -12,8 +12,8 @@ import {
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import SignatureCanvas from 'react-native-signature-canvas';
-import { RootStackParamList } from '../../types';
-import { assignmentService, soldierService, clothingEquipmentService, pdfStorageService } from '../../services/firebaseService';
+import { RootStackParamList, HoldingItem } from '../../types';
+import { assignmentService, soldierService, clothingEquipmentService, pdfStorageService, holdingsService } from '../../services/firebaseService';
 import { useAuth } from '../../contexts/AuthContext';
 import { Colors, Shadows } from '../../theme/colors';
 import { generateAssignmentPDF } from '../../services/pdfService';
@@ -291,6 +291,17 @@ const ClothingSignatureScreen: React.FC = () => {
       // Créer l'attribution avec signature
       const assignmentId = await assignmentService.create(assignmentData);
       console.log('Assignment created:', assignmentId);
+
+      // Mettre à jour les holdings du soldat
+      const holdingItems: HoldingItem[] = assignmentItems.map(item => ({
+        equipmentId: item.equipmentId,
+        equipmentName: item.equipmentName,
+        quantity: item.quantity,
+        serials: item.serial ? [item.serial] : [],
+      }));
+
+      await holdingsService.addToHoldings(soldierId, 'clothing', holdingItems);
+      console.log('Holdings updated successfully');
 
       // Générer et uploader le PDF
       const pdfUrl = await generateAndUploadPdf(assignmentId, assignmentData);
