@@ -177,7 +177,9 @@ useEffect(() => {
 
 **Écrans modifiés:**
 - `src/screens/vetement/ClothingSignatureScreen.tsx`
-- (Ajouter d'autres écrans si nécessaire)
+- `src/screens/arme/ArmeHomeScreen.tsx`
+- `src/screens/admin/AdminPanelScreen.tsx`
+- `App.tsx` (suppression de l'init au démarrage)
 
 #### Solution 2: Règles Firestore avec authentification
 
@@ -251,6 +253,112 @@ Ce script ajoute le champ `role` aux tokens Firebase de chaque utilisateur, perm
 
 ---
 
+## 📝 Problème 4: "Unsupported field value: undefined" (Firestore)
+
+### 🐛 Symptôme
+Erreur lors de la création d'assignments:
+```
+ERROR Error creating assignment: [FirebaseError: Function addDoc() called with invalid data.
+Unsupported field value: undefined (found in document assignments/xxx)]
+```
+
+### 🔍 Cause
+Firestore n'accepte pas les champs avec la valeur `undefined`. Causes courantes:
+1. **Spread operator incluant tous les champs**: `...assignmentData` inclut même les champs optionnels undefined
+2. **Construction explicite avec undefined**: `serial: item.serial || undefined` crée toujours le champ
+
+**Exemple problématique:**
+```typescript
+const item = {
+  id: '1',
+  name: 'Casque',
+  serial: item.serial || undefined  // ❌ Crée toujours serial, même si undefined
+};
+
+await addDoc(collection(db, 'assignments'), {
+  ...assignmentData,  // ❌ Inclut tous les champs, même undefined
+  timestamp: Timestamp.now()
+});
+```
+
+### ✅ Solutions Appliquées
+
+#### Solution 1: Construction conditionnelle des items
+
+**Avant:**
+```typescript
+const assignmentItems = selectedItems.map(item => ({
+  equipmentId: item.id,
+  equipmentName: item.name,
+  quantity: item.quantity,
+  serial: item.serial || undefined,  // ❌ Toujours présent
+}));
+```
+
+**Après:**
+```typescript
+const assignmentItems = selectedItems.map(item => {
+  const itemData: any = {
+    equipmentId: item.id,
+    equipmentName: item.name,
+    quantity: item.quantity,
+  };
+
+  // ✅ N'ajouter serial que s'il existe
+  if (item.serial) {
+    itemData.serial = item.serial;
+  }
+
+  return itemData;
+});
+```
+
+#### Solution 2: Filtrage explicite dans le service
+
+**Avant (assignmentService.create):**
+```typescript
+const docRef = await addDoc(collection(db, COLLECTIONS.ASSIGNMENTS), {
+  ...assignmentData,  // ❌ Inclut signature, pdfUrl même si undefined
+  timestamp: Timestamp.now(),
+});
+```
+
+**Après:**
+```typescript
+// ✅ Construire l'objet explicitement
+const cleanData: any = {
+  soldierId: assignmentData.soldierId,
+  soldierName: assignmentData.soldierName,
+  soldierPersonalNumber: assignmentData.soldierPersonalNumber,
+  type: assignmentData.type,
+  items: assignmentData.items || [],
+  status: assignmentData.status,
+  assignedBy: assignmentData.assignedBy,
+  timestamp: Timestamp.now(),
+};
+
+// ✅ Ajouter les champs optionnels seulement s'ils existent
+if (assignmentData.signature) {
+  cleanData.signature = assignmentData.signature;
+}
+if (assignmentData.pdfUrl) {
+  cleanData.pdfUrl = assignmentData.pdfUrl;
+}
+
+const docRef = await addDoc(collection(db, COLLECTIONS.ASSIGNMENTS), cleanData);
+```
+
+### 🎯 Résultat
+- Plus d'erreurs "Unsupported field value: undefined"
+- Les assignments se créent correctement
+- Les champs optionnels ne sont ajoutés que s'ils ont une valeur
+
+### 📂 Fichiers Modifiés
+- `src/screens/vetement/ClothingSignatureScreen.tsx`
+- `src/services/firebaseService.ts` (assignmentService.create)
+
+---
+
 ## 🚀 Checklist de Vérification
 
 Après avoir appliqué les corrections:
@@ -258,6 +366,7 @@ Après avoir appliqué les corrections:
 - [ ] **Signature:** Dessiner rapidement produit des traits continus (pas des points)
 - [ ] **AsyncStorage:** Aucun warning Firebase Auth dans la console
 - [ ] **Permissions:** Aucune erreur "Missing or insufficient permissions" lors du chargement des données
+- [ ] **Undefined:** Aucune erreur "Unsupported field value: undefined" lors création d'assignments
 - [ ] **Session:** La session utilisateur persiste après un redémarrage de l'app
 - [ ] **Règles Firestore:** Les règles sont déployées dans Firebase Console
 
