@@ -32,7 +32,7 @@ const ClothingSignatureScreen: React.FC = () => {
   const navigation = useNavigation();
   const route = useRoute<ClothingSignatureRouteProp>();
   const { soldierId } = route.params;
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
 
   const signatureRef = useRef<any>(null);
   const [signature, setSignature] = useState<string | null>(null);
@@ -40,10 +40,19 @@ const ClothingSignatureScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [soldier, setSoldier] = useState<any>(null);
   const [equipment, setEquipment] = useState<EquipmentItem[]>([]);
+  const [scrollEnabled, setScrollEnabled] = useState(true);
 
   useEffect(() => {
-    loadData();
-  }, []);
+    // Attendre que l'authentification soit prête avant de charger les données
+    if (!authLoading && user) {
+      loadData();
+    } else if (!authLoading && !user) {
+      // Utilisateur non connecté
+      setLoading(false);
+      Alert.alert('שגיאה', 'יש להתחבר כדי להמשיך');
+      navigation.goBack();
+    }
+  }, [authLoading, user]);
 
   const loadData = async () => {
     try {
@@ -115,9 +124,16 @@ const ClothingSignatureScreen: React.FC = () => {
     }
   `;
 
+  const handleBegin = () => {
+    // Désactiver le scroll pendant le dessin
+    setScrollEnabled(false);
+  };
+
   const handleEnd = () => {
     // Déclencher la capture de la signature
     signatureRef.current?.readSignature();
+    // Réactiver le scroll
+    setScrollEnabled(true);
   };
 
   const handleOK = (sig: string) => {
@@ -309,10 +325,11 @@ const ClothingSignatureScreen: React.FC = () => {
         </View>
       </View>
 
-      <ScrollView 
-        style={styles.content} 
+      <ScrollView
+        style={styles.content}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
+        scrollEnabled={scrollEnabled}
       >
         {/* 1. Infos Soldat */}
         <View style={styles.soldierCard}>
@@ -403,6 +420,8 @@ const ClothingSignatureScreen: React.FC = () => {
             ref={signatureRef}
             onOK={handleOK}
             onEmpty={handleEmpty}
+            onBegin={handleBegin}
+            onEnd={handleEnd}
             descriptionText="חתום כאן"
             clearText="נקה"
             confirmText="אשר"
