@@ -1,0 +1,28 @@
+---
+description: Firebase — data layer (services + hooks) et suppression de mocks
+globs:
+  - "src/services/**/*.ts"
+  - "src/contexts/**/*.tsx"
+  - "src/hooks/**/*.ts"
+alwaysApply: false
+---
+
+## Firebase Architecture
+- Ne pas appeler Firestore directement depuis un screen.
+- Toute interaction passe par `src/services/*` puis hooks `src/hooks/*`.
+- Standardiser les retours: `{ data, loading, error, refetch }`.
+- Normaliser Timestamp <-> Date (convertir proprement au boundary service).
+- Centraliser la gestion d'erreurs Firebase:
+  - helper `handleFirebaseError(e)` qui retourne un message utilisateur (hébreu) + log technique.
+
+## Data Quality
+- Empêcher doublons (ex: personalNumber unique) :
+  - vérifier avant create + gérer collision proprement.
+- Utiliser `limit`, pagination et `orderBy` pour les listes.
+- Documenter les indexes nécessaires dès qu'une query composite est ajoutée.
+
+## No-Mock Policy
+- Interdit de laisser des données mockées.
+- Si une collection Firestore n'existe pas encore:
+  - créer le schéma attendu dans `src/types`
+  - ajouter un seed minimal (script ou écran admin) OU fallback UI "aucune donnée" propre.

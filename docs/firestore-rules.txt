@@ -1,0 +1,77 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && 
+             request.auth.token.role == 'admin';
+    }
+    
+    function hasArmePermission() {
+      return isAuthenticated() && 
+             (request.auth.token.role == 'admin' || 
+              request.auth.token.role == 'arme' || 
+              request.auth.token.role == 'both');
+    }
+    
+    function hasVetementPermission() {
+      return isAuthenticated() && 
+             (request.auth.token.role == 'admin' || 
+              request.auth.token.role == 'vetement' || 
+              request.auth.token.role == 'both');
+    }
+    
+    // Users collection - admin only
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+    
+    // Soldiers collection
+    match /soldiers/{soldierId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+      allow delete: if isAdmin();
+    }
+    
+    // Combat Equipment collection
+    match /combatEquipment/{equipmentId} {
+      allow read: if hasArmePermission();
+      allow write: if hasArmePermission();
+    }
+    
+    // Clothing Equipment collection
+    match /clothingEquipment/{equipmentId} {
+      allow read: if hasVetementPermission();
+      allow write: if hasVetementPermission();
+    }
+    
+    // Manot collection
+    match /manot/{manaId} {
+      allow read: if hasArmePermission();
+      allow write: if hasArmePermission();
+    }
+    
+    // Assignments collection
+    match /assignments/{assignmentId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+      allow delete: if isAdmin();
+    }
+    
+    // Audit logs collection
+    match /logs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAuthenticated(); // Tous peuvent créer des logs
+      allow update, delete: if false; // Logs are immutable
+    }
+  }
+}
+

@@ -4,15 +4,14 @@ import {
   View,
   Text,
   TextInput,
-  TouchableOpacity,
   StyleSheet,
-  ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Platform,
-  Image,
 } from 'react-native';
 import { useAuth } from '../../contexts/AuthContext';
+import { Colors, Shadows } from '../../theme/colors';
+import { PrimaryButton } from '../../components';
+import { notifyError } from '../../utils/notify';
 
 const LoginScreen: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -22,15 +21,15 @@ const LoginScreen: React.FC = () => {
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
-      Alert.alert('שגיאה', 'נא למלא את כל השדות');
+      notifyError(new Error('נא למלא את כל השדות'), 'התחברות');
       return;
     }
 
     setLoading(true);
     try {
       await signIn(email.trim(), password);
-    } catch (error: any) {
-      Alert.alert('שגיאה', error.message);
+    } catch (error) {
+      notifyError(error, 'התחברות');
     } finally {
       setLoading(false);
     }
@@ -60,11 +59,13 @@ const LoginScreen: React.FC = () => {
               value={email}
               onChangeText={setEmail}
               placeholder="example@email.com"
-              placeholderTextColor="#999"
+              placeholderTextColor={Colors.text.light}
               keyboardType="email-address"
               autoCapitalize="none"
               autoCorrect={false}
               textAlign="right"
+              accessibilityLabel="שדה הזנת אימייל"
+              accessibilityHint="הזן את כתובת האימייל שלך"
             />
           </View>
 
@@ -75,23 +76,22 @@ const LoginScreen: React.FC = () => {
               value={password}
               onChangeText={setPassword}
               placeholder="••••••••"
-              placeholderTextColor="#999"
+              placeholderTextColor={Colors.text.light}
               secureTextEntry
               textAlign="right"
+              accessibilityLabel="שדה הזנת סיסמה"
+              accessibilityHint="הזן את הסיסמה שלך"
             />
           </View>
 
-          <TouchableOpacity
-            style={[styles.button, loading && styles.buttonDisabled]}
+          <PrimaryButton
+            title="התחברות"
             onPress={handleLogin}
+            loading={loading}
             disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.buttonText}>התחברות</Text>
-            )}
-          </TouchableOpacity>
+            accessibilityLabel="כפתור התחברות"
+            accessibilityHint="לחץ להתחבר למערכת"
+          />
         </View>
 
         {/* Footer */}
@@ -106,7 +106,7 @@ const LoginScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1a1a2e',
+    backgroundColor: Colors.background.primary,
   },
   content: {
     flex: 1,
@@ -121,78 +121,55 @@ const styles = StyleSheet.create({
     width: 100,
     height: 100,
     borderRadius: 50,
-    backgroundColor: '#4a90d9',
+    backgroundColor: Colors.status.info,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 20,
-    shadowColor: '#4a90d9',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.5,
-    shadowRadius: 20,
-    elevation: 10,
+    ...Shadows.large,
   },
   logoText: {
     fontSize: 36,
     fontWeight: 'bold',
-    color: '#fff',
+    color: Colors.text.white,
   },
   title: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: '#fff',
+    color: Colors.text.white,
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 18,
-    color: '#8892b0',
+    color: Colors.text.secondary,
   },
   form: {
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    backgroundColor: Colors.background.card,
     borderRadius: 20,
     padding: 25,
+    ...Shadows.medium,
   },
   inputContainer: {
     marginBottom: 20,
   },
   label: {
     fontSize: 14,
-    color: '#8892b0',
+    color: Colors.text.secondary,
     marginBottom: 8,
     textAlign: 'right',
   },
   input: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: Colors.background.primary,
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 14,
     fontSize: 16,
-    color: '#fff',
+    color: Colors.text.primary,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  button: {
-    backgroundColor: '#4a90d9',
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: 'center',
-    marginTop: 10,
-    shadowColor: '#4a90d9',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  buttonDisabled: {
-    opacity: 0.7,
-  },
-  buttonText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#fff',
+    borderColor: Colors.border.medium,
   },
   footer: {
     textAlign: 'center',
-    color: '#8892b0',
+    color: Colors.text.secondary,
     fontSize: 12,
     marginTop: 40,
   },

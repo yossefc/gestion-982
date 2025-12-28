@@ -1,0 +1,26 @@
+---
+description: UI/UX — Design system + composants réutilisables (React Native)
+globs:
+  - "src/screens/**/*.tsx"
+  - "src/components/**/*.tsx"
+alwaysApply: false
+---
+
+## UI Rules
+- Utiliser Colors/Shadows du thème. Interdit d'inventer des couleurs hardcodées (sauf exceptions justifiées).
+- Créer/maintenir composants UI réutilisables:
+  - `Screen` (layout + padding + safe area)
+  - `AppHeader` (titre + actions)
+  - `Card`
+  - `PrimaryButton` / `SecondaryButton`
+  - `StatusBadge` (נופק לחייל / לא חתום / זוכה)
+  - `EmptyState` + `LoadingState` + `ErrorState`
+- Style uniforme :
+  - mêmes arrondis, padding, bordures, ombres
+  - typographie cohérente (sizes: 12/14/16/18/22/28)
+- RTL: tous les écrans en hébreu doivent être alignés à droite et respecter les sens des chevrons/navigation.
+
+## UX Flow
+- Chaque action critique (suppression, retour/זיכוי, déconnexion) => confirmation + résumé.
+- Feedback immédiat : toast/alert + spinner pendant les écritures Firestore.
+- Validations côté UI (ex: numéro אישי, quantités, champs requis).

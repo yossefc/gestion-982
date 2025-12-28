@@ -11,10 +11,11 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Colors, Shadows } from '../../theme/colors';
-import { getAllSoldiers } from '../../services/soldierService';
+import { soldierService } from '../../services/firebaseService';
 import { getAssignmentsByType } from '../../services/assignmentService';
 import { initializeDefaultData } from '../../services/equipmentService';
 import { getUserCount } from '../../services/userService';
+import { notifyError } from '../../utils/notify';
 
 const AdminPanelScreen: React.FC = () => {
   const navigation = useNavigation<any>();
@@ -33,7 +34,7 @@ const AdminPanelScreen: React.FC = () => {
   const loadStats = async () => {
     try {
       const [soldiers, clothingAssignments, combatAssignments, userCount] = await Promise.all([
-        getAllSoldiers(),
+        soldierService.getAll(1000), // Charger tous pour les stats
         getAssignmentsByType('clothing'),
         getAssignmentsByType('combat'),
         getUserCount(),
@@ -74,7 +75,6 @@ const AdminPanelScreen: React.FC = () => {
           onPress: async () => {
             try {
               await initializeDefaultData();
-              Alert.alert('הצלחה', 'נתוני ברירת המחדל נוספו בהצלחה');
             } catch (error) {
               console.error('Error initializing data:', error);
               Alert.alert('שגיאה', 'נכשל באתחול הנתונים');
@@ -131,7 +131,11 @@ const AdminPanelScreen: React.FC = () => {
         </View>
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.content} 
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
         {/* ניהול משתמשים */}
         <Text style={styles.sectionTitle}>ניהול משתמשים</Text>
         <TouchableOpacity
@@ -253,6 +257,9 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     padding: 20,
+  },
+  scrollContent: {
+    paddingBottom: 100,
   },
   loadingContainer: {
     flex: 1,

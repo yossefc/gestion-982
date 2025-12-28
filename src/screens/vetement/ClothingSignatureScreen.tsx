@@ -76,18 +76,38 @@ const ClothingSignatureScreen: React.FC = () => {
   // Style amélioré du canvas de signature
   const webStyle = `
     .m-signature-pad {
+      position: fixed;
+      margin: auto;
+      top: 0;
+      left: 0;
+      right: 0;
+      width: 100%;
+      height: 100%;
       box-shadow: none;
       border: 2px solid #2c5f7c;
       border-radius: 8px;
       background-color: #ffffff;
     }
     .m-signature-pad--body {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 0;
+      bottom: 0;
       border: none;
+    }
+    .m-signature-pad--body canvas {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
     }
     .m-signature-pad--footer {
       display: none;
     }
     body, html {
+      position: relative;
       width: 100%;
       height: 100%;
       margin: 0;
@@ -103,9 +123,6 @@ const ClothingSignatureScreen: React.FC = () => {
   const handleOK = (sig: string) => {
     console.log('Signature captured:', sig ? 'Yes' : 'No');
     setSignature(sig);
-    if (sig) {
-      Alert.alert('הצלחה', 'החתימה נקלטה בהצלחה!');
-    }
   };
 
   const handleClear = () => {
@@ -192,17 +209,10 @@ const ClothingSignatureScreen: React.FC = () => {
         assignedBy: user?.id || '',
       });
 
-      Alert.alert('הצלחה', 'החתימה נשמרה בהצלחה', [
-        {
-          text: 'אישור',
-          onPress: () => {
-            (navigation as any).reset({
-              index: 0,
-              routes: [{ name: 'Home' }],
-            });
-          },
-        },
-      ]);
+      (navigation as any).reset({
+        index: 0,
+        routes: [{ name: 'Home' }],
+      });
     } catch (error) {
       Alert.alert('שגיאה', 'נכשל בשמירת החתימה');
       console.error('Error saving signature:', error);
@@ -299,7 +309,11 @@ const ClothingSignatureScreen: React.FC = () => {
         </View>
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.content} 
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
         {/* 1. Infos Soldat */}
         <View style={styles.soldierCard}>
           <View style={styles.soldierRow}>
@@ -475,6 +489,9 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 20,
   },
+  scrollContent: {
+    paddingBottom: 100,
+  },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -637,7 +654,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   signatureContainer: {
-    height: 250,
+    height: 300,
+    width: '100%',
     backgroundColor: '#ffffff',
     borderRadius: 12,
     overflow: 'hidden',

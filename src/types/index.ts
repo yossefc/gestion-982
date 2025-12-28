@@ -22,6 +22,10 @@ export interface Soldier {
   company: string;         // פלוגה
   department?: string;     // מחלקה
   createdAt: Date;
+  updatedAt?: Date;
+  // Champs de recherche normalisés (générés automatiquement)
+  searchKey?: string;      // Clé de recherche (name + personalNumber + phone + company)
+  nameLower?: string;      // Nom en lowercase pour tri
 }
 
 // Statut équipement

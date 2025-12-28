@@ -12,6 +12,10 @@ import {
   where,
   orderBy,
   Timestamp,
+  limit as firestoreLimit,
+  startAfter,
+  QueryDocumentSnapshot,
+  DocumentData,
 } from 'firebase/firestore';
 import { app } from '../config/firebase';
 import {
@@ -22,6 +26,10 @@ import {
   Mana,
   DashboardStats,
 } from '../types';
+import { mapFirebaseError, createAppError, ErrorCodes, logError } from './errors';
+import { buildSoldierSearchKey, buildNameLower, normalizeText } from '../utils/normalize';
+import { logService } from './logService';
+import { auth } from '../config/firebase';
 
 const db = getFirestore(app);
 
@@ -42,14 +50,38 @@ export const soldierService = {
   // Créer un nouveau soldat
   async create(soldierData: Omit<Soldier, 'id' | 'createdAt'>): Promise<string> {
     try {
+      // Vérifier si le numéro personnel existe déjà
+      const existing = await this.getByPersonalNumber(soldierData.personalNumber);
+      if (existing) {
+        throw createAppError(ErrorCodes.SOLDIER_DUPLICATE);
+      }
+
+      // Calculer les champs de recherche normalisés
+      const searchKey = buildSoldierSearchKey(soldierData);
+      const nameLower = buildNameLower(soldierData.name);
+
       const docRef = await addDoc(collection(db, COLLECTIONS.SOLDIERS), {
         ...soldierData,
+        searchKey,
+        nameLower,
         createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
       });
+      
+      // Log d'audit
+      await logService.logChange({
+        entityType: 'soldier',
+        entityId: docRef.id,
+        action: 'create',
+        after: { ...soldierData, searchKey, nameLower },
+        performedBy: auth.currentUser?.uid || 'unknown',
+        performedByName: auth.currentUser?.displayName || auth.currentUser?.email || 'Unknown',
+      });
+      
       return docRef.id;
     } catch (error) {
-      console.error('Error creating soldier:', error);
-      throw error;
+      logError('soldierService.create', error);
+      throw mapFirebaseError(error);
     }
   },
 
@@ -68,8 +100,8 @@ export const soldierService = {
       }
       return null;
     } catch (error) {
-      console.error('Error getting soldier:', error);
-      throw error;
+      logError('soldierService.getById', error);
+      throw mapFirebaseError(error);
     }
   },
 
@@ -78,7 +110,8 @@ export const soldierService = {
     try {
       const q = query(
         collection(db, COLLECTIONS.SOLDIERS),
-        where('personalNumber', '==', personalNumber)
+        where('personalNumber', '==', personalNumber),
+        firestoreLimit(1)
       );
       const querySnapshot = await getDocs(q);
 
@@ -92,16 +125,20 @@ export const soldierService = {
       }
       return null;
     } catch (error) {
-      console.error('Error searching soldier:', error);
-      throw error;
+      logError('soldierService.getByPersonalNumber', error);
+      throw mapFirebaseError(error);
     }
   },
 
-  // Obtenir tous les soldats
-  async getAll(): Promise<Soldier[]> {
+  // Obtenir tous les soldats (paginé par défaut)
+  async getAll(limitCount: number = 50): Promise<Soldier[]> {
     try {
       const querySnapshot = await getDocs(
-        query(collection(db, COLLECTIONS.SOLDIERS), orderBy('createdAt', 'desc'))
+        query(
+          collection(db, COLLECTIONS.SOLDIERS),
+          orderBy('nameLower', 'asc'),
+          firestoreLimit(limitCount)
+        )
       );
 
       return querySnapshot.docs.map(doc => ({
@@ -110,25 +147,96 @@ export const soldierService = {
         createdAt: doc.data().createdAt?.toDate(),
       })) as Soldier[];
     } catch (error) {
-      console.error('Error getting soldiers:', error);
-      throw error;
+      logError('soldierService.getAll', error);
+      throw mapFirebaseError(error);
     }
   },
 
-  // Rechercher des soldats
-  async search(searchTerm: string): Promise<Soldier[]> {
+  // Recherche performante côté serveur avec pagination
+  async search(
+    searchTerm: string,
+    options?: {
+      limitCount?: number;
+      company?: string;
+      lastDoc?: QueryDocumentSnapshot<DocumentData>;
+    }
+  ): Promise<{ soldiers: Soldier[]; lastDoc: QueryDocumentSnapshot<DocumentData> | null }> {
     try {
-      const soldiers = await this.getAll();
-      const term = searchTerm.toLowerCase();
+      const limitCount = options?.limitCount || 50;
+      
+      // Si pas de terme de recherche, retourner liste paginée
+      if (!searchTerm || searchTerm.trim() === '') {
+        let q = query(
+          collection(db, COLLECTIONS.SOLDIERS),
+          orderBy('nameLower', 'asc'),
+          firestoreLimit(limitCount)
+        );
 
-      return soldiers.filter(soldier =>
-        soldier.name.toLowerCase().includes(term) ||
-        soldier.personalNumber.includes(term) ||
-        soldier.company.toLowerCase().includes(term)
+        // Filtre par compagnie si fourni
+        if (options?.company) {
+          q = query(
+            collection(db, COLLECTIONS.SOLDIERS),
+            where('company', '==', options.company),
+            orderBy('nameLower', 'asc'),
+            firestoreLimit(limitCount)
+          );
+        }
+
+        // Pagination
+        if (options?.lastDoc) {
+          q = query(q, startAfter(options.lastDoc));
+        }
+
+        const querySnapshot = await getDocs(q);
+        
+        return {
+          soldiers: querySnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+            createdAt: doc.data().createdAt?.toDate(),
+          })) as Soldier[],
+          lastDoc: querySnapshot.docs[querySnapshot.docs.length - 1] || null,
+        };
+      }
+
+      // Recherche avec terme normalisé
+      const normalizedTerm = normalizeText(searchTerm);
+      
+      let q = query(
+        collection(db, COLLECTIONS.SOLDIERS),
+        orderBy('searchKey'),
+        where('searchKey', '>=', normalizedTerm),
+        where('searchKey', '<=', normalizedTerm + '\uf8ff'),
+        firestoreLimit(limitCount)
       );
+
+      // Note: impossible de combiner where avec filtre company ET orderBy/startAt sur searchKey
+      // Il faudrait un index composite ou filtrer côté client
+      
+      if (options?.lastDoc) {
+        q = query(q, startAfter(options.lastDoc));
+      }
+
+      const querySnapshot = await getDocs(q);
+      
+      let soldiers = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        createdAt: doc.data().createdAt?.toDate(),
+      })) as Soldier[];
+
+      // Filtre côté client par company si nécessaire (limité mais fonctionnel)
+      if (options?.company) {
+        soldiers = soldiers.filter(s => s.company === options.company);
+      }
+
+      return {
+        soldiers,
+        lastDoc: querySnapshot.docs[querySnapshot.docs.length - 1] || null,
+      };
     } catch (error) {
-      console.error('Error searching soldiers:', error);
-      throw error;
+      logError('soldierService.search', error);
+      throw mapFirebaseError(error);
     }
   },
 
@@ -136,20 +244,86 @@ export const soldierService = {
   async update(id: string, data: Partial<Soldier>): Promise<void> {
     try {
       const docRef = doc(db, COLLECTIONS.SOLDIERS, id);
-      await updateDoc(docRef, data);
+      
+      // Récupérer les données avant modification (pour l'audit log)
+      const before = await this.getById(id);
+      
+      // Recalculer searchKey si nécessaire
+      const updateData: any = { ...data, updatedAt: Timestamp.now() };
+      
+      if (data.name || data.personalNumber || data.phone || data.company) {
+        // Récupérer les données actuelles pour reconstruire searchKey
+        const current = before;
+        if (current) {
+          const updatedSoldier = { ...current, ...data };
+          updateData.searchKey = buildSoldierSearchKey(updatedSoldier);
+          if (data.name) {
+            updateData.nameLower = buildNameLower(data.name);
+          }
+        }
+      }
+      
+      await updateDoc(docRef, updateData);
+      
+      // Log d'audit
+      await logService.logChange({
+        entityType: 'soldier',
+        entityId: id,
+        action: 'update',
+        before,
+        after: { ...before, ...updateData },
+        performedBy: auth.currentUser?.uid || 'unknown',
+        performedByName: auth.currentUser?.displayName || auth.currentUser?.email || 'Unknown',
+      });
     } catch (error) {
-      console.error('Error updating soldier:', error);
-      throw error;
+      logError('soldierService.update', error);
+      throw mapFirebaseError(error);
     }
   },
 
   // Supprimer un soldat
   async delete(id: string): Promise<void> {
     try {
+      // Récupérer les données avant suppression (pour l'audit log)
+      const before = await this.getById(id);
+      
       await deleteDoc(doc(db, COLLECTIONS.SOLDIERS, id));
+      
+      // Log d'audit
+      await logService.logChange({
+        entityType: 'soldier',
+        entityId: id,
+        action: 'delete',
+        before,
+        performedBy: auth.currentUser?.uid || 'unknown',
+        performedByName: auth.currentUser?.displayName || auth.currentUser?.email || 'Unknown',
+      });
     } catch (error) {
-      console.error('Error deleting soldier:', error);
-      throw error;
+      logError('soldierService.delete', error);
+      throw mapFirebaseError(error);
+    }
+  },
+
+  // Recherche par compagnie (filtre rapide)
+  async getByCompany(company: string, limitCount: number = 50): Promise<Soldier[]> {
+    try {
+      const q = query(
+        collection(db, COLLECTIONS.SOLDIERS),
+        where('company', '==', company),
+        orderBy('nameLower', 'asc'),
+        firestoreLimit(limitCount)
+      );
+      
+      const querySnapshot = await getDocs(q);
+      
+      return querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        createdAt: doc.data().createdAt?.toDate(),
+      })) as Soldier[];
+    } catch (error) {
+      logError('soldierService.getByCompany', error);
+      throw mapFirebaseError(error);
     }
   },
 };

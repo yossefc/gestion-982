@@ -59,7 +59,6 @@ const UserManagementScreen: React.FC = () => {
     try {
       await updateUserRole(editingUser.id, selectedRole);
 
-      Alert.alert('הצלחה', 'התפקיד עודכן בהצלחה');
       setModalVisible(false);
       loadUsers();
     } catch (error) {
@@ -143,7 +142,11 @@ const UserManagementScreen: React.FC = () => {
         </View>
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.content} 
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
         {/* Users List */}
         {users.length === 0 ? (
           <View style={styles.emptyCard}>
@@ -315,6 +318,9 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     padding: 20,
+  },
+  scrollContent: {
+    paddingBottom: 100,
   },
   loadingContainer: {
     flex: 1,

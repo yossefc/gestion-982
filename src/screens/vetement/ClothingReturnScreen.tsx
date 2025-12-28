@@ -83,12 +83,7 @@ const ClothingReturnScreen: React.FC = () => {
                 )
               );
 
-              Alert.alert('הצלחה', 'הציוד זוכה בהצלחה', [
-                {
-                  text: 'אישור',
-                  onPress: () => navigation.goBack(),
-                },
-              ]);
+              navigation.goBack();
             } catch (error) {
               Alert.alert('שגיאה', 'נכשל בזיכוי הציוד');
               console.error('Error returning equipment:', error);
@@ -140,7 +135,11 @@ const ClothingReturnScreen: React.FC = () => {
         </View>
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.content} 
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
         {/* Soldier Info */}
         {soldier && (
           <View style={styles.soldierCard}>
@@ -278,6 +277,9 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     padding: 20,
+  },
+  scrollContent: {
+    paddingBottom: 100,
   },
   loadingContainer: {
     flex: 1,

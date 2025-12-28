@@ -11,9 +11,10 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { addSoldier } from '../../services/soldierService';
+import { soldierService } from '../../services/firebaseService';
 import { Company } from '../../types';
 import { Colors, Shadows } from '../../theme/colors';
+import { notifyError, notifySuccess } from '../../utils/notify';
 
 const COMPANIES: Company[] = ['פלוגה א', 'פלוגה ב', 'פלוגה ג', 'פלוגה ד', 'מפקדה', 'ניוד'];
 
@@ -53,7 +54,7 @@ const AddSoldierScreen: React.FC = () => {
 
     setLoading(true);
     try {
-      await addSoldier({
+      await soldierService.create({
         personalNumber: formData.personalNumber.trim(),
         name: formData.name.trim(),
         phone: formData.phone.trim() || undefined,
@@ -61,11 +62,9 @@ const AddSoldierScreen: React.FC = () => {
         department: formData.department.trim() || undefined,
       });
       
-      Alert.alert('הצלחה', 'החייל נוסף בהצלחה', [
-        { text: 'אישור', onPress: () => navigation.goBack() }
-      ]);
-    } catch (error: any) {
-      Alert.alert('שגיאה', error.message || 'לא ניתן להוסיף את החייל');
+      navigation.goBack();
+    } catch (error) {
+      notifyError(error, 'הוספת חייל');
     } finally {
       setLoading(false);
     }
@@ -84,7 +83,11 @@ const AddSoldierScreen: React.FC = () => {
         <Text style={styles.title}>הוספת חייל חדש</Text>
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.content} 
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
         {/* Personal Number */}
         <View style={styles.inputGroup}>
           <Text style={styles.label}>מספר אישי *</Text>
@@ -213,6 +216,9 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     padding: 20,
+  },
+  scrollContent: {
+    paddingBottom: 100,
   },
   inputGroup: {
     marginBottom: 20,

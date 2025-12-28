@@ -1,0 +1,29 @@
+---
+description: Gestion-982 — règles globales (toujours actives)
+alwaysApply: true
+---
+
+# Contexte projet — gestion-982 (גדוד 982)
+Tu travailles sur une app React Native TypeScript pour la gestion d'équipement militaire (modules Arme / Vêtement / Admin).
+Le backend est Firebase (Auth + Firestore + éventuellement Storage).
+
+## Objectifs qualité (obligatoires)
+- UX ultra intuitive, RTL/hébreu propre (textAlign right, flexDirection row-reverse si nécessaire).
+- Design militaire PRO cohérent : utiliser le thème `src/theme/colors.ts` (Colors, Shadows) partout.
+- 0 mock en prod : remplacer toute donnée mockée / TODO par des appels Firestore robustes.
+- Écrans = UI seulement. Toute logique data passe par services + hooks (pas d'appels Firestore dans les screens).
+- Chaque écran doit gérer : Loading / Empty / Error (avec message clair en hébreu).
+
+## Conventions de code
+- TypeScript strict, types partagés dans `src/types`.
+- Éviter le duplication : créer `src/components/ui/*` (Card, Button, Badge, Screen, EmptyState, Loading).
+- Toujours gérer erreurs Firebase avec un helper commun (ex: `mapFirebaseErrorToMessage()`).
+
+## Firebase / Performance
+- Ne pas faire `getAll()` puis filtrer côté client si la collection peut grossir.
+- Préférer queries Firestore indexées (where/orderBy/limit) + pagination.
+- Si une query nécessite un index composite, le noter clairement dans le PR/commit.
+
+## Sécurité (obligatoire)
+- Aucune clé/secrets commités.
+- Vérifier que les queries respectent les Firestore rules (sinon ça échoue).

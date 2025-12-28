@@ -56,7 +56,6 @@ const ManotDetailsScreen: React.FC = () => {
           onPress: async () => {
             try {
               await manaService.delete(manaId);
-              Alert.alert('הצלחה', 'המנה נמחקה בהצלחה');
               navigation.goBack();
             } catch (error) {
               Alert.alert('שגיאה', 'נכשל במחיקת המנה');
@@ -125,7 +124,11 @@ const ManotDetailsScreen: React.FC = () => {
         </View>
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.content} 
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
         {/* Mana Info Card */}
         <View style={styles.infoCard}>
           <View style={styles.infoRow}>
@@ -220,6 +223,9 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     padding: 20,
+  },
+  scrollContent: {
+    paddingBottom: 100,
   },
   loadingContainer: {
     flex: 1,

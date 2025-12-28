@@ -67,17 +67,15 @@ const ClothingEquipmentManagementScreen: React.FC = () => {
     try {
       const equipmentData = {
         name: formData.name.trim(),
-        yamach: formData.yamach ? parseInt(formData.yamach) : undefined,
+        yamach: formData.yamach ? parseInt(formData.yamach) : 0,
       };
 
       if (editingItem) {
         // Update
         await clothingEquipmentService.update(editingItem.id, equipmentData);
-        Alert.alert('הצלחה', 'הציוד עודכן בהצלחה');
       } else {
         // Create
         await clothingEquipmentService.create(equipmentData);
-        Alert.alert('הצלחה', 'הציוד נוסף בהצלחה');
       }
 
       setModalVisible(false);
@@ -100,7 +98,6 @@ const ClothingEquipmentManagementScreen: React.FC = () => {
           onPress: async () => {
             try {
               await clothingEquipmentService.delete(item.id);
-              Alert.alert('הצלחה', 'הציוד נמחק בהצלחה');
               loadEquipment();
             } catch (error) {
               console.error('Error deleting equipment:', error);
@@ -115,21 +112,21 @@ const ClothingEquipmentManagementScreen: React.FC = () => {
   // Ajouter les équipements par défaut
   const addDefaultEquipment = async () => {
     const defaultItems = [
-      { name: 'חולצה ב', yamach: undefined },
-      { name: 'מכנסיים ב', yamach: undefined },
-      { name: 'חולצה א', yamach: undefined },
-      { name: 'מכנסיים א', yamach: undefined },
-      { name: 'נעליים', yamach: undefined },
-      { name: 'כומתה', yamach: undefined },
-      { name: 'קסדה', yamach: undefined },
-      { name: 'וסט לוחם', yamach: undefined },
-      { name: 'שק שינה', yamach: undefined },
-      { name: 'תרמיל', yamach: undefined },
-      { name: 'מימייה', yamach: undefined },
-      { name: 'פונצ\'ו', yamach: undefined },
-      { name: 'חגורה', yamach: undefined },
-      { name: 'גרביים', yamach: undefined },
-      { name: 'תחתונים', yamach: undefined },
+      { name: 'חולצה ב', yamach: 0 },
+      { name: 'מכנסיים ב', yamach: 0 },
+      { name: 'חולצה א', yamach: 0 },
+      { name: 'מכנסיים א', yamach: 0 },
+      { name: 'נעליים', yamach: 0 },
+      { name: 'כומתה', yamach: 0 },
+      { name: 'קסדה', yamach: 0 },
+      { name: 'וסט לוחם', yamach: 0 },
+      { name: 'שק שינה', yamach: 0 },
+      { name: 'תרמיל', yamach: 0 },
+      { name: 'מימייה', yamach: 0 },
+      { name: 'פונצ\'ו', yamach: 0 },
+      { name: 'חגורה', yamach: 0 },
+      { name: 'גרביים', yamach: 0 },
+      { name: 'תחתונים', yamach: 0 },
     ];
 
     Alert.alert(
@@ -144,7 +141,6 @@ const ClothingEquipmentManagementScreen: React.FC = () => {
               for (const item of defaultItems) {
                 await clothingEquipmentService.create(item);
               }
-              Alert.alert('הצלחה', 'ציוד ברירת מחדל נוסף בהצלחה');
               loadEquipment();
             } catch (error) {
               console.error('Error adding default equipment:', error);
@@ -193,7 +189,11 @@ const ClothingEquipmentManagementScreen: React.FC = () => {
         </View>
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.content} 
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
         {/* Action Buttons */}
         <View style={styles.actionRow}>
           <TouchableOpacity style={styles.addButton} onPress={handleAdd}>
@@ -348,13 +348,16 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 20,
   },
+  scrollContent: {
+    paddingBottom: 100,
+  },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
   actionRow: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     gap: 12,
     marginBottom: 20,
   },
@@ -388,7 +391,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   equipmentCard: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     justifyContent: 'space-between',
     alignItems: 'center',
     backgroundColor: Colors.background.card,
@@ -413,7 +416,7 @@ const styles = StyleSheet.create({
     color: Colors.text.secondary,
   },
   equipmentActions: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     gap: 8,
   },
   editButton: {

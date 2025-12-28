@@ -1,0 +1,13 @@
+---
+description: Navigation + RTL (React Navigation)
+globs:
+  - "src/navigation/**/*.tsx"
+  - "src/screens/**/*.tsx"
+alwaysApply: false
+---
+
+## Navigation rules
+- Routes claires, noms cohérents, pas de navigation "magique".
+- Pour chaque screen: définir paramètres (route params) typés.
+- Boutons retour/back : respecter RTL (icônes/chevrons).
+- Éviter la duplication des headers : utiliser `AppHeader` ou config navigation partagée.

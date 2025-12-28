@@ -1,17 +1,18 @@
 // Écran d'accueil principal
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
   ScrollView,
-  Alert,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../contexts/AuthContext';
 import { Colors, Shadows } from '../../theme/colors';
 import { soldierService, assignmentService } from '../../services/firebaseService';
+import { StatCard, ModuleCard } from '../../components';
+import { confirmAction } from '../../utils/notify';
 
 const HomeScreen: React.FC = () => {
   const navigation = useNavigation<any>();
@@ -23,11 +24,7 @@ const HomeScreen: React.FC = () => {
   });
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    loadStats();
-  }, []);
-
-  const loadStats = async () => {
+  const loadStats = useCallback(async () => {
     try {
       const soldiers = await soldierService.getAll();
       // TODO: Charger les vraies stats
@@ -41,16 +38,20 @@ const HomeScreen: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  // Recharger les stats à chaque fois que l'écran devient actif
+  useFocusEffect(
+    useCallback(() => {
+      loadStats();
+    }, [loadStats])
+  );
 
   const handleSignOut = () => {
-    Alert.alert(
+    confirmAction(
       'התנתקות',
       'האם אתה בטוח שברצונך להתנתק?',
-      [
-        { text: 'ביטול', style: 'cancel' },
-        { text: 'התנתק', style: 'destructive', onPress: signOut },
-      ]
+      signOut
     );
   };
 
@@ -115,7 +116,11 @@ const HomeScreen: React.FC = () => {
       </View>
 
       {/* Content */}
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.content} 
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
         {/* Title Section */}
         <View style={styles.titleSection}>
           <Text style={styles.mainTitle}>מערכת ניהול גדוד 982</Text>
@@ -124,18 +129,24 @@ const HomeScreen: React.FC = () => {
 
         {/* Quick Stats */}
         <View style={styles.statsContainer}>
-          <View style={[styles.statCard, { backgroundColor: Colors.status.info }]}>
-            <Text style={styles.statNumber}>{stats.totalSoldiers}</Text>
-            <Text style={styles.statLabel}>חיילים</Text>
-          </View>
-          <View style={[styles.statCard, { backgroundColor: Colors.status.success }]}>
-            <Text style={styles.statNumber}>{stats.todayAssignments}</Text>
-            <Text style={styles.statLabel}>היום</Text>
-          </View>
-          <View style={[styles.statCard, { backgroundColor: Colors.status.warning }]}>
-            <Text style={styles.statNumber}>{stats.pendingSignatures}</Text>
-            <Text style={styles.statLabel}>ממתינים</Text>
-          </View>
+          <StatCard
+            value={stats.totalSoldiers}
+            label="חיילים"
+            backgroundColor={Colors.status.info}
+            textColor={Colors.text.white}
+          />
+          <StatCard
+            value={stats.todayAssignments}
+            label="היום"
+            backgroundColor={Colors.status.success}
+            textColor={Colors.text.white}
+          />
+          <StatCard
+            value={stats.pendingSignatures}
+            label="ממתינים"
+            backgroundColor={Colors.status.warning}
+            textColor={Colors.text.white}
+          />
         </View>
 
         {/* Modules */}
@@ -146,35 +157,15 @@ const HomeScreen: React.FC = () => {
             const hasAccess = hasPermission(module.permission as any);
 
             return (
-              <TouchableOpacity
+              <ModuleCard
                 key={module.id}
-                style={[
-                  styles.moduleCard,
-                  !hasAccess && styles.moduleDisabled,
-                ]}
-                onPress={() => hasAccess && navigation.navigate(module.screen)}
+                title={module.title}
+                subtitle={module.subtitle}
+                icon={module.icon}
+                onPress={() => navigation.navigate(module.screen)}
                 disabled={!hasAccess}
-                activeOpacity={0.7}
-              >
-                <View style={[styles.moduleIcon, { backgroundColor: module.color }]}>
-                  <Text style={styles.moduleIconText}>{module.icon}</Text>
-                </View>
-                <View style={styles.moduleInfo}>
-                  <Text style={[styles.moduleTitle, !hasAccess && styles.textDisabled]}>
-                    {module.title}
-                  </Text>
-                  <Text style={[styles.moduleSubtitle, !hasAccess && styles.textDisabled]}>
-                    {module.subtitle}
-                  </Text>
-                </View>
-                {hasAccess ? (
-                  <Text style={styles.chevron}>›</Text>
-                ) : (
-                  <View style={styles.lockBadge}>
-                    <Text style={styles.lockText}>🔒</Text>
-                  </View>
-                )}
-              </TouchableOpacity>
+                backgroundColor={Colors.background.card}
+              />
             );
           })}
         </View>
@@ -264,6 +255,9 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 20,
     paddingTop: 20,
+  },
+  scrollContent: {
+    paddingBottom: 100,
   },
   titleSection: {
     alignItems: 'center',

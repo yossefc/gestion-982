@@ -75,10 +75,14 @@ export const addClothingEquipment = async (
   equipment: Omit<ClothingEquipment, 'id'>
 ): Promise<string> => {
   try {
-    const docRef = await addDoc(collection(db, CLOTHING_COLLECTION), {
-      ...equipment,
+    // Nettoyer les valeurs undefined pour Firestore
+    const cleanData = {
+      name: equipment.name,
+      yamach: equipment.yamach ?? 0, // Utiliser 0 si undefined
       createdAt: Timestamp.now(),
-    });
+    };
+    
+    const docRef = await addDoc(collection(db, CLOTHING_COLLECTION), cleanData);
     return docRef.id;
   } catch (error) {
     console.error('Error adding clothing equipment:', error);
