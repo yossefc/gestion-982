@@ -136,6 +136,23 @@ export type RootStackParamList = {
   };
 };
 
+// Holdings (équipement actuellement détenu par un soldat)
+export interface HoldingItem {
+  equipmentId: string;
+  equipmentName: string;
+  quantity: number;
+  serials: string[];  // Liste des numéros de série possédés
+}
+
+export interface SoldierHoldings {
+  soldierId: string;
+  soldierName: string;
+  soldierPersonalNumber: string;
+  type: 'combat' | 'clothing';
+  items: HoldingItem[];
+  lastUpdated: Date;
+}
+
 // Statistiques Dashboard
 export interface DashboardStats {
   totalSoldiers: number;
