@@ -118,6 +118,7 @@ export type RootStackParamList = {
   ManotDetails: { manaId: string };
   CombatEquipmentList: undefined;
   CombatAssignment: { soldierId: string };
+  CombatReturn: { soldierId: string };
   // Module Vêtement
   VetementHome: undefined;
   ClothingSignature: { soldierId: string };
@@ -127,6 +128,7 @@ export type RootStackParamList = {
   // Admin
   AdminPanel: undefined;
   UserManagement: undefined;
+  HoldingsRecalculate: undefined;
   // Signature
   SignatureScreen: { 
     soldierId: string; 
