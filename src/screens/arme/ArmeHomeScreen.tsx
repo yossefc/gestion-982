@@ -11,9 +11,11 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { Colors, Shadows } from '../../theme/colors';
 import { dashboardService, manaService, combatEquipmentService } from '../../services/firebaseService';
+import { useAuth } from '../../contexts/AuthContext';
 
 const ArmeHomeScreen: React.FC = () => {
   const navigation = useNavigation<any>();
+  const { user, loading: authLoading } = useAuth();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     activeManot: 0,
@@ -22,8 +24,13 @@ const ArmeHomeScreen: React.FC = () => {
   });
 
   useEffect(() => {
-    loadStats();
-  }, []);
+    // Attendre que l'auth soit prête avant de charger les stats
+    if (!authLoading && user) {
+      loadStats();
+    } else if (!authLoading) {
+      setLoading(false);
+    }
+  }, [authLoading, user]);
 
   const loadStats = async () => {
     try {

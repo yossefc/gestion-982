@@ -7,19 +7,9 @@ import AppNavigator from './src/navigation/AppNavigator';
 import { initializeDefaultData } from './src/services/equipmentService';
 
 export default function App() {
-  useEffect(() => {
-    // Initialiser les données par défaut au démarrage
-    const initData = async () => {
-      try {
-        await initializeDefaultData();
-        console.log('App initialized successfully');
-      } catch (error) {
-        console.error('Error initializing app:', error);
-      }
-    };
-    
-    initData();
-  }, []);
+  // NOTE: L'initialisation des données par défaut se fait maintenant
+  // via le panneau admin (AdminPanelScreen) pour éviter les erreurs
+  // de permissions avant que l'auth soit prête
 
   return (
     <SafeAreaProvider>

@@ -16,9 +16,11 @@ import { getAssignmentsByType } from '../../services/assignmentService';
 import { initializeDefaultData } from '../../services/equipmentService';
 import { getUserCount } from '../../services/userService';
 import { notifyError } from '../../utils/notify';
+import { useAuth } from '../../contexts/AuthContext';
 
 const AdminPanelScreen: React.FC = () => {
   const navigation = useNavigation<any>();
+  const { user, loading: authLoading } = useAuth();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     totalUsers: 0,
@@ -28,8 +30,13 @@ const AdminPanelScreen: React.FC = () => {
   });
 
   useEffect(() => {
-    loadStats();
-  }, []);
+    // Attendre que l'auth soit prête avant de charger les stats
+    if (!authLoading && user) {
+      loadStats();
+    } else if (!authLoading) {
+      setLoading(false);
+    }
+  }, [authLoading, user]);
 
   const loadStats = async () => {
     try {
