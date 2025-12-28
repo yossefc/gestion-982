@@ -13,9 +13,11 @@ import {
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import SignatureCanvas from 'react-native-signature-canvas';
 import { RootStackParamList } from '../../types';
-import { assignmentService, soldierService, clothingEquipmentService } from '../../services/firebaseService';
+import { assignmentService, soldierService, clothingEquipmentService, pdfStorageService } from '../../services/firebaseService';
 import { useAuth } from '../../contexts/AuthContext';
 import { Colors, Shadows } from '../../theme/colors';
+import { generateAssignmentPDF } from '../../services/pdfService';
+import { downloadAndSharePdf } from '../../services/whatsappService';
 
 type ClothingSignatureRouteProp = RouteProp<RootStackParamList, 'ClothingSignature'>;
 
@@ -41,6 +43,8 @@ const ClothingSignatureScreen: React.FC = () => {
   const [soldier, setSoldier] = useState<any>(null);
   const [equipment, setEquipment] = useState<EquipmentItem[]>([]);
   const [scrollEnabled, setScrollEnabled] = useState(true);
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [generatingPdf, setGeneratingPdf] = useState(false);
 
   useEffect(() => {
     // Attendre que l'authentification soit prête avant de charger les données
@@ -178,6 +182,52 @@ const ClothingSignatureScreen: React.FC = () => {
     );
   };
 
+  const generateAndUploadPdf = async (assignmentId: string, assignmentData: any) => {
+    try {
+      setGeneratingPdf(true);
+      console.log('Generating PDF for assignment:', assignmentId);
+
+      // 1. Générer le PDF
+      const pdfBytes = await generateAssignmentPDF({
+        ...assignmentData,
+        id: assignmentId,
+        timestamp: new Date(),
+      });
+
+      console.log('PDF generated successfully, size:', pdfBytes.length, 'bytes');
+
+      // 2. Upload vers Storage
+      const url = await pdfStorageService.uploadPdf(pdfBytes, assignmentId);
+      console.log('PDF uploaded to:', url);
+
+      // 3. Mettre à jour l'assignment avec le pdfUrl
+      await assignmentService.update(assignmentId, { pdfUrl: url });
+
+      setPdfUrl(url);
+      return url;
+    } catch (error) {
+      console.error('Error generating/uploading PDF:', error);
+      Alert.alert('שגיאה', 'נכשל ביצירת המסמך PDF');
+      return null;
+    } finally {
+      setGeneratingPdf(false);
+    }
+  };
+
+  const handleShareWhatsApp = async (url: string) => {
+    try {
+      const fileName = `assignment_${soldier.personalNumber}_${Date.now()}.pdf`;
+      const success = await downloadAndSharePdf(url, fileName);
+
+      if (success) {
+        console.log('PDF shared successfully via WhatsApp');
+      }
+    } catch (error) {
+      console.error('Error sharing PDF via WhatsApp:', error);
+      Alert.alert('שגיאה', 'נכשל בשיתוף הקובץ');
+    }
+  };
+
   const handleSaveAndSign = async () => {
     // Validation
     const selectedItems = equipment.filter(item => item.selected);
@@ -221,22 +271,75 @@ const ClothingSignatureScreen: React.FC = () => {
         return itemData;
       });
 
-      // Créer l'attribution avec signature
-      await assignmentService.create({
+      // Préparer les données complètes pour PDF
+      const assignmentData = {
         soldierId,
         soldierName: soldier.name,
         soldierPersonalNumber: soldier.personalNumber,
-        type: 'clothing',
+        soldierPhone: soldier.phone,
+        soldierCompany: soldier.company,
+        type: 'clothing' as const,
+        action: 'issue' as const,
         items: assignmentItems,
         signature,
-        status: 'נופק לחייל',
+        status: 'נופק לחייל' as const,
         assignedBy: user?.id || '',
-      });
+        assignedByName: user?.name,
+        assignedByEmail: user?.email,
+      };
 
-      (navigation as any).reset({
-        index: 0,
-        routes: [{ name: 'Home' }],
-      });
+      // Créer l'attribution avec signature
+      const assignmentId = await assignmentService.create(assignmentData);
+      console.log('Assignment created:', assignmentId);
+
+      // Générer et uploader le PDF
+      const pdfUrl = await generateAndUploadPdf(assignmentId, assignmentData);
+
+      // Afficher succès avec option WhatsApp
+      if (pdfUrl) {
+        Alert.alert(
+          'הצלחה',
+          'החתימה נשמרה והמסמך נוצר בהצלחה',
+          [
+            {
+              text: 'שלח ב-WhatsApp',
+              onPress: () => {
+                handleShareWhatsApp(pdfUrl);
+                // Naviguer après le partage
+                setTimeout(() => {
+                  (navigation as any).reset({
+                    index: 0,
+                    routes: [{ name: 'Home' }],
+                  });
+                }, 500);
+              },
+            },
+            {
+              text: 'סגור',
+              style: 'cancel',
+              onPress: () => (navigation as any).reset({
+                index: 0,
+                routes: [{ name: 'Home' }],
+              }),
+            },
+          ]
+        );
+      } else {
+        // PDF failed mais assignment créé
+        Alert.alert(
+          'הצלחה חלקית',
+          'החתימה נשמרה אך יצירת המסמך נכשלה',
+          [
+            {
+              text: 'אישור',
+              onPress: () => (navigation as any).reset({
+                index: 0,
+                routes: [{ name: 'Home' }],
+              }),
+            },
+          ]
+        );
+      }
     } catch (error) {
       Alert.alert('שגיאה', 'נכשל בשמירת החתימה');
       console.error('Error saving signature:', error);
