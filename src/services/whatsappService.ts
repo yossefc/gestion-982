@@ -17,7 +17,10 @@ export async function downloadPdf(
 ): Promise<string> {
   try {
     // Créer le chemin local pour sauvegarder le PDF
-    const fileUri = `${FileSystem.documentDirectory}${fileName}`;
+    // Note: cacheDirectory pour fichiers temporaires
+    // @ts-ignore - cacheDirectory existe mais types pas à jour
+    const cacheDir = FileSystem.cacheDirectory || '';
+    const fileUri = `${cacheDir}${fileName}`;
 
     console.log('Downloading PDF from:', pdfUrl);
     console.log('Saving to:', fileUri);
@@ -168,7 +171,8 @@ export async function openWhatsAppChat(
  */
 export async function cleanupOldPdfs(daysOld: number = 7): Promise<void> {
   try {
-    const directory = FileSystem.documentDirectory;
+    // @ts-ignore - cacheDirectory existe mais types pas à jour
+    const directory = FileSystem.cacheDirectory;
     if (!directory) return;
 
     const files = await FileSystem.readDirectoryAsync(directory);
