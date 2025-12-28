@@ -55,19 +55,27 @@ export interface ClothingEquipment {
   yamach?: number;        // ימח - quantité totale
 }
 
+// Action d'attribution
+export type AssignmentAction = 'issue' | 'add' | 'return' | 'credit';
+
 // Attribution d'équipement
 export interface Assignment {
   id: string;
   soldierId: string;
   soldierName: string;
   soldierPersonalNumber: string;
+  soldierPhone?: string;  // Téléphone du soldat (pour WhatsApp)
+  soldierCompany?: string; // Compagnie du soldat
   type: 'combat' | 'clothing';
+  action?: AssignmentAction;  // Type d'opération
   items: AssignmentItem[];
   signature?: string;     // Base64 de la signature
-  pdfUrl?: string;
+  pdfUrl?: string;        // URL du PDF généré
   status: EquipmentStatus;
   timestamp: Date;
   assignedBy: string;     // User ID qui a fait l'attribution
+  assignedByName?: string; // Nom de l'opérateur
+  assignedByEmail?: string; // Email de l'opérateur
 }
 
 // Item dans une attribution
