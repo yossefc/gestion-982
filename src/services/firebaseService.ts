@@ -26,6 +26,8 @@ import {
   Assignment,
   Mana,
   DashboardStats,
+  SoldierHoldings,
+  HoldingItem,
 } from '../types';
 import { mapFirebaseError, createAppError, ErrorCodes, logError } from './errors';
 import { buildSoldierSearchKey, buildNameLower, normalizeText } from '../utils/normalize';
@@ -41,6 +43,7 @@ const COLLECTIONS = {
   CLOTHING_EQUIPMENT: 'clothingEquipment',
   ASSIGNMENTS: 'assignments',
   MANOT: 'manot',
+  SOLDIER_HOLDINGS: 'soldier_holdings',
 };
 
 // ============================================
@@ -792,6 +795,285 @@ export const pdfStorageService = {
     } catch (error) {
       console.error('Error deleting PDF:', error);
       // Ne pas throw - la suppression peut échouer si le fichier n'existe pas
+    }
+  },
+};
+
+// ============================================
+// SOLDIER HOLDINGS (Snapshot d'équipement détenu)
+// ============================================
+
+export const holdingsService = {
+  /**
+   * Obtient les holdings actuels d'un soldat
+   *
+   * @param soldierId - ID du soldat
+   * @param type - Type d'équipement ('combat' | 'clothing')
+   * @returns Holdings du soldat ou null si aucun
+   */
+  async getHoldings(
+    soldierId: string,
+    type: 'combat' | 'clothing'
+  ): Promise<SoldierHoldings | null> {
+    try {
+      const holdingsId = `${soldierId}_${type}`;
+      const docRef = doc(db, COLLECTIONS.SOLDIER_HOLDINGS, holdingsId);
+      const docSnap = await getDoc(docRef);
+
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        return {
+          soldierId: data.soldierId,
+          soldierName: data.soldierName,
+          soldierPersonalNumber: data.soldierPersonalNumber,
+          type: data.type,
+          items: data.items || [],
+          lastUpdated: data.lastUpdated?.toDate() || new Date(),
+        } as SoldierHoldings;
+      }
+
+      return null;
+    } catch (error) {
+      console.error('Error getting holdings:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Calcule les holdings d'un soldat depuis ses assignments
+   * Analyse toutes les attributions (issue/add/return/credit) pour calculer
+   * l'état actuel de l'équipement détenu
+   *
+   * @param soldierId - ID du soldat
+   * @param type - Type d'équipement
+   * @returns Holdings calculés
+   */
+  async calculateHoldingsFromAssignments(
+    soldierId: string,
+    type: 'combat' | 'clothing'
+  ): Promise<SoldierHoldings> {
+    try {
+      // Récupérer toutes les attributions du soldat pour ce type
+      const assignments = await assignmentService.getBySoldier(soldierId);
+      const filteredAssignments = assignments.filter(a => a.type === type);
+
+      // Map pour accumuler les quantités par équipement
+      const itemsMap = new Map<string, HoldingItem>();
+
+      // Traiter chaque attribution
+      filteredAssignments.forEach(assignment => {
+        const action = assignment.action || 'issue';
+        const isAdding = action === 'issue' || action === 'add';
+        const isRemoving = action === 'return' || action === 'credit';
+
+        // Ignorer si pas une action valide ou si status = 'לא חתום' (non signé)
+        if (assignment.status === 'לא חתום') {
+          return;
+        }
+
+        assignment.items.forEach(item => {
+          const existing = itemsMap.get(item.equipmentId);
+
+          if (isAdding) {
+            // Ajouter à l'inventaire
+            if (existing) {
+              existing.quantity += item.quantity;
+              if (item.serial && !existing.serials.includes(item.serial)) {
+                existing.serials.push(item.serial);
+              }
+            } else {
+              itemsMap.set(item.equipmentId, {
+                equipmentId: item.equipmentId,
+                equipmentName: item.equipmentName,
+                quantity: item.quantity,
+                serials: item.serial ? [item.serial] : [],
+              });
+            }
+          } else if (isRemoving) {
+            // Retirer de l'inventaire
+            if (existing) {
+              existing.quantity -= item.quantity;
+              if (item.serial) {
+                existing.serials = existing.serials.filter(s => s !== item.serial);
+              }
+
+              // Supprimer si quantity <= 0
+              if (existing.quantity <= 0) {
+                itemsMap.delete(item.equipmentId);
+              }
+            }
+          }
+        });
+      });
+
+      // Récupérer les infos du soldat
+      const soldier = await soldierService.getById(soldierId);
+
+      return {
+        soldierId,
+        soldierName: soldier?.name || '',
+        soldierPersonalNumber: soldier?.personalNumber || '',
+        type,
+        items: Array.from(itemsMap.values()),
+        lastUpdated: new Date(),
+      };
+    } catch (error) {
+      console.error('Error calculating holdings:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Met à jour les holdings d'un soldat
+   *
+   * @param holdings - Holdings à sauvegarder
+   */
+  async updateHoldings(holdings: SoldierHoldings): Promise<void> {
+    try {
+      const holdingsId = `${holdings.soldierId}_${holdings.type}`;
+      const docRef = doc(db, COLLECTIONS.SOLDIER_HOLDINGS, holdingsId);
+
+      await updateDoc(docRef, {
+        soldierId: holdings.soldierId,
+        soldierName: holdings.soldierName,
+        soldierPersonalNumber: holdings.soldierPersonalNumber,
+        type: holdings.type,
+        items: holdings.items,
+        lastUpdated: Timestamp.now(),
+      }).catch(async (error) => {
+        // Si le document n'existe pas, le créer
+        if (error.code === 'not-found') {
+          const colRef = collection(db, COLLECTIONS.SOLDIER_HOLDINGS);
+          await addDoc(colRef, {
+            soldierId: holdings.soldierId,
+            soldierName: holdings.soldierName,
+            soldierPersonalNumber: holdings.soldierPersonalNumber,
+            type: holdings.type,
+            items: holdings.items,
+            lastUpdated: Timestamp.now(),
+          });
+        } else {
+          throw error;
+        }
+      });
+
+      console.log('Holdings updated successfully');
+    } catch (error) {
+      console.error('Error updating holdings:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Ajoute des items aux holdings d'un soldat (utilisé après issue/add)
+   *
+   * @param soldierId - ID du soldat
+   * @param type - Type d'équipement
+   * @param items - Items à ajouter
+   */
+  async addToHoldings(
+    soldierId: string,
+    type: 'combat' | 'clothing',
+    items: HoldingItem[]
+  ): Promise<void> {
+    try {
+      // Récupérer les holdings actuels
+      let holdings = await this.getHoldings(soldierId, type);
+
+      // Si aucun holdings, les calculer depuis les assignments
+      if (!holdings) {
+        const soldier = await soldierService.getById(soldierId);
+        holdings = {
+          soldierId,
+          soldierName: soldier?.name || '',
+          soldierPersonalNumber: soldier?.personalNumber || '',
+          type,
+          items: [],
+          lastUpdated: new Date(),
+        };
+      }
+
+      // Ajouter les nouveaux items
+      const itemsMap = new Map(
+        holdings.items.map(item => [item.equipmentId, item])
+      );
+
+      items.forEach(newItem => {
+        const existing = itemsMap.get(newItem.equipmentId);
+        if (existing) {
+          existing.quantity += newItem.quantity;
+          newItem.serials.forEach(serial => {
+            if (serial && !existing.serials.includes(serial)) {
+              existing.serials.push(serial);
+            }
+          });
+        } else {
+          itemsMap.set(newItem.equipmentId, { ...newItem });
+        }
+      });
+
+      holdings.items = Array.from(itemsMap.values());
+      holdings.lastUpdated = new Date();
+
+      // Sauvegarder
+      await this.updateHoldings(holdings);
+    } catch (error) {
+      console.error('Error adding to holdings:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Retire des items des holdings d'un soldat (utilisé après return/credit)
+   *
+   * @param soldierId - ID du soldat
+   * @param type - Type d'équipement
+   * @param items - Items à retirer
+   */
+  async removeFromHoldings(
+    soldierId: string,
+    type: 'combat' | 'clothing',
+    items: HoldingItem[]
+  ): Promise<void> {
+    try {
+      // Récupérer les holdings actuels
+      let holdings = await this.getHoldings(soldierId, type);
+
+      // Si aucun holdings, les calculer
+      if (!holdings) {
+        holdings = await this.calculateHoldingsFromAssignments(soldierId, type);
+      }
+
+      // Retirer les items
+      const itemsMap = new Map(
+        holdings.items.map(item => [item.equipmentId, item])
+      );
+
+      items.forEach(itemToRemove => {
+        const existing = itemsMap.get(itemToRemove.equipmentId);
+        if (existing) {
+          existing.quantity -= itemToRemove.quantity;
+
+          // Retirer les serials
+          itemToRemove.serials.forEach(serial => {
+            existing.serials = existing.serials.filter(s => s !== serial);
+          });
+
+          // Supprimer si quantity <= 0
+          if (existing.quantity <= 0) {
+            itemsMap.delete(itemToRemove.equipmentId);
+          }
+        }
+      });
+
+      holdings.items = Array.from(itemsMap.values());
+      holdings.lastUpdated = new Date();
+
+      // Sauvegarder
+      await this.updateHoldings(holdings);
+    } catch (error) {
+      console.error('Error removing from holdings:', error);
+      throw error;
     }
   },
 };
