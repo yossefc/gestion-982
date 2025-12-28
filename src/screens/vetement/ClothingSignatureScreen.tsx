@@ -206,12 +206,20 @@ const ClothingSignatureScreen: React.FC = () => {
     setSaving(true);
     try {
       // Préparer les items pour l'attribution
-      const assignmentItems = selectedItems.map(item => ({
-        equipmentId: item.id,
-        equipmentName: item.name,
-        quantity: item.quantity,
-        serial: item.serial || undefined,
-      }));
+      const assignmentItems = selectedItems.map(item => {
+        const itemData: any = {
+          equipmentId: item.id,
+          equipmentName: item.name,
+          quantity: item.quantity,
+        };
+
+        // N'ajouter serial que s'il existe
+        if (item.serial) {
+          itemData.serial = item.serial;
+        }
+
+        return itemData;
+      });
 
       // Créer l'attribution avec signature
       await assignmentService.create({

@@ -458,10 +458,27 @@ export const assignmentService = {
   // Créer une attribution
   async create(assignmentData: Omit<Assignment, 'id' | 'timestamp'>): Promise<string> {
     try {
-      const docRef = await addDoc(collection(db, COLLECTIONS.ASSIGNMENTS), {
-        ...assignmentData,
+      // Filtrer les valeurs undefined pour éviter les erreurs Firestore
+      const cleanData: any = {
+        soldierId: assignmentData.soldierId,
+        soldierName: assignmentData.soldierName,
+        soldierPersonalNumber: assignmentData.soldierPersonalNumber,
+        type: assignmentData.type,
+        items: assignmentData.items || [],
+        status: assignmentData.status,
+        assignedBy: assignmentData.assignedBy,
         timestamp: Timestamp.now(),
-      });
+      };
+
+      // Ajouter les champs optionnels seulement s'ils existent
+      if (assignmentData.signature) {
+        cleanData.signature = assignmentData.signature;
+      }
+      if (assignmentData.pdfUrl) {
+        cleanData.pdfUrl = assignmentData.pdfUrl;
+      }
+
+      const docRef = await addDoc(collection(db, COLLECTIONS.ASSIGNMENTS), cleanData);
       return docRef.id;
     } catch (error) {
       console.error('Error creating assignment:', error);
