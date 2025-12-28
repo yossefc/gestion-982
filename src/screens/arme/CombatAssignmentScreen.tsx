@@ -12,10 +12,11 @@ import {
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import SignatureCanvas from 'react-native-signature-canvas';
-import { RootStackParamList } from '../../types';
-import { assignmentService, soldierService } from '../../services/firebaseService';
+import { RootStackParamList, HoldingItem } from '../../types';
+import { assignmentService, soldierService, combatEquipmentService, manaService, holdingsService } from '../../services/firebaseService';
 import { useAuth } from '../../contexts/AuthContext';
 import { Colors, Shadows } from '../../theme/colors';
+import { CombatEquipment, Mana } from '../../types';
 
 type CombatAssignmentRouteProp = RouteProp<RootStackParamList, 'CombatAssignment'>;
 
@@ -48,8 +49,12 @@ const CombatAssignmentScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [soldier, setSoldier] = useState<any>(null);
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
+  const [equipment, setEquipment] = useState<EquipmentItem[]>([]);
+  const [manot, setManot] = useState<Mana[]>([]);
+  const [categories, setCategories] = useState<{name: string; color: string}[]>([]);
 
-  // Équipements par catégorie
+  // ANCIEN CODE HARDCODÉ - NE PLUS UTILISER
+  /*
   const [equipment, setEquipment] = useState<EquipmentItem[]>([
     // נשק ראשי
     { id: 'w1', name: 'M16', category: 'נשק ראשי', quantity: 1, selected: false, needsSerial: true,
@@ -112,42 +117,8 @@ const CombatAssignmentScreen: React.FC = () => {
     { id: 'r3', name: 'סוללות קשר', category: 'קשר', quantity: 2, selected: false, needsSerial: false },
   ]);
 
-  // Manot prédéfinies
-  const manot = [
-    {
-      id: 'mana1',
-      name: 'מנת מפקד',
-      items: ['w1', 'a1', 'c1', 'c3'],
-    },
-    {
-      id: 'mana2',
-      name: 'מנת לוחם',
-      items: ['w1', 'c1', 'c3'],
-    },
-    {
-      id: 'mana3',
-      name: 'מנת רימונאי',
-      items: ['w2', 'c1', 'c3'],
-    },
-    {
-      id: 'mana4',
-      name: 'מנת מאגיסט',
-      items: ['w5', 'c1', 'c3'],
-    },
-    {
-      id: 'mana5',
-      name: 'מנת קלע',
-      items: ['w3', 'c1', 'c3'],
-    },
-  ];
-
-  const categories = [
-    { name: 'נשק ראשי', color: '#e74c3c' },
-    { name: 'אביזרי נשק', color: '#e67e22' },
-    { name: 'ציוד לוחם', color: '#27ae60' },
-    { name: 'אופטיקה ותצפית', color: '#9b59b6' },
-    { name: 'קשר', color: '#3498db' },
-  ];
+  */
+  // FIN ANCIEN CODE HARDCODÉ
 
   useEffect(() => {
     loadSoldierData();
@@ -155,11 +126,61 @@ const CombatAssignmentScreen: React.FC = () => {
 
   const loadSoldierData = async () => {
     try {
-      const soldierData = await soldierService.getById(soldierId);
+      // Charger toutes les données en parallèle depuis Firebase
+      const [soldierData, combatEquipment, manotData] = await Promise.all([
+        soldierService.getById(soldierId),
+        combatEquipmentService.getAll(),
+        manaService.getAll(),
+      ]);
+
       setSoldier(soldierData);
+
+      // Transformer les équipements Firebase en EquipmentItem pour l'UI
+      const equipmentItems: EquipmentItem[] = combatEquipment.map((eq: CombatEquipment) => ({
+        id: eq.id,
+        name: eq.name,
+        category: eq.category,
+        quantity: 1,
+        selected: false,
+        needsSerial: eq.serial !== undefined || ['נשק', 'אופטיקה'].includes(eq.category),
+        subEquipments: eq.hasSubEquipment && eq.subEquipments
+          ? eq.subEquipments.map(sub => ({
+              id: sub.id,
+              name: sub.name,
+              selected: false,
+            }))
+          : undefined,
+      }));
+
+      setEquipment(equipmentItems);
+      setManot(manotData);
+
+      // Extraire les catégories uniques depuis les équipements
+      const uniqueCategories = Array.from(
+        new Set(combatEquipment.map((e: CombatEquipment) => e.category))
+      );
+
+      const categoryColors: { [key: string]: string } = {
+        'נשק': '#e74c3c',
+        'אופטיקה': '#9b59b6',
+        'ציוד מגן': '#27ae60',
+        'ציוד נוסף': '#3498db',
+        'נשק ראשי': '#e74c3c',
+        'אביזרי נשק': '#e67e22',
+        'ציוד לוחם': '#27ae60',
+        'אופטיקה ותצפית': '#9b59b6',
+        'קשר': '#3498db',
+      };
+
+      const categoriesData = uniqueCategories.map(cat => ({
+        name: cat,
+        color: categoryColors[cat] || '#95a5a6',
+      }));
+
+      setCategories(categoriesData);
     } catch (error) {
-      Alert.alert('שגיאה', 'נכשל בטעינת נתוני החייל');
-      console.error('Error loading soldier:', error);
+      Alert.alert('שגיאה', 'נכשל בטעינת הנתונים');
+      console.error('Error loading data:', error);
     } finally {
       setLoading(false);
     }
@@ -218,13 +239,28 @@ const CombatAssignmentScreen: React.FC = () => {
     const mana = manot.find(m => m.id === manaId);
     if (!mana) return;
 
-    setEquipment(prev =>
-      prev.map(item => ({
-        ...item,
-        selected: mana.items.includes(item.id),
-        subEquipments: item.subEquipments?.map(sub => ({ ...sub, selected: mana.items.includes(item.id) })),
-      }))
+    // Créer un Set des noms d'équipements dans la מנה
+    const manaEquipmentNames = new Set(
+      mana.equipments.map(eq => eq.equipmentName)
     );
+
+    setEquipment(prev =>
+      prev.map(item => {
+        const isInMana = manaEquipmentNames.has(item.name);
+        const manaEq = mana.equipments.find(eq => eq.equipmentName === item.name);
+        return {
+          ...item,
+          selected: isInMana,
+          quantity: isInMana && manaEq ? manaEq.quantity : item.quantity,
+          subEquipments: item.subEquipments?.map(sub => ({
+            ...sub,
+            selected: isInMana,
+          })),
+        };
+      })
+    );
+
+    Alert.alert('הצלחה', `${mana.name} נבחרה`);
   };
 
   const toggleCategory = (categoryName: string) => {
@@ -308,26 +344,54 @@ const CombatAssignmentScreen: React.FC = () => {
 
     setSaving(true);
     try {
-      const assignmentItems = selectedItems.map(item => ({
-        equipmentId: item.id,
-        equipmentName: item.name,
-        quantity: item.quantity,
-        serial: item.serial || undefined,
-        subEquipments: item.subEquipments
-          ?.filter(sub => sub.selected)
-          .map(sub => ({ name: sub.name, serial: undefined })),
-      }));
+      const assignmentItems = selectedItems.map(item => {
+        const itemData: any = {
+          equipmentId: item.id,
+          equipmentName: item.name,
+          quantity: item.quantity,
+        };
 
-      await assignmentService.create({
+        // Ajouter serial uniquement s'il existe
+        if (item.serial) {
+          itemData.serial = item.serial;
+        }
+
+        // Ajouter subEquipments uniquement s'il y en a
+        const selectedSubEquipments = item.subEquipments?.filter(sub => sub.selected);
+        if (selectedSubEquipments && selectedSubEquipments.length > 0) {
+          itemData.subEquipments = selectedSubEquipments.map(sub => ({ name: sub.name }));
+        }
+
+        return itemData;
+      });
+
+      const assignmentId = await assignmentService.create({
         soldierId,
         soldierName: soldier.name,
         soldierPersonalNumber: soldier.personalNumber,
+        soldierPhone: soldier.phone,
+        soldierCompany: soldier.company,
         type: 'combat',
+        action: 'issue',
         items: assignmentItems,
         signature,
         status: 'נופק לחייל',
         assignedBy: user?.id || '',
+        assignedByName: user?.name,
+        assignedByEmail: user?.email,
       });
+      console.log('Combat assignment created:', assignmentId);
+
+      // Mettre à jour les holdings du soldat
+      const holdingItems: HoldingItem[] = assignmentItems.map(item => ({
+        equipmentId: item.equipmentId,
+        equipmentName: item.equipmentName,
+        quantity: item.quantity,
+        serials: item.serial ? [item.serial] : [],
+      }));
+
+      await holdingsService.addToHoldings(soldierId, 'combat', holdingItems);
+      console.log('Combat holdings updated successfully');
 
       (navigation as any).reset({
         index: 0,
