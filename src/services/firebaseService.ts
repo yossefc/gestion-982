@@ -17,7 +17,8 @@ import {
   QueryDocumentSnapshot,
   DocumentData,
 } from 'firebase/firestore';
-import { app } from '../config/firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { app, storage } from '../config/firebase';
 import {
   Soldier,
   CombatEquipment,
@@ -733,6 +734,64 @@ export const dashboardService = {
     } catch (error) {
       console.error('Error getting combat stats:', error);
       throw error;
+    }
+  },
+};
+
+// ============================================
+// PDF STORAGE (Firebase Storage)
+// ============================================
+
+export const pdfStorageService = {
+  /**
+   * Upload un PDF vers Firebase Storage
+   *
+   * @param pdfBytes - Contenu du PDF en Uint8Array
+   * @param assignmentId - ID de l'attribution
+   * @returns URL de téléchargement du PDF
+   */
+  async uploadPdf(pdfBytes: Uint8Array, assignmentId: string): Promise<string> {
+    try {
+      // Créer une référence vers le fichier
+      const fileName = `assignment_${assignmentId}_${Date.now()}.pdf`;
+      const storageRef = ref(storage, `pdf/assignments/${fileName}`);
+
+      console.log('Uploading PDF to Storage:', fileName);
+
+      // Upload le fichier
+      const snapshot = await uploadBytes(storageRef, pdfBytes, {
+        contentType: 'application/pdf',
+      });
+
+      console.log('PDF uploaded successfully:', snapshot.metadata.fullPath);
+
+      // Récupérer l'URL de téléchargement
+      const downloadUrl = await getDownloadURL(snapshot.ref);
+
+      console.log('PDF download URL:', downloadUrl);
+
+      return downloadUrl;
+    } catch (error) {
+      console.error('Error uploading PDF:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Supprime un PDF de Firebase Storage
+   *
+   * @param pdfUrl - URL du PDF à supprimer
+   */
+  async deletePdf(pdfUrl: string): Promise<void> {
+    try {
+      // Extraire le chemin depuis l'URL
+      const { deleteObject } = await import('firebase/storage');
+      const storageRef = ref(storage, pdfUrl);
+      await deleteObject(storageRef);
+      console.log('PDF deleted successfully');
+    } catch (error) {
+      console.error('Error deleting PDF:', error);
+      // Ne pas throw - la suppression peut échouer si le fichier n'existe pas
     }
   },
 };
