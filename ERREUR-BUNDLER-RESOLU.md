@@ -34,3 +34,6 @@ Dans le terminal où Expo tourne :
 
 **🚀 Après le reload, l'erreur devrait disparaître et la signature devrait fonctionner ! 🎨**
 
+
+
+

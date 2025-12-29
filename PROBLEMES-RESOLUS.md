@@ -148,3 +148,6 @@ code .env
 
 **🎉 Presque terminé ! Plus que 2 fichiers à configurer et vous pourrez relancer le script ! 🚀**
 
+
+
+

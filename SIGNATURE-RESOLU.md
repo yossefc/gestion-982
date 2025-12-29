@@ -182,3 +182,6 @@ _Créé le : 28 décembre 2025_
 _Problème résolu : Signature canvas non fonctionnel_  
 _Solution : Installation react-native-webview + CSS optimisé_
 
+
+
+

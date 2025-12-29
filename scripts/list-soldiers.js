@@ -55,3 +55,6 @@ async function listAllSoldiers() {
 
 listAllSoldiers();
 
+
+
+

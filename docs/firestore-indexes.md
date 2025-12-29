@@ -96,3 +96,6 @@ await batch.commit();
 - La pagination réduit la charge réseau et améliore les performances
 - Les index composites doivent être créés AVANT de déployer les queries qui les utilisent
 
+
+
+

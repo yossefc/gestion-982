@@ -58,3 +58,6 @@ async function cleanSoldiers() {
 
 cleanSoldiers();
 
+
+
+

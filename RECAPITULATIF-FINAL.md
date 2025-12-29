@@ -180,3 +180,6 @@ _Créé le : 28 décembre 2025_
 _Projet : gestion-982 (גדוד 982)_  
 _Déploiement : Version 2.0.0_
 
+
+
+

@@ -267,3 +267,6 @@ Vous avez maintenant une application **gestion-982** totalement refactorée et p
 **Dernière mise à jour** : 26 Décembre 2024  
 **Version** : 2.0.0
 
+
+
+

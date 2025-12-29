@@ -1,6 +1,6 @@
 // Service de génération de PDF pour les attributions d'équipement
 import * as Print from 'expo-print';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { Assignment } from '../types';
 
 /**

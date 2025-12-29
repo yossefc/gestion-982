@@ -138,3 +138,6 @@ Tous les problèmes critiques ont été résolus :
 
 _Si vous rencontrez encore des erreurs, elles apparaîtront dans la console et je pourrai vous aider à les résoudre !_
 
+
+
+

@@ -276,3 +276,6 @@ Dans Firebase Console → Cloud Messaging :
 2. Déploiement Cloud Functions
 3. Tests sur devices réels (pas simulateur iOS pour push)
 
+
+
+

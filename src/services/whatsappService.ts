@@ -1,5 +1,5 @@
 // Service de partage WhatsApp pour les PDFs d'attribution
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { Alert } from 'react-native';
 

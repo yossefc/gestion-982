@@ -17,8 +17,10 @@ import {
   QueryDocumentSnapshot,
   DocumentData,
 } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { ref, uploadBytes, uploadString, getDownloadURL } from 'firebase/storage';
 import { app, storage } from '../config/firebase';
+import { pdfToBase64 } from './pdfService';
+import * as FileSystem from 'expo-file-system/legacy';
 import {
   Soldier,
   CombatEquipment,
@@ -761,12 +763,33 @@ export const pdfStorageService = {
 
       console.log('Uploading PDF to Storage:', fileName);
 
-      // Upload le fichier
-      const snapshot = await uploadBytes(storageRef, pdfBytes, {
+      // Convertir Uint8Array en base64
+      const pdfBase64 = pdfToBase64(pdfBytes);
+
+      // Sauvegarder temporairement le fichier localement
+      // @ts-ignore - cacheDirectory existe
+      const tempFileUri = `${FileSystem.cacheDirectory}${fileName}`;
+      await FileSystem.writeAsStringAsync(tempFileUri, pdfBase64, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+
+      console.log('PDF saved to temp file:', tempFileUri);
+
+      // Lire le fichier comme blob avec fetch
+      const response = await fetch(tempFileUri);
+      const blob = await response.blob();
+
+      console.log('PDF blob created, size:', blob.size);
+
+      // Upload le blob
+      const snapshot = await uploadBytes(storageRef, blob, {
         contentType: 'application/pdf',
       });
 
       console.log('PDF uploaded successfully:', snapshot.metadata.fullPath);
+
+      // Nettoyer le fichier temporaire
+      await FileSystem.deleteAsync(tempFileUri, { idempotent: true });
 
       // Récupérer l'URL de téléchargement
       const downloadUrl = await getDownloadURL(snapshot.ref);

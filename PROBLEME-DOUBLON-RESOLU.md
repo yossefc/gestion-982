@@ -138,3 +138,6 @@ Le soldat a été créé **avant** le déploiement des nouvelles règles qui ajo
 
 _Si le soldat n'apparaît toujours pas après reload, faites-le moi savoir !_
 
+
+
+

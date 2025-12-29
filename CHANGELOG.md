@@ -147,3 +147,6 @@ Toutes les modifications notables de ce projet seront documentées dans ce fichi
 
 Pour plus de détails, voir `docs/REFACTORING-SUMMARY.md`
 
+
+
+

@@ -95,3 +95,6 @@ firebase deploy --only firestore:rules
 
 **Durée totale** : ~15 minutes avec le script automatique
 
+
+
+

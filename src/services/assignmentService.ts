@@ -88,24 +88,37 @@ export const createAssignment = async (
   signatureBase64?: string
 ): Promise<string> => {
   try {
-    let signatureUrl = undefined;
-    
+    let signatureUrl: string | undefined = undefined;
+
     // Upload de la signature si fournie
     if (signatureBase64) {
       const signatureRef = ref(
-        storage, 
+        storage,
         `signatures/${assignment.soldierId}_${Date.now()}.png`
       );
       await uploadString(signatureRef, signatureBase64, 'data_url');
       signatureUrl = await getDownloadURL(signatureRef);
     }
-    
-    const docRef = await addDoc(collection(db, COLLECTION_NAME), {
-      ...assignment,
-      signature: signatureUrl,
+
+    // Construire les données en filtrant les undefined
+    const data: any = {
+      soldierId: assignment.soldierId,
+      soldierName: assignment.soldierName,
+      soldierPersonalNumber: assignment.soldierPersonalNumber,
+      type: assignment.type,
+      items: assignment.items || [],
+      status: assignment.status,
+      assignedBy: assignment.assignedBy,
       timestamp: Timestamp.now(),
-    });
-    
+    };
+
+    // Ajouter signature uniquement si elle existe
+    if (signatureUrl) {
+      data.signature = signatureUrl;
+    }
+
+    const docRef = await addDoc(collection(db, COLLECTION_NAME), data);
+
     return docRef.id;
   } catch (error) {
     console.error('Error creating assignment:', error);

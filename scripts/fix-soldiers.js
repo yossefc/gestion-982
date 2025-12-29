@@ -93,3 +93,6 @@ async function fixExistingSoldiers() {
 
 fixExistingSoldiers();
 
+
+
+

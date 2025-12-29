@@ -109,3 +109,6 @@ Pour la production, vous pourrez restaurer les règles strictes :
 
 Mais pour le développement, les règles actuelles sont parfaites ! 👍
 
+
+
+
