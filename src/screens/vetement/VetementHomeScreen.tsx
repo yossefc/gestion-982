@@ -47,7 +47,7 @@ const VetementHomeScreen: React.FC = () => {
       subtitle: 'הנפקת ביגוד וציוד אישי',
       icon: '✍️',
       color: Colors.status.success,
-      action: () => navigation.navigate('SoldierSearch', { mode: 'clothing' }),
+      action: () => navigation.navigate('SoldierSearch', { mode: 'clothing', action: 'signature' }),
     },
     {
       id: 'return',
@@ -55,7 +55,7 @@ const VetementHomeScreen: React.FC = () => {
       subtitle: 'החזרת ציוד',
       icon: '↩️',
       color: Colors.status.warning,
-      action: () => navigation.navigate('SoldierSearch', { mode: 'clothing' }),
+      action: () => navigation.navigate('SoldierSearch', { mode: 'clothing', action: 'return' }),
     },
     {
       id: 'dashboard',

@@ -1,11 +1,12 @@
 // Service pour gérer les attributions d'équipement dans Firestore
-import { 
-  collection, 
-  doc, 
-  getDocs, 
-  getDoc, 
-  addDoc, 
-  updateDoc, 
+import {
+  collection,
+  doc,
+  getDocs,
+  getDoc,
+  addDoc,
+  updateDoc,
+  setDoc,
   query,
   where,
   orderBy,
@@ -35,9 +36,34 @@ const convertDocToAssignment = (doc: any): Assignment => {
   };
 };
 
+// Récupérer l'assignment actuel d'un soldat (par ID déterministe)
+export const getCurrentAssignment = async (
+  soldierId: string,
+  type: 'combat' | 'clothing',
+  action?: 'issue' | 'credit'
+): Promise<Assignment | null> => {
+  try {
+    // Générer l'ID déterministe (même logique que createAssignment)
+    const actionSuffix = action ? `_${action}` : '';
+    const assignmentId = `${soldierId}_${type}${actionSuffix}`;
+
+    const docRef = doc(db, COLLECTION_NAME, assignmentId);
+    const docSnap = await getDoc(docRef);
+
+    if (!docSnap.exists()) {
+      return null;
+    }
+
+    return convertDocToAssignment(docSnap);
+  } catch (error) {
+    console.error('Error getting current assignment:', error);
+    return null;
+  }
+};
+
 // Récupérer toutes les attributions d'un soldat
 export const getAssignmentsBySoldier = async (
-  soldierId: string, 
+  soldierId: string,
   type?: 'combat' | 'clothing'
 ): Promise<Assignment[]> => {
   try {
@@ -56,7 +82,7 @@ export const getAssignmentsBySoldier = async (
         orderBy('timestamp', 'desc')
       );
     }
-    
+
     const snapshot = await getDocs(q);
     return snapshot.docs.map(convertDocToAssignment);
   } catch (error) {
@@ -73,7 +99,7 @@ export const getAssignmentsByType = async (type: 'combat' | 'clothing'): Promise
       where('type', '==', type),
       orderBy('timestamp', 'desc')
     );
-    
+
     const snapshot = await getDocs(q);
     return snapshot.docs.map(convertDocToAssignment);
   } catch (error) {
@@ -82,25 +108,104 @@ export const getAssignmentsByType = async (type: 'combat' | 'clothing'): Promise
   }
 };
 
-// Créer une nouvelle attribution avec signature
+// Calculer l'équipement actuellement détenu par un soldat
+// Scanne tous les assignments (issue/credit) et calcule le solde actuel
+export const calculateCurrentHoldings = async (
+  soldierId: string,
+  type: 'combat' | 'clothing'
+): Promise<AssignmentItem[]> => {
+  try {
+    const assignments = await getAssignmentsBySoldier(soldierId, type);
+
+    // Map pour accumuler les items: equipmentId -> item
+    const itemsMap = new Map<string, AssignmentItem>();
+
+    // Trier par timestamp (plus ancien en premier)
+    const sortedAssignments = assignments.sort(
+      (a, b) => a.timestamp.getTime() - b.timestamp.getTime()
+    );
+
+    // Pour chaque assignment, ajouter ou retirer les items
+    sortedAssignments.forEach(assignment => {
+      const action = assignment.action || 'issue'; // Par défaut 'issue' si pas d'action
+
+      assignment.items.forEach(item => {
+        const existing = itemsMap.get(item.equipmentId);
+
+        if (action === 'issue' || action === 'add') {
+          // AJOUTER à l'inventaire
+          if (existing) {
+            existing.quantity += item.quantity;
+            // Ajouter le serial s'il existe et n'est pas déjà présent
+            if (item.serial && !existing.serial?.includes(item.serial)) {
+              existing.serial = existing.serial
+                ? `${existing.serial}, ${item.serial}`
+                : item.serial;
+            }
+          } else {
+            itemsMap.set(item.equipmentId, { ...item });
+          }
+        } else if (action === 'credit' || action === 'return') {
+          // RETIRER de l'inventaire
+          if (existing) {
+            existing.quantity -= item.quantity;
+
+            // Retirer les serials
+            if (item.serial && existing.serial) {
+              const serialsToRemove = item.serial.split(',').map(s => s.trim());
+              const existingSerials = existing.serial.split(',').map(s => s.trim());
+              const remainingSerials = existingSerials.filter(
+                s => !serialsToRemove.includes(s)
+              );
+              existing.serial = remainingSerials.length > 0
+                ? remainingSerials.join(', ')
+                : undefined;
+            }
+
+            // Supprimer l'item si quantité <= 0
+            if (existing.quantity <= 0) {
+              itemsMap.delete(item.equipmentId);
+            }
+          }
+        }
+      });
+    });
+
+    // Retourner les items avec quantity > 0
+    return Array.from(itemsMap.values()).filter(item => item.quantity > 0);
+  } catch (error) {
+    console.error('Error calculating current holdings:', error);
+    throw error;
+  }
+};
+
+// Créer ou mettre à jour une attribution avec signature (UPSERT)
+// Utilise soldierId + type + action comme ID unique pour éviter les doublons
 export const createAssignment = async (
   assignment: Omit<Assignment, 'id' | 'timestamp' | 'pdfUrl'>,
   signatureBase64?: string
 ): Promise<string> => {
   try {
+    // Générer un ID déterministe basé sur soldierId, type, et action
+    // Format: {soldierId}_{type}_{action} si action existe
+    // Format: {soldierId}_{type} si pas d'action (pour compatibilité)
+    const actionSuffix = assignment.action ? `_${assignment.action}` : '';
+    const assignmentId = `${assignment.soldierId}_${assignment.type}${actionSuffix}`;
+    const docRef = doc(db, COLLECTION_NAME, assignmentId);
+
     let signatureUrl: string | undefined = undefined;
 
-    // Upload de la signature si fournie
+    // Upload de la signature si fournie (remplace l'ancienne)
     if (signatureBase64) {
       const signatureRef = ref(
         storage,
-        `signatures/${assignment.soldierId}_${Date.now()}.png`
+        `signatures/${assignmentId}.png`
       );
       await uploadString(signatureRef, signatureBase64, 'data_url');
       signatureUrl = await getDownloadURL(signatureRef);
     }
 
-    // Construire les données en filtrant les undefined
+    // Construire les données
     const data: any = {
       soldierId: assignment.soldierId,
       soldierName: assignment.soldierName,
@@ -110,16 +215,36 @@ export const createAssignment = async (
       status: assignment.status,
       assignedBy: assignment.assignedBy,
       timestamp: Timestamp.now(),
+      updatedAt: Timestamp.now(),
     };
 
-    // Ajouter signature uniquement si elle existe
+    // Ajouter les champs optionnels s'ils existent
+    if (assignment.action) {
+      data.action = assignment.action;
+    }
+    if (assignment.soldierPhone) {
+      data.soldierPhone = assignment.soldierPhone;
+    }
+    if (assignment.soldierCompany) {
+      data.soldierCompany = assignment.soldierCompany;
+    }
+    if (assignment.assignedByName) {
+      data.assignedByName = assignment.assignedByName;
+    }
+    if (assignment.assignedByEmail) {
+      data.assignedByEmail = assignment.assignedByEmail;
+    }
     if (signatureUrl) {
       data.signature = signatureUrl;
     }
 
-    const docRef = await addDoc(collection(db, COLLECTION_NAME), data);
+    // UPSERT: créer ou mettre à jour le document existant
+    // merge:true pour METTRE À JOUR les champs sans tout effacer
+    await setDoc(docRef, data, { merge: true });
 
-    return docRef.id;
+    console.log(`Assignment ${assignmentId} created/updated successfully (merged)`);
+
+    return assignmentId;
   } catch (error) {
     console.error('Error creating assignment:', error);
     throw error;
@@ -201,6 +326,72 @@ export const returnEquipment = async (
   }
 };
 
+// Récupérer tous les soldats avec de l'équipement détenu actuellement
+// Retourne une liste de {soldierId, soldierName, soldierPersonalNumber, items, totalQuantity}
+export const getSoldiersWithCurrentHoldings = async (
+  type: 'combat' | 'clothing'
+): Promise<Array<{
+  soldierId: string;
+  soldierName: string;
+  soldierPersonalNumber: string;
+  items: AssignmentItem[];
+  totalQuantity: number;
+}>> => {
+  try {
+    // Récupérer tous les assignments de ce type
+    const allAssignments = await getAssignmentsByType(type);
+
+    // Grouper par soldierId
+    const bySoldier = new Map<string, {
+      soldierName: string;
+      soldierPersonalNumber: string;
+      assignments: Assignment[];
+    }>();
+
+    allAssignments.forEach(assignment => {
+      if (!bySoldier.has(assignment.soldierId)) {
+        bySoldier.set(assignment.soldierId, {
+          soldierName: assignment.soldierName,
+          soldierPersonalNumber: assignment.soldierPersonalNumber,
+          assignments: [],
+        });
+      }
+      bySoldier.get(assignment.soldierId)!.assignments.push(assignment);
+    });
+
+    // Calculer les holdings pour chaque soldat
+    const results: Array<{
+      soldierId: string;
+      soldierName: string;
+      soldierPersonalNumber: string;
+      items: AssignmentItem[];
+      totalQuantity: number;
+    }> = [];
+
+    for (const [soldierId, data] of bySoldier.entries()) {
+      // Calculer les items actuellement détenus
+      const items = await calculateCurrentHoldings(soldierId, type);
+
+      if (items.length > 0) {
+        const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0);
+        results.push({
+          soldierId,
+          soldierName: data.soldierName,
+          soldierPersonalNumber: data.soldierPersonalNumber,
+          items,
+          totalQuantity,
+        });
+      }
+    }
+
+    // Trier par nombre total décroissant
+    return results.sort((a, b) => b.totalQuantity - a.totalQuantity);
+  } catch (error) {
+    console.error('Error getting soldiers with current holdings:', error);
+    throw error;
+  }
+};
+
 // Statistiques pour le dashboard
 export const getAssignmentStats = async (type: 'combat' | 'clothing'): Promise<{
   total: number;
@@ -210,7 +401,7 @@ export const getAssignmentStats = async (type: 'combat' | 'clothing'): Promise<{
 }> => {
   try {
     const assignments = await getAssignmentsByType(type);
-    
+
     return {
       total: assignments.length,
       signed: assignments.filter(a => a.status === 'נופק לחייל').length,

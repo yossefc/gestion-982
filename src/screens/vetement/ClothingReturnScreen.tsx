@@ -12,11 +12,10 @@ import {
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import SignatureCanvas from 'react-native-signature-canvas';
-import { RootStackParamList, Soldier, HoldingItem } from '../../types';
+import { RootStackParamList, Soldier, AssignmentItem } from '../../types';
 import {
   assignmentService,
   soldierService,
-  holdingsService,
   pdfStorageService,
 } from '../../services/firebaseService';
 import { useAuth } from '../../contexts/AuthContext';
@@ -26,10 +25,11 @@ import { downloadAndSharePdf, openWhatsAppChat } from '../../services/whatsappSe
 
 type ClothingReturnRouteProp = RouteProp<RootStackParamList, 'ClothingReturn'>;
 
-interface ReturnItem extends HoldingItem {
+interface ReturnItem extends AssignmentItem {
   selected: boolean;
   returnQuantity: number;
-  selectedSerials: string[];
+  availableSerials: string[]; // Serials disponibles (depuis serial string)
+  selectedSerials: string[]; // Serials sélectionnés pour le retour
 }
 
 const ClothingReturnScreen: React.FC = () => {
@@ -54,29 +54,28 @@ const ClothingReturnScreen: React.FC = () => {
 
   const loadData = async () => {
     try {
-      const [soldierData, holdings] = await Promise.all([
+      const [soldierData, currentItems] = await Promise.all([
         soldierService.getById(soldierId),
-        holdingsService.getHoldings(soldierId, 'clothing'),
+        assignmentService.calculateCurrentHoldings(soldierId, 'clothing'),
       ]);
 
       setSoldier(soldierData);
 
-      // Si pas de holdings, calculer depuis assignments
-      let holdingsData = holdings;
-      if (!holdingsData) {
-        holdingsData = await holdingsService.calculateHoldingsFromAssignments(
-          soldierId,
-          'clothing'
-        );
-      }
+      // Convertir les items en ReturnItems
+      // Convertir serial (string) en tableau de serials
+      const returnItems: ReturnItem[] = currentItems.map(item => {
+        const serialsArray = item.serial
+          ? item.serial.split(',').map(s => s.trim())
+          : [];
 
-      // Convertir holdings en ReturnItems
-      const returnItems: ReturnItem[] = holdingsData.items.map(item => ({
-        ...item,
-        selected: false,
-        returnQuantity: 0,
-        selectedSerials: [],
-      }));
+        return {
+          ...item,
+          selected: false,
+          returnQuantity: 0,
+          availableSerials: serialsArray,
+          selectedSerials: [], // Initialement vide
+        };
+      });
 
       setItems(returnItems);
     } catch (error) {
@@ -94,7 +93,7 @@ const ClothingReturnScreen: React.FC = () => {
           ? {
               ...item,
               selected: !item.selected,
-              returnQuantity: !item.selected ? 1 : 0,
+              returnQuantity: !item.selected ? item.quantity : 0,
               selectedSerials: [],
             }
           : item
@@ -210,50 +209,42 @@ const ClothingReturnScreen: React.FC = () => {
             setProcessing(true);
             try {
               // Préparer les items pour le credit assignment
-              const creditItems = selectedItems.map(item => ({
-                equipmentId: item.equipmentId,
-                equipmentName: item.equipmentName,
-                quantity: item.returnQuantity,
-                serial: item.selectedSerials.length > 0
-                  ? item.selectedSerials.join(', ')
-                  : undefined,
-              }));
+              const creditItems = selectedItems.map(item => {
+                const itemData: any = {
+                  equipmentId: item.equipmentId,
+                  equipmentName: item.equipmentName,
+                  quantity: item.returnQuantity,
+                };
 
-              // Créer le credit assignment
-              const assignmentData = {
+                // Ajouter serial seulement s'il y a des serials sélectionnés
+                if (item.selectedSerials.length > 0) {
+                  itemData.serial = item.selectedSerials.join(', ');
+                }
+
+                return itemData;
+              });
+
+              // Créer le credit assignment (sans timestamp - ajouté automatiquement)
+              const assignmentData: any = {
                 soldierId,
                 soldierName: soldier?.name || '',
                 soldierPersonalNumber: soldier?.personalNumber || '',
-                soldierPhone: soldier?.phone,
-                soldierCompany: soldier?.company,
                 type: 'clothing' as const,
                 action: 'credit' as const,
                 items: creditItems,
                 signature,
                 status: 'זוכה' as const,
                 assignedBy: user?.id || '',
-                assignedByName: user?.name,
-                assignedByEmail: user?.email,
-                timestamp: new Date(),
               };
+
+              // Ajouter les champs optionnels seulement s'ils existent
+              if (soldier?.phone) assignmentData.soldierPhone = soldier.phone;
+              if (soldier?.company) assignmentData.soldierCompany = soldier.company;
+              if (user?.name) assignmentData.assignedByName = user.name;
+              if (user?.email) assignmentData.assignedByEmail = user.email;
 
               const assignmentId = await assignmentService.create(assignmentData);
               console.log('Credit assignment created:', assignmentId);
-
-              // Mettre à jour les holdings (retirer les items retournés)
-              const holdingItems: HoldingItem[] = selectedItems.map(item => ({
-                equipmentId: item.equipmentId,
-                equipmentName: item.equipmentName,
-                quantity: item.returnQuantity,
-                serials: item.selectedSerials,
-              }));
-
-              await holdingsService.removeFromHoldings(
-                soldierId,
-                'clothing',
-                holdingItems
-              );
-              console.log('Holdings updated successfully');
 
               // Générer PDF
               const pdfBytes = await generateAssignmentPDF({
@@ -269,21 +260,20 @@ const ClothingReturnScreen: React.FC = () => {
               await assignmentService.update(assignmentId, { pdfUrl });
               console.log('PDF generated and uploaded:', pdfUrl);
 
-              // Calculer les items restants
-              const updatedHoldings = await holdingsService.getHoldings(
+              // Calculer les items restants (recalculer depuis assignments)
+              const remainingItems = await assignmentService.calculateCurrentHoldings(
                 soldierId,
                 'clothing'
               );
 
-              const hasRemainingItems =
-                updatedHoldings && updatedHoldings.items.length > 0;
+              const hasRemainingItems = remainingItems.length > 0;
 
               // Générer message WhatsApp
               let whatsappMessage = `שלום ${soldier?.name},\n\nהזיכוי בוצע בהצלחה.\n\n`;
 
               if (hasRemainingItems) {
                 whatsappMessage += 'ציוד פתוח:\n';
-                updatedHoldings!.items.forEach(item => {
+                remainingItems.forEach(item => {
                   whatsappMessage += `• ${item.equipmentName} - כמות: ${item.quantity}\n`;
                 });
               } else {
@@ -296,7 +286,7 @@ const ClothingReturnScreen: React.FC = () => {
               Alert.alert(
                 'הצלחה',
                 hasRemainingItems
-                  ? `הזיכוי בוצע בהצלחה. לחייל נותר ציוד פתוח (${updatedHoldings!.items.length} פריטים).`
+                  ? `הזיכוי בוצע בהצלחה. לחייל נותר ציוד פתוח (${remainingItems.length} פריטים).`
                   : 'הזיכוי בוצע בהצלחה. החייל אין לו ציוד פתוח.',
                 [
                   {
@@ -520,11 +510,11 @@ const ClothingReturnScreen: React.FC = () => {
                     </View>
 
                     {/* Serials selector */}
-                    {item.serials.length > 0 && (
+                    {item.availableSerials.length > 0 && (
                       <View style={styles.serialsSection}>
                         <Text style={styles.detailLabel}>בחר מסטבים:</Text>
                         <View style={styles.serialsList}>
-                          {item.serials.map((serial, idx) => (
+                          {item.availableSerials.map((serial, idx) => (
                             <TouchableOpacity
                               key={idx}
                               style={[

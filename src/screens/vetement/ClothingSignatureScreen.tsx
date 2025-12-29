@@ -12,8 +12,8 @@ import {
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import SignatureCanvas from 'react-native-signature-canvas';
-import { RootStackParamList, HoldingItem } from '../../types';
-import { assignmentService, soldierService, clothingEquipmentService, pdfStorageService, holdingsService } from '../../services/firebaseService';
+import { RootStackParamList } from '../../types';
+import { assignmentService, soldierService, clothingEquipmentService, pdfStorageService } from '../../services/firebaseService';
 import { useAuth } from '../../contexts/AuthContext';
 import { Colors, Shadows } from '../../theme/colors';
 import { generateAssignmentPDF } from '../../services/pdfService';
@@ -60,24 +60,38 @@ const ClothingSignatureScreen: React.FC = () => {
 
   const loadData = async () => {
     try {
-      // Charger soldat et équipements en parallèle
-      const [soldierData, equipmentData] = await Promise.all([
+      // Charger soldat, équipements, et ASSIGNMENT ACTUEL en parallèle
+      const [soldierData, equipmentData, currentAssignment] = await Promise.all([
         soldierService.getById(soldierId),
         clothingEquipmentService.getAll(),
+        assignmentService.getCurrentAssignment(soldierId, 'clothing', 'issue'),
       ]);
 
       setSoldier(soldierData);
 
       // Convertir les équipements Firebase en EquipmentItem
-      const equipmentItems: EquipmentItem[] = equipmentData.map(eq => ({
-        id: eq.id,
-        name: eq.name,
-        quantity: 1,
-        selected: false,
-        needsSerial: ['קסדה', 'וסט לוחם', 'וסט קרמי'].includes(eq.name),
-      }));
+      const equipmentItems: EquipmentItem[] = equipmentData.map(eq => {
+        // Chercher si cet équipement est dans l'assignment actuel
+        const currentItem = currentAssignment?.items?.find(
+          item => item.equipmentId === eq.id
+        );
+
+        return {
+          id: eq.id,
+          name: eq.name,
+          quantity: currentItem?.quantity || 1,
+          selected: !!currentItem, // Pré-cocher SEULEMENT si dans l'assignment
+          serial: currentItem?.serial || undefined,
+          needsSerial: ['קסדה', 'וסט לוחם', 'וסט קרמי'].includes(eq.name),
+        };
+      });
 
       setEquipment(equipmentItems);
+
+      // Afficher un message si des items existent déjà
+      if (currentAssignment?.items && currentAssignment.items.length > 0) {
+        console.log(`Found ${currentAssignment.items.length} items in current assignment for soldier ${soldierId}`);
+      }
     } catch (error) {
       Alert.alert('שגיאה', 'נכשל בטעינת הנתונים');
       console.error('Error loading data:', error);
@@ -272,36 +286,27 @@ const ClothingSignatureScreen: React.FC = () => {
       });
 
       // Préparer les données complètes pour PDF
-      const assignmentData = {
+      const assignmentData: any = {
         soldierId,
         soldierName: soldier.name,
         soldierPersonalNumber: soldier.personalNumber,
-        soldierPhone: soldier.phone,
-        soldierCompany: soldier.company,
         type: 'clothing' as const,
         action: 'issue' as const,
         items: assignmentItems,
         signature,
         status: 'נופק לחייל' as const,
         assignedBy: user?.id || '',
-        assignedByName: user?.name,
-        assignedByEmail: user?.email,
       };
+
+      // Ajouter les champs optionnels seulement s'ils existent
+      if (soldier.phone) assignmentData.soldierPhone = soldier.phone;
+      if (soldier.company) assignmentData.soldierCompany = soldier.company;
+      if (user?.name) assignmentData.assignedByName = user.name;
+      if (user?.email) assignmentData.assignedByEmail = user.email;
 
       // Créer l'attribution avec signature
       const assignmentId = await assignmentService.create(assignmentData);
-      console.log('Assignment created:', assignmentId);
-
-      // Mettre à jour les holdings du soldat
-      const holdingItems: HoldingItem[] = assignmentItems.map(item => ({
-        equipmentId: item.equipmentId,
-        equipmentName: item.equipmentName,
-        quantity: item.quantity,
-        serials: item.serial ? [item.serial] : [],
-      }));
-
-      await holdingsService.addToHoldings(soldierId, 'clothing', holdingItems);
-      console.log('Holdings updated successfully');
+      console.log('Assignment created/updated:', assignmentId);
 
       // Générer et uploader le PDF
       const pdfUrl = await generateAndUploadPdf(assignmentId, assignmentData);

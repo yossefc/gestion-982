@@ -52,10 +52,27 @@ function generateAssignmentHTML(assignment: Assignment): string {
     ? 'טופס מסירת ציוד לחימה'
     : 'טופס מסירת ביגוד וציוד אישי';
 
-  const dateStr = new Date(assignment.timestamp).toLocaleString('he-IL', {
+  // S'assurer que timestamp est un Date object
+  const timestamp = assignment.timestamp instanceof Date
+    ? assignment.timestamp
+    : new Date(assignment.timestamp);
+
+  const dateStr = timestamp.toLocaleString('he-IL', {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+
+  // Format additionnel: juste la date (sans heure)
+  const dateOnly = timestamp.toLocaleDateString('he-IL', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+
+  const timeOnly = timestamp.toLocaleTimeString('he-IL', {
     hour: '2-digit',
     minute: '2-digit',
   });
@@ -118,8 +135,26 @@ function generateAssignmentHTML(assignment: Assignment): string {
       text-align: center;
       font-size: 16px;
       margin-top: 0;
-      margin-bottom: 30px;
+      margin-bottom: 10px;
       color: #7f8c8d;
+    }
+    .date-box {
+      background-color: #3498db;
+      color: white;
+      padding: 12px;
+      text-align: center;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      font-size: 16px;
+      font-weight: bold;
+    }
+    .date-box .date {
+      font-size: 18px;
+      margin-bottom: 5px;
+    }
+    .date-box .time {
+      font-size: 14px;
+      opacity: 0.9;
     }
     .soldier-info {
       border: 2px solid #2c3e50;
@@ -179,6 +214,11 @@ function generateAssignmentHTML(assignment: Assignment): string {
 <body>
   <h1>${titleText}</h1>
   <h2>גדוד 982</h2>
+
+  <div class="date-box">
+    <div class="date">📅 ${dateOnly}</div>
+    <div class="time">🕐 שעה: ${timeOnly}</div>
+  </div>
 
   <div class="soldier-info">
     <p><strong>שם חייל:</strong> ${assignment.soldierName}</p>

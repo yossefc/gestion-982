@@ -153,6 +153,16 @@ export interface SoldierHoldings {
   type: 'combat' | 'clothing';
   items: HoldingItem[];
   lastUpdated: Date;
+  // Champs agrégés pour requêtes efficaces
+  outstandingCount: number;  // Nombre total d'items à rendre
+  hasSignedEquipment: boolean;  // A déjà signé pour des équipements
+  status: 'OPEN' | 'CLOSED';  // OPEN = reste à rendre, CLOSED = tout rendu
+  currentPdf?: {
+    type: 'SIGNATURE' | 'ZIKUY';  // Type du PDF actuel
+    storagePath: string;  // Chemin dans Storage
+    url?: string;  // URL de téléchargement
+    updatedAt: Date;
+  };
 }
 
 // Statistiques Dashboard

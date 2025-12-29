@@ -12,8 +12,8 @@ import {
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import SignatureCanvas from 'react-native-signature-canvas';
-import { RootStackParamList, HoldingItem } from '../../types';
-import { assignmentService, soldierService, combatEquipmentService, manaService, holdingsService } from '../../services/firebaseService';
+import { RootStackParamList } from '../../types';
+import { assignmentService, soldierService, combatEquipmentService, manaService } from '../../services/firebaseService';
 import { useAuth } from '../../contexts/AuthContext';
 import { Colors, Shadows } from '../../theme/colors';
 import { CombatEquipment, Mana } from '../../types';
@@ -126,34 +126,54 @@ const CombatAssignmentScreen: React.FC = () => {
 
   const loadSoldierData = async () => {
     try {
-      // Charger toutes les données en parallèle depuis Firebase
-      const [soldierData, combatEquipment, manotData] = await Promise.all([
+      // Charger toutes les données + ASSIGNMENT ACTUEL en parallèle depuis Firebase
+      const [soldierData, combatEquipment, manotData, currentAssignment] = await Promise.all([
         soldierService.getById(soldierId),
         combatEquipmentService.getAll(),
         manaService.getAll(),
+        assignmentService.getCurrentAssignment(soldierId, 'combat', 'issue'),
       ]);
 
       setSoldier(soldierData);
 
       // Transformer les équipements Firebase en EquipmentItem pour l'UI
-      const equipmentItems: EquipmentItem[] = combatEquipment.map((eq: CombatEquipment) => ({
-        id: eq.id,
-        name: eq.name,
-        category: eq.category,
-        quantity: 1,
-        selected: false,
-        needsSerial: eq.serial !== undefined || ['נשק', 'אופטיקה'].includes(eq.category),
-        subEquipments: eq.hasSubEquipment && eq.subEquipments
-          ? eq.subEquipments.map(sub => ({
-              id: sub.id,
-              name: sub.name,
-              selected: false,
-            }))
-          : undefined,
-      }));
+      const equipmentItems: EquipmentItem[] = combatEquipment.map((eq: CombatEquipment) => {
+        // Chercher si cet équipement est dans l'assignment actuel
+        const currentItem = currentAssignment?.items?.find(
+          item => item.equipmentId === eq.id
+        );
+
+        return {
+          id: eq.id,
+          name: eq.name,
+          category: eq.category,
+          quantity: currentItem?.quantity || 1,
+          selected: !!currentItem, // Pré-cocher SEULEMENT si dans l'assignment
+          serial: currentItem?.serial || undefined,
+          needsSerial: eq.serial !== undefined || ['נשק', 'אופטיקה'].includes(eq.category),
+          subEquipments: eq.hasSubEquipment && eq.subEquipments
+            ? eq.subEquipments.map(sub => {
+                // Chercher si ce sous-équipement est dans l'assignment
+                const existingSub = currentItem?.subEquipments?.find(
+                  s => s.name === sub.name
+                );
+                return {
+                  id: sub.id,
+                  name: sub.name,
+                  selected: !!existingSub,
+                };
+              })
+            : undefined,
+        };
+      });
 
       setEquipment(equipmentItems);
       setManot(manotData);
+
+      // Afficher un message si des items existent déjà
+      if (currentAssignment?.items && currentAssignment.items.length > 0) {
+        console.log(`Found ${currentAssignment.items.length} items in current combat assignment for soldier ${soldierId}`);
+      }
 
       // Extraire les catégories uniques depuis les équipements
       const uniqueCategories = Array.from(
@@ -365,33 +385,26 @@ const CombatAssignmentScreen: React.FC = () => {
         return itemData;
       });
 
-      const assignmentId = await assignmentService.create({
+      const assignmentData: any = {
         soldierId,
         soldierName: soldier.name,
         soldierPersonalNumber: soldier.personalNumber,
-        soldierPhone: soldier.phone,
-        soldierCompany: soldier.company,
         type: 'combat',
         action: 'issue',
         items: assignmentItems,
         signature,
         status: 'נופק לחייל',
         assignedBy: user?.id || '',
-        assignedByName: user?.name,
-        assignedByEmail: user?.email,
-      });
-      console.log('Combat assignment created:', assignmentId);
+      };
 
-      // Mettre à jour les holdings du soldat
-      const holdingItems: HoldingItem[] = assignmentItems.map(item => ({
-        equipmentId: item.equipmentId,
-        equipmentName: item.equipmentName,
-        quantity: item.quantity,
-        serials: item.serial ? [item.serial] : [],
-      }));
+      // Ajouter les champs optionnels seulement s'ils existent
+      if (soldier.phone) assignmentData.soldierPhone = soldier.phone;
+      if (soldier.company) assignmentData.soldierCompany = soldier.company;
+      if (user?.name) assignmentData.assignedByName = user.name;
+      if (user?.email) assignmentData.assignedByEmail = user.email;
 
-      await holdingsService.addToHoldings(soldierId, 'combat', holdingItems);
-      console.log('Combat holdings updated successfully');
+      const assignmentId = await assignmentService.create(assignmentData);
+      console.log('Combat assignment created/updated:', assignmentId);
 
       (navigation as any).reset({
         index: 0,
