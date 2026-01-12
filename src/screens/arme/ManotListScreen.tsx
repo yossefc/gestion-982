@@ -9,7 +9,7 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { Mana } from '../../types';
 import { Colors, Shadows } from '../../theme/colors';
 import { getAllManot, addMana, deleteMana, DEFAULT_MANOT } from '../../services/equipmentService';
@@ -19,9 +19,12 @@ const ManotListScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [manot, setManot] = useState<Mana[]>([]);
 
-  useEffect(() => {
-    loadManot();
-  }, []);
+  // Recharger les données à chaque fois que l'écran est focus
+  useFocusEffect(
+    React.useCallback(() => {
+      loadManot();
+    }, [])
+  );
 
   const loadManot = async () => {
     try {
@@ -66,7 +69,7 @@ const ManotListScreen: React.FC = () => {
   };
 
   const handleAddMana = () => {
-    Alert.alert('בקרוב', 'תכונה זו תהיה זמינה בקרוב');
+    navigation.navigate('AddMana');
   };
 
   if (loading) {
@@ -102,8 +105,8 @@ const ManotListScreen: React.FC = () => {
           <Text style={styles.backButtonText}>←</Text>
         </TouchableOpacity>
         <View style={styles.headerContent}>
-          <Text style={styles.title}>ניהול מנות</Text>
-          <Text style={styles.subtitle}>📦 {manot.length} מנות פעילות</Text>
+          <Text style={styles.title}>ניהול מנות וערכות</Text>
+          <Text style={styles.subtitle}>📦 {manot.length} פריטים פעילים</Text>
         </View>
       </View>
 
@@ -128,11 +131,11 @@ const ManotListScreen: React.FC = () => {
 
         {/* Add Mana Button */}
         <TouchableOpacity style={styles.addButton} onPress={handleAddMana}>
-          <Text style={styles.addButtonText}>+ הוסף מנה חדשה</Text>
+          <Text style={styles.addButtonText}>+ הוסף מנה/ערכה חדשה</Text>
         </TouchableOpacity>
 
         {/* Manot List */}
-        <Text style={styles.sectionTitle}>רשימת מנות</Text>
+        <Text style={styles.sectionTitle}>רשימת מנות וערכות</Text>
         <View style={styles.manotList}>
           {manot.map((mana) => (
             <TouchableOpacity
@@ -144,7 +147,17 @@ const ManotListScreen: React.FC = () => {
                 <Text style={styles.manaIconText}>📦</Text>
               </View>
               <View style={styles.manaInfo}>
-                <Text style={styles.manaName}>{mana.name}</Text>
+                <View style={styles.manaHeader}>
+                  <Text style={styles.manaName}>{mana.name}</Text>
+                  {mana.type && (
+                    <View style={[
+                      styles.typeBadge,
+                      { backgroundColor: mana.type === 'מנה' ? '#3498db' : '#9b59b6' }
+                    ]}>
+                      <Text style={styles.typeBadgeText}>{mana.type}</Text>
+                    </View>
+                  )}
+                </View>
                 <Text style={styles.manaDetails}>
                   {mana.equipments.length} פריטי ציוד
                 </Text>
@@ -298,11 +311,26 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'flex-end',
   },
+  manaHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
   manaName: {
     fontSize: 18,
     fontWeight: 'bold',
     color: Colors.text.primary,
-    marginBottom: 4,
+  },
+  typeBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  typeBadgeText: {
+    fontSize: 10,
+    color: '#FFF',
+    fontWeight: 'bold',
   },
   manaDetails: {
     fontSize: 13,

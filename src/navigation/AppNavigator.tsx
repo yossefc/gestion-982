@@ -21,6 +21,7 @@ import ClothingEquipmentManagementScreen from '../screens/vetement/ClothingEquip
 import ArmeHomeScreen from '../screens/arme/ArmeHomeScreen';
 import ManotListScreen from '../screens/arme/ManotListScreen';
 import ManotDetailsScreen from '../screens/arme/ManotDetailsScreen';
+import AddManaScreen from '../screens/arme/AddManaScreen';
 import CombatEquipmentListScreen from '../screens/arme/CombatEquipmentListScreen';
 import CombatAssignmentScreen from '../screens/arme/CombatAssignmentScreen';
 import AdminPanelScreen from '../screens/admin/AdminPanelScreen';
@@ -73,6 +74,7 @@ const AppNavigator: React.FC = () => {
             <Stack.Screen name="ArmeHome" component={ArmeHomeScreen} />
             <Stack.Screen name="ManotList" component={ManotListScreen} />
             <Stack.Screen name="ManotDetails" component={ManotDetailsScreen} />
+            <Stack.Screen name="AddMana" component={AddManaScreen} />
             <Stack.Screen name="CombatEquipmentList" component={CombatEquipmentListScreen} />
             <Stack.Screen name="CombatAssignment" component={CombatAssignmentScreen} />
 

@@ -90,10 +90,14 @@ export interface AssignmentItem {
   }[];
 }
 
-// Mana (מנה)
+// Type de package
+export type PackageType = 'מנה' | 'ערכה';
+
+// Mana (מנה) ou Arakha (ערכה)
 export interface Mana {
   id: string;
-  name: string;           // Ex: מנת מפקד, מנת לוחם
+  name: string;           // Ex: מנת מפקד, מנת לוחם, ערכת מג"ד
+  type?: PackageType;     // סוג: מנה או ערכה (optionnel pour compatibilité)
   equipments: {
     equipmentId: string;
     equipmentName: string;
@@ -116,6 +120,7 @@ export type RootStackParamList = {
   ArmeHome: undefined;
   ManotList: undefined;
   ManotDetails: { manaId: string };
+  AddMana: undefined;
   CombatEquipmentList: undefined;
   CombatAssignment: { soldierId: string };
   CombatReturn: { soldierId: string };
