@@ -9,6 +9,7 @@
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
     "migrate:soldiers": "ts-node -P tsconfig.scripts.json scripts/migrate-soldiers.ts",
+    "migrate:equipment": "node scripts/migrate-equipment.js",
     "setup:claims": "ts-node -P tsconfig.scripts.json scripts/setup-custom-claims.ts",
     "deploy": "bash scripts/deploy.sh",
     "deploy:windows": "powershell -ExecutionPolicy Bypass -File deploy-windows.ps1",
