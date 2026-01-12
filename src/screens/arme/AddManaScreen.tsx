@@ -393,7 +393,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: Colors.statusColors.pending,
+    backgroundColor: Colors.status.danger,
     justifyContent: 'center',
     alignItems: 'center',
     marginLeft: 8,
