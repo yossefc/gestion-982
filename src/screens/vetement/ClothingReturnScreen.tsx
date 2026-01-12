@@ -246,19 +246,22 @@ const ClothingReturnScreen: React.FC = () => {
               const assignmentId = await assignmentService.create(assignmentData);
               console.log('Credit assignment created:', assignmentId);
 
-              // Générer PDF
+              // Générer PDF de crédit
               const pdfBytes = await generateAssignmentPDF({
                 ...assignmentData,
                 id: assignmentId,
               });
 
+              // Upload PDF avec chemin structuré: pdf/clothing/credit/{soldierId}.pdf
               const pdfUrl = await pdfStorageService.uploadPdf(
                 pdfBytes,
-                assignmentId
+                soldierId,
+                'clothing',
+                'credit'
               );
 
               await assignmentService.update(assignmentId, { pdfUrl });
-              console.log('PDF generated and uploaded:', pdfUrl);
+              console.log('Credit PDF generated and uploaded:', pdfUrl);
 
               // Calculer les items restants (recalculer depuis assignments)
               const remainingItems = await assignmentService.calculateCurrentHoldings(
@@ -267,6 +270,17 @@ const ClothingReturnScreen: React.FC = () => {
               );
 
               const hasRemainingItems = remainingItems.length > 0;
+
+              // LOGIQUE "TOUT RENDU" (Point E)
+              // Si le soldat n'a plus d'équipement, supprimer le PDF de signature
+              if (!hasRemainingItems) {
+                console.log('All items returned - deleting signature PDF');
+                await pdfStorageService.deletePdfByPath(
+                  soldierId,
+                  'clothing',
+                  'issue'
+                );
+              }
 
               // Générer message WhatsApp
               let whatsappMessage = `שלום ${soldier?.name},\n\nהזיכוי בוצע בהצלחה.\n\n`;

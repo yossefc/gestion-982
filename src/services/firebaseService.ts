@@ -27,6 +27,7 @@ import {
   CombatEquipment,
   ClothingEquipment,
   Assignment,
+  AssignmentItem,
   Mana,
   DashboardStats,
   SoldierHoldings,
@@ -733,8 +734,7 @@ export const assignmentService = {
       const assignmentId = `${soldierId}_${type}_issue`;
       await this.update(assignmentId, {
         items: updatedItems,
-        updatedAt: Timestamp.now(),
-      });
+      } as Partial<Assignment>);
 
       // Déterminer le status
       const status = updatedItems.length === 0 ? 'CLOSED' : 'OPEN';
@@ -776,6 +776,90 @@ export const assignmentService = {
       return assignmentsWithItems;
     } catch (error) {
       console.error('Error getting assignments with outstanding items:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Calcule l'équipement actuellement détenu par un soldat
+   * en scannant tous ses assignments (issue - credit)
+   */
+  async calculateCurrentHoldings(
+    soldierId: string,
+    type: 'combat' | 'clothing'
+  ): Promise<AssignmentItem[]> {
+    try {
+      const assignments = await this.getBySoldier(soldierId);
+      const typeAssignments = assignments.filter(a => a.type === type);
+
+      // Créer une map des quantités par equipmentId
+      const holdingsMap = new Map<string, AssignmentItem>();
+
+      typeAssignments.forEach(assignment => {
+        const multiplier = assignment.action === 'credit' ? -1 : 1;
+
+        assignment.items.forEach(item => {
+          const existing = holdingsMap.get(item.equipmentId);
+
+          if (existing) {
+            existing.quantity += item.quantity * multiplier;
+          } else {
+            holdingsMap.set(item.equipmentId, {
+              ...item,
+              quantity: item.quantity * multiplier,
+            });
+          }
+        });
+      });
+
+      // Filtrer pour ne retourner que les items avec quantité > 0
+      return Array.from(holdingsMap.values()).filter(item => item.quantity > 0);
+    } catch (error) {
+      console.error('Error calculating current holdings:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Obtient tous les soldats qui détiennent actuellement de l'équipement
+   * avec le calcul dynamique basé sur les assignments
+   */
+  async getSoldiersWithCurrentHoldings(
+    type: 'combat' | 'clothing'
+  ): Promise<Assignment[]> {
+    try {
+      // Récupérer tous les assignments du type
+      const allAssignments = await this.getByType(type);
+
+      // Grouper par soldierId
+      const soldierMap = new Map<string, Assignment[]>();
+      allAssignments.forEach(assignment => {
+        const existing = soldierMap.get(assignment.soldierId) || [];
+        existing.push(assignment);
+        soldierMap.set(assignment.soldierId, existing);
+      });
+
+      // Calculer les holdings pour chaque soldat
+      const result: Assignment[] = [];
+
+      for (const [soldierId, assignments] of soldierMap.entries()) {
+        // Prendre le premier assignment comme base
+        const baseAssignment = assignments[0];
+
+        // Calculer les holdings actuels
+        const currentHoldings = await this.calculateCurrentHoldings(soldierId, type);
+
+        if (currentHoldings.length > 0) {
+          result.push({
+            ...baseAssignment,
+            items: currentHoldings,
+          });
+        }
+      }
+
+      return result;
+    } catch (error) {
+      console.error('Error getting soldiers with current holdings:', error);
       throw error;
     }
   },
@@ -954,22 +1038,36 @@ export const dashboardService = {
 
 export const pdfStorageService = {
   /**
-   * Upload un PDF vers Firebase Storage à un chemin FIXE
+   * Upload un PDF vers Firebase Storage à un chemin structuré
    * Le fichier est REMPLACÉ à chaque upload (même nom)
    *
    * @param pdfBytes - Contenu du PDF en Uint8Array
-   * @param assignmentId - ID de l'attribution (format: {soldierId}_{type})
+   * @param soldierId - ID du soldat
+   * @param type - Type d'équipement ('combat' | 'clothing')
+   * @param action - Action ('issue' | 'credit')
    * @returns URL de téléchargement du PDF
+   *
+   * Structure des chemins:
+   * - pdf/{type}/signature/{soldierId}.pdf (pour issue)
+   * - pdf/{type}/credit/{soldierId}.pdf (pour credit)
    *
    * NOTE: Le downloadURL peut changer car le token Firebase change à chaque upload.
    * Pour une URL stable, il faudrait forcer un token constant via Admin SDK.
    */
-  async uploadPdf(pdfBytes: Uint8Array, assignmentId: string): Promise<string> {
+  async uploadPdf(
+    pdfBytes: Uint8Array,
+    soldierId: string,
+    type: 'combat' | 'clothing',
+    action: 'issue' | 'credit'
+  ): Promise<string> {
     try {
-      // Utiliser un chemin FIXE basé sur assignmentId (pas de timestamp)
-      // Cela REMPLACE le PDF existant au lieu de créer un nouveau fichier
-      const fileName = `${assignmentId}.pdf`;
-      const storageRef = ref(storage, `pdf/assignments/${fileName}`);
+      // Déterminer le sous-dossier selon l'action
+      const subFolder = action === 'issue' ? 'signature' : 'credit';
+
+      // Construire le chemin structuré: pdf/{type}/{subFolder}/{soldierId}.pdf
+      const fileName = `${soldierId}.pdf`;
+      const storagePath = `pdf/${type}/${subFolder}/${fileName}`;
+      const storageRef = ref(storage, storagePath);
 
       console.log('Uploading PDF to Storage (REPLACE mode):', fileName);
 
@@ -1031,374 +1129,30 @@ export const pdfStorageService = {
       // Ne pas throw - la suppression peut échouer si le fichier n'existe pas
     }
   },
-};
-
-// ============================================
-// SOLDIER HOLDINGS (Snapshot d'équipement détenu)
-// ============================================
-
-export const holdingsService = {
-  /**
-   * Calcule les champs agrégés (outstandingCount, status, etc.)
-   */
-  _calculateAggregatedFields(holdings: SoldierHoldings): void {
-    // Calculer outstandingCount = somme des quantités
-    holdings.outstandingCount = holdings.items.reduce(
-      (sum, item) => sum + item.quantity,
-      0
-    );
-
-    // Déterminer le status
-    holdings.status = holdings.outstandingCount > 0 ? 'OPEN' : 'CLOSED';
-
-    // hasSignedEquipment = true si a déjà eu des items (même si tout rendu maintenant)
-    // On peut le déduire de l'existence du doc ou d'un champ explicite
-    holdings.hasSignedEquipment = holdings.outstandingCount > 0 || !!holdings.currentPdf;
-  },
 
   /**
-   * Obtient les holdings actuels d'un soldat
+   * Supprime un PDF par son chemin structuré
    *
    * @param soldierId - ID du soldat
    * @param type - Type d'équipement ('combat' | 'clothing')
-   * @returns Holdings du soldat ou null si aucun
+   * @param action - Action ('issue' | 'credit')
    */
-  async getHoldings(
-    soldierId: string,
-    type: 'combat' | 'clothing'
-  ): Promise<SoldierHoldings | null> {
-    try {
-      const holdingsId = `${soldierId}_${type}`;
-      const docRef = doc(db, COLLECTIONS.SOLDIER_HOLDINGS, holdingsId);
-      const docSnap = await getDoc(docRef);
-
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        return {
-          soldierId: data.soldierId,
-          soldierName: data.soldierName,
-          soldierPersonalNumber: data.soldierPersonalNumber,
-          type: data.type,
-          items: data.items || [],
-          lastUpdated: data.lastUpdated?.toDate() || new Date(),
-          outstandingCount: data.outstandingCount || 0,
-          hasSignedEquipment: data.hasSignedEquipment || false,
-          status: data.status || 'CLOSED',
-          currentPdf: data.currentPdf ? {
-            ...data.currentPdf,
-            updatedAt: data.currentPdf.updatedAt?.toDate() || new Date(),
-          } : undefined,
-        } as SoldierHoldings;
-      }
-
-      return null;
-    } catch (error) {
-      console.error('Error getting holdings:', error);
-      throw error;
-    }
-  },
-
-  /**
-   * Calcule les holdings d'un soldat depuis ses assignments
-   * Analyse toutes les attributions (issue/add/return/credit) pour calculer
-   * l'état actuel de l'équipement détenu
-   *
-   * @param soldierId - ID du soldat
-   * @param type - Type d'équipement
-   * @returns Holdings calculés
-   */
-  async calculateHoldingsFromAssignments(
-    soldierId: string,
-    type: 'combat' | 'clothing'
-  ): Promise<SoldierHoldings> {
-    try {
-      // Récupérer toutes les attributions du soldat pour ce type
-      const assignments = await assignmentService.getBySoldier(soldierId);
-      const filteredAssignments = assignments.filter(a => a.type === type);
-
-      // Map pour accumuler les quantités par équipement
-      const itemsMap = new Map<string, HoldingItem>();
-
-      // Traiter chaque attribution
-      filteredAssignments.forEach(assignment => {
-        const action = assignment.action || 'issue';
-        const isAdding = action === 'issue' || action === 'add';
-        const isRemoving = action === 'return' || action === 'credit';
-
-        // Ignorer si pas une action valide ou si status = 'לא חתום' (non signé)
-        if (assignment.status === 'לא חתום') {
-          return;
-        }
-
-        assignment.items.forEach(item => {
-          const existing = itemsMap.get(item.equipmentId);
-
-          if (isAdding) {
-            // Ajouter à l'inventaire
-            if (existing) {
-              existing.quantity += item.quantity;
-              if (item.serial && !existing.serials.includes(item.serial)) {
-                existing.serials.push(item.serial);
-              }
-            } else {
-              itemsMap.set(item.equipmentId, {
-                equipmentId: item.equipmentId,
-                equipmentName: item.equipmentName,
-                quantity: item.quantity,
-                serials: item.serial ? [item.serial] : [],
-              });
-            }
-          } else if (isRemoving) {
-            // Retirer de l'inventaire
-            if (existing) {
-              existing.quantity -= item.quantity;
-              if (item.serial) {
-                existing.serials = existing.serials.filter(s => s !== item.serial);
-              }
-
-              // Supprimer si quantity <= 0
-              if (existing.quantity <= 0) {
-                itemsMap.delete(item.equipmentId);
-              }
-            }
-          }
-        });
-      });
-
-      // Récupérer les infos du soldat
-      const soldier = await soldierService.getById(soldierId);
-
-      return {
-        soldierId,
-        soldierName: soldier?.name || '',
-        soldierPersonalNumber: soldier?.personalNumber || '',
-        type,
-        items: Array.from(itemsMap.values()),
-        lastUpdated: new Date(),
-      };
-    } catch (error) {
-      console.error('Error calculating holdings:', error);
-      throw error;
-    }
-  },
-
-  /**
-   * Met à jour les holdings d'un soldat
-   *
-   * @param holdings - Holdings à sauvegarder
-   */
-  async updateHoldings(holdings: SoldierHoldings): Promise<void> {
-    try {
-      const holdingsId = `${holdings.soldierId}_${holdings.type}`;
-      const docRef = doc(db, COLLECTIONS.SOLDIER_HOLDINGS, holdingsId);
-
-      const data: any = {
-        soldierId: holdings.soldierId,
-        soldierName: holdings.soldierName,
-        soldierPersonalNumber: holdings.soldierPersonalNumber,
-        type: holdings.type,
-        items: holdings.items,
-        lastUpdated: Timestamp.now(),
-        outstandingCount: holdings.outstandingCount,
-        hasSignedEquipment: holdings.hasSignedEquipment,
-        status: holdings.status,
-      };
-
-      // Ajouter currentPdf si présent
-      if (holdings.currentPdf) {
-        data.currentPdf = {
-          type: holdings.currentPdf.type,
-          storagePath: holdings.currentPdf.storagePath,
-          url: holdings.currentPdf.url,
-          updatedAt: Timestamp.now(),
-        };
-      }
-
-      // Utiliser setDoc avec merge pour créer ou mettre à jour
-      await setDoc(docRef, data, { merge: true });
-
-      console.log('Holdings updated successfully');
-    } catch (error) {
-      console.error('Error updating holdings:', error);
-      throw error;
-    }
-  },
-
-  /**
-   * Ajoute des items aux holdings d'un soldat (utilisé après issue/add)
-   *
-   * @param soldierId - ID du soldat
-   * @param type - Type d'équipement
-   * @param items - Items à ajouter
-   */
-  async addToHoldings(
+  async deletePdfByPath(
     soldierId: string,
     type: 'combat' | 'clothing',
-    items: HoldingItem[]
+    action: 'issue' | 'credit'
   ): Promise<void> {
     try {
-      // Récupérer les holdings actuels
-      let holdings = await this.getHoldings(soldierId, type);
+      const subFolder = action === 'issue' ? 'signature' : 'credit';
+      const storagePath = `pdf/${type}/${subFolder}/${soldierId}.pdf`;
+      const storageRef = ref(storage, storagePath);
 
-      // Si aucun holdings, les calculer depuis les assignments
-      if (!holdings) {
-        const soldier = await soldierService.getById(soldierId);
-        holdings = {
-          soldierId,
-          soldierName: soldier?.name || '',
-          soldierPersonalNumber: soldier?.personalNumber || '',
-          type,
-          items: [],
-          lastUpdated: new Date(),
-        };
-      }
-
-      // Ajouter les nouveaux items
-      const itemsMap = new Map(
-        holdings.items.map(item => [item.equipmentId, item])
-      );
-
-      items.forEach(newItem => {
-        const existing = itemsMap.get(newItem.equipmentId);
-        if (existing) {
-          existing.quantity += newItem.quantity;
-          newItem.serials.forEach(serial => {
-            if (serial && !existing.serials.includes(serial)) {
-              existing.serials.push(serial);
-            }
-          });
-        } else {
-          itemsMap.set(newItem.equipmentId, { ...newItem });
-        }
-      });
-
-      holdings.items = Array.from(itemsMap.values());
-      holdings.lastUpdated = new Date();
-
-      // Calculer les champs agrégés
-      this._calculateAggregatedFields(holdings);
-
-      // Sauvegarder
-      await this.updateHoldings(holdings);
+      const { deleteObject } = await import('firebase/storage');
+      await deleteObject(storageRef);
+      console.log('PDF deleted successfully:', storagePath);
     } catch (error) {
-      console.error('Error adding to holdings:', error);
-      throw error;
-    }
-  },
-
-  /**
-   * Retire des items des holdings d'un soldat (utilisé après return/credit)
-   *
-   * @param soldierId - ID du soldat
-   * @param type - Type d'équipement
-   * @param items - Items à retirer
-   */
-  async removeFromHoldings(
-    soldierId: string,
-    type: 'combat' | 'clothing',
-    items: HoldingItem[]
-  ): Promise<void> {
-    try {
-      // Récupérer les holdings actuels
-      let holdings = await this.getHoldings(soldierId, type);
-
-      // Si aucun holdings, les calculer
-      if (!holdings) {
-        holdings = await this.calculateHoldingsFromAssignments(soldierId, type);
-      }
-
-      // Retirer les items
-      const itemsMap = new Map(
-        holdings.items.map(item => [item.equipmentId, item])
-      );
-
-      items.forEach(itemToRemove => {
-        const existing = itemsMap.get(itemToRemove.equipmentId);
-        if (existing) {
-          existing.quantity -= itemToRemove.quantity;
-
-          // Retirer les serials
-          itemToRemove.serials.forEach(serial => {
-            existing.serials = existing.serials.filter(s => s !== serial);
-          });
-
-          // Supprimer si quantity <= 0
-          if (existing.quantity <= 0) {
-            itemsMap.delete(itemToRemove.equipmentId);
-          }
-        }
-      });
-
-      holdings.items = Array.from(itemsMap.values());
-      holdings.lastUpdated = new Date();
-
-      // Stocker l'ancien status pour détecter la transition
-      const wasOpen = holdings.status === 'OPEN';
-
-      // Calculer les champs agrégés
-      this._calculateAggregatedFields(holdings);
-
-      // Détecter transition OPEN -> CLOSED (tout rendu!)
-      const nowClosed = holdings.status === 'CLOSED';
-      if (wasOpen && nowClosed) {
-        console.log(`🎉 Soldat ${soldierId} a rendu TOUT son équipement ${type}!`);
-        // La logique de suppression PDF + génération זיכוי sera implémentée
-        // par l'écran de retour pour avoir accès aux données complètes
-        // On marque juste que c'est fermé ici
-      }
-
-      // Sauvegarder
-      await this.updateHoldings(holdings);
-
-      // Retourner le nouveau status pour que l'appelant puisse agir
-      return holdings.status;
-    } catch (error) {
-      console.error('Error removing from holdings:', error);
-      throw error;
-    }
-  },
-
-  /**
-   * Obtient tous les soldats avec des équipements à rendre
-   * Utilisé pour la liste "זיכוי"
-   *
-   * @param type - Type d'équipement
-   * @returns Liste des holdings avec outstandingCount > 0
-   */
-  async getAllWithOutstandingItems(
-    type: 'combat' | 'clothing'
-  ): Promise<SoldierHoldings[]> {
-    try {
-      const q = query(
-        collection(db, COLLECTIONS.SOLDIER_HOLDINGS),
-        where('type', '==', type),
-        where('outstandingCount', '>', 0),
-        orderBy('outstandingCount', 'desc')
-      );
-
-      const querySnapshot = await getDocs(q);
-
-      return querySnapshot.docs.map(doc => {
-        const data = doc.data();
-        return {
-          soldierId: data.soldierId,
-          soldierName: data.soldierName,
-          soldierPersonalNumber: data.soldierPersonalNumber,
-          type: data.type,
-          items: data.items || [],
-          lastUpdated: data.lastUpdated?.toDate() || new Date(),
-          outstandingCount: data.outstandingCount || 0,
-          hasSignedEquipment: data.hasSignedEquipment || false,
-          status: data.status || 'CLOSED',
-          currentPdf: data.currentPdf ? {
-            ...data.currentPdf,
-            updatedAt: data.currentPdf.updatedAt?.toDate() || new Date(),
-          } : undefined,
-        } as SoldierHoldings;
-      });
-    } catch (error) {
-      console.error('Error getting holdings with outstanding items:', error);
-      throw error;
+      console.error('Error deleting PDF by path:', error);
+      // Ne pas throw - la suppression peut échouer si le fichier n'existe pas
     }
   },
 };

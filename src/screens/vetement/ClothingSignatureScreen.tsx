@@ -210,8 +210,14 @@ const ClothingSignatureScreen: React.FC = () => {
 
       console.log('PDF generated successfully, size:', pdfBytes.length, 'bytes');
 
-      // 2. Upload vers Storage
-      const url = await pdfStorageService.uploadPdf(pdfBytes, assignmentId);
+      // 2. Upload vers Storage avec chemin structuré
+      // Chemin: pdf/{type}/signature/{soldierId}.pdf
+      const url = await pdfStorageService.uploadPdf(
+        pdfBytes,
+        assignmentData.soldierId,
+        assignmentData.type,
+        'issue' // Action pour signature
+      );
       console.log('PDF uploaded to:', url);
 
       // 3. Mettre à jour l'assignment avec le pdfUrl

@@ -1,8 +1,46 @@
-# 🔄 Modifications: Assignment UPSERT au lieu de CREATE
+# 🔄 Modifications: Assignment UPSERT + Suppression de soldier_holdings
 
 ## 📋 Résumé des changements
 
+### ✅ PARTIE 1: Assignment UPSERT (Décembre 2025)
 Le système a été modifié pour **REMPLACER** les assignments au lieu d'en créer de nouveaux à chaque signature.
+
+### ✅ PARTIE 2: Suppression de soldier_holdings (Décembre 2025)
+La collection `soldier_holdings` a été **COMPLÈTEMENT SUPPRIMÉE** pour simplifier l'architecture.
+- **Avant:** 2 collections (`assignments` + `soldier_holdings`) créaient confusion et désynchronisation
+- **Après:** Une seule source de vérité (`assignments`), calcul dynamique de l'équipement détenu
+
+---
+
+## 🎯 Architecture finale
+
+### Une seule collection: `assignments`
+
+**Pour החתמה (signature/attribution):**
+```
+assignments/{soldierId}_{type}_issue
+  - action: 'issue'
+  - items: [...]
+  - signature, pdfUrl, etc.
+```
+
+**Pour זיכוי (retour/crédit):**
+```
+assignments/{soldierId}_{type}_credit
+  - action: 'credit'
+  - items: [...]
+  - signature, pdfUrl, etc.
+```
+
+**Calcul de l'équipement détenu:**
+- Scanne tous les `assignments` du soldat
+- Additionne les `issue`, soustrait les `credit`
+- Retourne le solde actuel
+
+---
+
+## 📊 Avant vs Après (UPSERT)
+
 
 ### Avant:
 - Chaque signature créait un nouveau document Firestore avec ID auto-généré
@@ -34,9 +72,21 @@ Le système a été modifié pour **REMPLACER** les assignments au lieu d'en cr�
 
 **Lignes modifiées:** 1-14, 86-150
 
+**Nouvelles fonctions ajoutées (PARTIE 2):**
+- ✅ `calculateCurrentHoldings(soldierId, type)` - Calcule l'équipement actuellement détenu
+  - Scanne tous les assignments (issue/credit)
+  - Additionne/soustrait les quantités
+  - Retourne les items actuels avec quantity > 0
+- ✅ `getSoldiersWithCurrentHoldings(type)` - Liste tous les soldats avec équipement
+  - Groupe les assignments par soldat
+  - Calcule les holdings pour chaque soldat
+  - Retourne seulement ceux avec des items
+
 ---
 
-### 2. `src/services/firebaseService.ts` (pdfStorageService)
+### 2. `src/services/firebaseService.ts`
+
+**Changements PARTIE 1 (pdfStorageService):**
 
 **Changements:**
 - ✅ Modification de `uploadPdf()`:
@@ -49,6 +99,53 @@ Le système a été modifié pour **REMPLACER** les assignments au lieu d'en cr�
 Le `downloadURL` peut changer à chaque upload car Firebase Storage génère un nouveau token. Pour une URL stable, il faudrait utiliser l'Admin SDK avec un token constant (voir commentaires dans le code).
 
 **Lignes modifiées:** 751-817
+
+**Changements PARTIE 2 (suppression de holdingsService):**
+- ❌ **SUPPRIMÉ** `holdingsService` (tout le service)
+  - `getHoldings()` - Remplacé par `assignmentService.calculateCurrentHoldings()`
+  - `calculateHoldingsFromAssignments()` - Logique intégrée dans assignmentService
+  - `updateHoldings()` - Plus nécessaire
+  - `addToHoldings()` - Plus nécessaire
+  - `removeFromHoldings()` - Plus nécessaire
+  - `getAllWithOutstandingItems()` - Remplacé par `assignmentService.getSoldiersWithCurrentHoldings()`
+
+---
+
+### 3. Écrans de retour modifiés (PARTIE 2)
+
+**Fichiers:**
+- `src/screens/vetement/ClothingReturnScreen.tsx`
+- `src/screens/arme/CombatReturnScreen.tsx`
+
+**Changements:**
+- ❌ Supprimé les imports de `holdingsService`
+- ✅ Utilise `assignmentService.calculateCurrentHoldings()` pour charger l'équipement
+- ✅ Recalcule automatiquement après un retour (plus besoin de `removeFromHoldings`)
+- ✅ Interface `ReturnItem` étendue avec `availableSerials` pour gérer les numéros de série
+
+---
+
+### 4. Écran de recherche modifié (PARTIE 2)
+
+**Fichier:** `src/screens/common/SoldierSearchScreen.tsx`
+
+**Changements:**
+- ❌ Supprimé l'import de `holdingsService`
+- ✅ Utilise `assignmentService.getSoldiersWithCurrentHoldings()` au lieu de `holdingsService.getAllWithOutstandingItems()`
+- ✅ Liste dynamique basée sur le calcul en temps réel
+
+---
+
+### 5. Nettoyage (PARTIE 2)
+
+**Fichiers supprimés:**
+- ❌ `src/screens/admin/HoldingsRecalculateScreen.tsx` (plus nécessaire)
+- ❌ `ZIKUY-REFACTORING.md` (documentation obsolète)
+- ❌ `docs/CREDIT_FLOW.md` (documentation obsolète)
+
+**Firestore:**
+- ❌ Supprimé l'index sur `soldier_holdings` dans `firestore.indexes.json`
+- ⚠️ **Note:** La collection `soldier_holdings` peut rester en production (données historiques) mais n'est plus utilisée
 
 ---
 

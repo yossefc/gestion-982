@@ -12,7 +12,7 @@ import {
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { Soldier } from '../../types';
 import { useSoldierSearch } from '../../hooks/useSoldierSearch';
-import { assignmentService } from '../../services/assignmentService';
+import { assignmentService } from '../../services/firebaseService';
 import { Colors, Shadows } from '../../theme/colors';
 import { notifyError } from '../../utils/notify';
 import { ScreenHeader, SoldierCard, EmptyState, LoadingState } from '../../components';
@@ -54,7 +54,7 @@ const SoldierSearchScreen: React.FC = () => {
         phone: '',
         createdAt: new Date(),
         // Ajouter un badge avec le nombre d'items
-        _outstandingCount: h.totalQuantity,
+        _outstandingCount: h.items?.reduce((sum, item) => sum + item.quantity, 0) || 0,
       } as any));
 
       setSoldatsAvecEquipements(soldiersList);
@@ -123,12 +123,10 @@ const SoldierSearchScreen: React.FC = () => {
   };
 
   const renderSoldierItem = ({ item }: { item: Soldier }) => {
-    const outstandingCount = (item as any)._outstandingCount;
     return (
       <SoldierCard
         soldier={item}
         onPress={() => handleSelectSoldier(item)}
-        badge={outstandingCount ? `${outstandingCount} פריטים` : undefined}
       />
     );
   };
