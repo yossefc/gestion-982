@@ -50,6 +50,17 @@ const COLLECTIONS = {
   SOLDIER_HOLDINGS: 'soldier_holdings',
 };
 
+// Fonction utilitaire pour nettoyer les valeurs undefined avant d'envoyer à Firestore
+function removeUndefinedFields<T extends Record<string, any>>(obj: T): Partial<T> {
+  const cleaned: any = {};
+  Object.keys(obj).forEach(key => {
+    if (obj[key] !== undefined) {
+      cleaned[key] = obj[key];
+    }
+  });
+  return cleaned;
+}
+
 // ============================================
 // SOLDIERS
 // ============================================
@@ -68,13 +79,16 @@ export const soldierService = {
       const searchKey = buildSoldierSearchKey(soldierData);
       const nameLower = buildNameLower(soldierData.name);
 
-      const docRef = await addDoc(collection(db, COLLECTIONS.SOLDIERS), {
+      // Nettoyer les valeurs undefined avant d'envoyer à Firestore
+      const cleanData = removeUndefinedFields({
         ...soldierData,
         searchKey,
         nameLower,
         createdAt: Timestamp.now(),
         updatedAt: Timestamp.now(),
       });
+
+      const docRef = await addDoc(collection(db, COLLECTIONS.SOLDIERS), cleanData);
       
       // Log d'audit
       await logService.logChange({
@@ -270,8 +284,11 @@ export const soldierService = {
           }
         }
       }
-      
-      await updateDoc(docRef, updateData);
+
+      // Nettoyer les valeurs undefined avant d'envoyer à Firestore
+      const cleanUpdateData = removeUndefinedFields(updateData);
+
+      await updateDoc(docRef, cleanUpdateData);
       
       // Log d'audit
       await logService.logChange({
