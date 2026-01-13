@@ -234,8 +234,14 @@ const CombatAssignmentScreen: React.FC = () => {
 
     // Convertir les équipements de la מנה en EquipmentItem[] et les ajouter à finalItems
     const manaEquipmentItems: EquipmentItem[] = mana.equipments.map(manaEq => {
-      // IMPORTANT: Utiliser equipmentId pour le matching, pas le nom
-      const fullEquipment = equipment.find(eq => eq.id === manaEq.equipmentId);
+      // IMPORTANT: Utiliser equipmentId pour le matching, avec fallback sur le nom si ID vide
+      let fullEquipment = equipment.find(eq => eq.id === manaEq.equipmentId);
+
+      // FALLBACK: Si equipmentId est vide ou non trouvé, chercher par nom
+      if (!fullEquipment && manaEq.equipmentName) {
+        console.log(`[MANA] Equipment ID empty or not found, trying by name: ${manaEq.equipmentName}`);
+        fullEquipment = equipment.find(eq => eq.name === manaEq.equipmentName);
+      }
 
       if (!fullEquipment) {
         console.warn(`[MANA] Equipment not found with ID: ${manaEq.equipmentId} (name: ${manaEq.equipmentName})`);
