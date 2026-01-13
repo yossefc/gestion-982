@@ -120,7 +120,7 @@ export type RootStackParamList = {
   ArmeHome: undefined;
   ManotList: undefined;
   ManotDetails: { manaId: string };
-  AddMana: undefined;
+  AddMana: { manaId?: string };  // manaId optionnel pour mode édition
   CombatEquipmentList: undefined;
   CombatAssignment: { soldierId: string };
   CombatReturn: { soldierId: string };

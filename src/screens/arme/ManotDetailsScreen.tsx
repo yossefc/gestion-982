@@ -41,7 +41,7 @@ const ManotDetailsScreen: React.FC = () => {
   };
 
   const handleEdit = () => {
-    Alert.alert('בקרוב', 'עריכת מנה תהיה זמינה בקרוב');
+    navigation.navigate('AddMana', { manaId });
   };
 
   const handleDelete = () => {

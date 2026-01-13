@@ -1,4 +1,4 @@
-// Écran pour ajouter une nouvelle מנה ou ערכה
+// Écran pour ajouter ou éditer une מנה ou ערכה
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -10,10 +10,12 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { Colors, Shadows } from '../../theme/colors';
-import { PackageType, CombatEquipment } from '../../types';
-import { addMana, getAllCombatEquipment } from '../../services/equipmentService';
+import { PackageType, CombatEquipment, RootStackParamList } from '../../types';
+import { addMana, updateMana, getManaById, getAllCombatEquipment } from '../../services/equipmentService';
+
+type AddManaRouteProp = RouteProp<RootStackParamList, 'AddMana'>;
 
 interface EquipmentSelection {
   equipmentId: string;
@@ -23,7 +25,12 @@ interface EquipmentSelection {
 
 const AddManaScreen: React.FC = () => {
   const navigation = useNavigation<any>();
+  const route = useRoute<AddManaRouteProp>();
+  const manaId = route.params?.manaId;
+  const isEditMode = !!manaId;
+
   const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(isEditMode);
   const [availableEquipment, setAvailableEquipment] = useState<CombatEquipment[]>([]);
 
   // Form state
@@ -32,8 +39,34 @@ const AddManaScreen: React.FC = () => {
   const [selectedEquipments, setSelectedEquipments] = useState<EquipmentSelection[]>([]);
 
   useEffect(() => {
-    loadEquipment();
+    loadData();
   }, []);
+
+  const loadData = async () => {
+    try {
+      // Charger les équipements disponibles
+      await loadEquipment();
+
+      // Si mode édition, charger les données de la mana
+      if (isEditMode && manaId) {
+        const manaData = await getManaById(manaId);
+        if (manaData) {
+          setName(manaData.name);
+          setType(manaData.type || 'מנה');
+          setSelectedEquipments(manaData.equipments.map(eq => ({
+            equipmentId: eq.equipmentId,
+            equipmentName: eq.equipmentName,
+            quantity: eq.quantity,
+          })));
+        }
+      }
+    } catch (error) {
+      console.error('Error loading data:', error);
+      Alert.alert('שגיאה', 'נכשל בטעינת הנתונים');
+    } finally {
+      setInitialLoading(false);
+    }
+  };
 
   const loadEquipment = async () => {
     try {
@@ -94,22 +127,57 @@ const AddManaScreen: React.FC = () => {
     try {
       setLoading(true);
 
-      await addMana({
-        name: name.trim(),
-        type,
-        equipments: selectedEquipments,
-      });
+      if (isEditMode && manaId) {
+        // Mode édition
+        await updateMana(manaId, {
+          name: name.trim(),
+          type,
+          equipments: selectedEquipments,
+        });
 
-      Alert.alert('הצלחה', `${type} "${name}" נוספה בהצלחה`, [
-        { text: 'אישור', onPress: () => navigation.goBack() },
-      ]);
+        Alert.alert('הצלחה', `${type} "${name}" עודכנה בהצלחה`, [
+          { text: 'אישור', onPress: () => navigation.goBack() },
+        ]);
+      } else {
+        // Mode ajout
+        await addMana({
+          name: name.trim(),
+          type,
+          equipments: selectedEquipments,
+        });
+
+        Alert.alert('הצלחה', `${type} "${name}" נוספה בהצלחה`, [
+          { text: 'אישור', onPress: () => navigation.goBack() },
+        ]);
+      }
     } catch (error) {
-      console.error('Error adding mana:', error);
+      console.error('Error saving mana:', error);
       Alert.alert('שגיאה', 'נכשל בשמירת הנתונים');
     } finally {
       setLoading(false);
     }
   };
+
+  if (initialLoading) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Text style={styles.backButtonText}>←</Text>
+          </TouchableOpacity>
+          <View style={styles.headerContent}>
+            <Text style={styles.title}>טוען...</Text>
+          </View>
+        </View>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={Colors.modules.arme} />
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -122,8 +190,12 @@ const AddManaScreen: React.FC = () => {
           <Text style={styles.backButtonText}>←</Text>
         </TouchableOpacity>
         <View style={styles.headerContent}>
-          <Text style={styles.title}>הוספת מנה/ערכה חדשה</Text>
-          <Text style={styles.subtitle}>צור מנת ציוד מוכנה</Text>
+          <Text style={styles.title}>
+            {isEditMode ? 'עריכת מנה/ערכה' : 'הוספת מנה/ערכה חדשה'}
+          </Text>
+          <Text style={styles.subtitle}>
+            {isEditMode ? 'עדכן את הפרטים' : 'צור מנת ציוד מוכנה'}
+          </Text>
         </View>
       </View>
 
@@ -256,7 +328,9 @@ const AddManaScreen: React.FC = () => {
           {loading ? (
             <ActivityIndicator color="#FFF" />
           ) : (
-            <Text style={styles.saveButtonText}>שמור</Text>
+            <Text style={styles.saveButtonText}>
+              {isEditMode ? 'עדכן' : 'שמור'}
+            </Text>
           )}
         </TouchableOpacity>
       </View>
