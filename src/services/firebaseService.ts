@@ -369,6 +369,25 @@ export const combatEquipmentService = {
     }
   },
 
+  // Obtenir un équipement par ID
+  async getById(id: string): Promise<CombatEquipment | null> {
+    try {
+      const docRef = doc(db, COLLECTIONS.COMBAT_EQUIPMENT, id);
+      const docSnap = await getDoc(docRef);
+
+      if (docSnap.exists()) {
+        return {
+          id: docSnap.id,
+          ...docSnap.data(),
+        } as CombatEquipment;
+      }
+      return null;
+    } catch (error) {
+      console.error('Error getting combat equipment by ID:', error);
+      throw error;
+    }
+  },
+
   // Obtenir tous les équipements
   async getAll(): Promise<CombatEquipment[]> {
     try {
