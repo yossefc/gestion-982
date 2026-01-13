@@ -229,12 +229,20 @@ const CombatAssignmentScreen: React.FC = () => {
     if (!mana) return;
 
     console.log('[MANA] Selecting mana:', mana.name);
+    console.log('[MANA] Mana equipments:', mana.equipments);
     setSelectedManaId(manaId);
 
     // Convertir les équipements de la מנה en EquipmentItem[] et les ajouter à finalItems
     const manaEquipmentItems: EquipmentItem[] = mana.equipments.map(manaEq => {
-      const fullEquipment = equipment.find(eq => eq.name === manaEq.equipmentName);
-      if (!fullEquipment) return null;
+      // IMPORTANT: Utiliser equipmentId pour le matching, pas le nom
+      const fullEquipment = equipment.find(eq => eq.id === manaEq.equipmentId);
+
+      if (!fullEquipment) {
+        console.warn(`[MANA] Equipment not found with ID: ${manaEq.equipmentId} (name: ${manaEq.equipmentName})`);
+        return null;
+      }
+
+      console.log(`[MANA] Found equipment: ${fullEquipment.name} (ID: ${fullEquipment.id})`);
 
       return {
         ...fullEquipment,
@@ -245,6 +253,8 @@ const CombatAssignmentScreen: React.FC = () => {
         })),
       };
     }).filter(item => item !== null) as EquipmentItem[];
+
+    console.log(`[MANA] Created ${manaEquipmentItems.length} equipment items from mana`);
 
     // Merger avec finalItems existants
     const mergedMap = new Map<string, EquipmentItem>();
