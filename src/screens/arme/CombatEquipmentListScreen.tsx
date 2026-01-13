@@ -1,5 +1,6 @@
 // Écran de liste des équipements de combat
-import React, { useEffect, useState } from 'react';
+// Design professionnel avec UX améliorée
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,22 +10,32 @@ import {
   ActivityIndicator,
   Alert,
   TextInput,
+  RefreshControl,
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { CombatEquipment } from '../../types';
-import { Colors, Shadows } from '../../theme/colors';
+import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/colors';
 import { getAllCombatEquipment, addCombatEquipment, DEFAULT_COMBAT_EQUIPMENT } from '../../services/equipmentService';
+
+const CATEGORY_CONFIG: { [key: string]: { icon: string; color: string } } = {
+  'נשק': { icon: '🔫', color: '#E53935' },
+  'אופטיקה': { icon: '🔭', color: '#8E24AA' },
+  'ציוד מגן': { icon: '🛡️', color: '#43A047' },
+  'אביזרים': { icon: '🔧', color: '#FB8C00' },
+  'ציוד לוחם': { icon: '🎒', color: '#1E88E5' },
+  'אחר': { icon: '📦', color: '#757575' },
+};
 
 const CombatEquipmentListScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [equipment, setEquipment] = useState<CombatEquipment[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('הכל');
 
-  // Recharger à chaque fois qu'on revient sur l'écran
   useFocusEffect(
-    React.useCallback(() => {
+    useCallback(() => {
       loadEquipment();
     }, [])
   );
@@ -33,7 +44,6 @@ const CombatEquipmentListScreen: React.FC = () => {
     try {
       const data = await getAllCombatEquipment();
 
-      // Si aucun équipement n'existe, proposer d'initialiser les données par défaut
       if (data.length === 0) {
         Alert.alert(
           'אין ציוד במערכת',
@@ -41,13 +51,13 @@ const CombatEquipmentListScreen: React.FC = () => {
           [
             { text: 'לא', style: 'cancel' },
             {
-              text: 'כן',
+              text: 'כן, הוסף',
               onPress: async () => {
                 try {
-                  for (const equipment of DEFAULT_COMBAT_EQUIPMENT) {
-                    await addCombatEquipment(equipment);
+                  for (const eq of DEFAULT_COMBAT_EQUIPMENT) {
+                    await addCombatEquipment(eq);
                   }
-                  loadEquipment(); // Recharger après ajout
+                  loadEquipment();
                 } catch (error) {
                   console.error('Error adding default equipment:', error);
                   Alert.alert('שגיאה', 'נכשל בהוספת ציוד ברירת מחדל');
@@ -64,17 +74,28 @@ const CombatEquipmentListScreen: React.FC = () => {
       Alert.alert('שגיאה', 'נכשל בטעינת הציוד');
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
-  const categories = ['הכל', 'נשק', 'אופטיקה', 'ציוד מגן', 'ציוד נוסף'];
+  const onRefresh = () => {
+    setRefreshing(true);
+    loadEquipment();
+  };
+
+  const categories = ['הכל', ...Object.keys(CATEGORY_CONFIG)];
 
   const filteredEquipment = equipment.filter((item) => {
-    const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    const matchesSearch =
+      item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       item.serial?.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCategory = selectedCategory === 'הכל' || item.category === selectedCategory;
     return matchesSearch && matchesCategory;
   });
+
+  const getCategoryConfig = (category: string) => {
+    return CATEGORY_CONFIG[category] || CATEGORY_CONFIG['אחר'];
+  };
 
   const handleAddEquipment = () => {
     navigation.navigate('AddCombatEquipment');
@@ -88,19 +109,15 @@ const CombatEquipmentListScreen: React.FC = () => {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}
-          >
-            <Text style={styles.backButtonText}>←</Text>
+          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+            <Text style={styles.backButtonText}>→</Text>
           </TouchableOpacity>
-          <View style={styles.headerContent}>
-            <Text style={styles.title}>ניהול ציוד</Text>
-            <Text style={styles.subtitle}>ציוד לוחם ונשק</Text>
-          </View>
+          <Text style={styles.headerTitle}>ניהול ציוד</Text>
+          <View style={styles.headerSpacer} />
         </View>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={Colors.modules.arme} />
+          <ActivityIndicator size="large" color={Colors.arme} />
+          <Text style={styles.loadingText}>טוען ציוד...</Text>
         </View>
       </View>
     );
@@ -110,36 +127,45 @@ const CombatEquipmentListScreen: React.FC = () => {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Text style={styles.backButtonText}>←</Text>
+        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+          <Text style={styles.backButtonText}>→</Text>
         </TouchableOpacity>
-        <View style={styles.headerContent}>
-          <Text style={styles.title}>ניהול ציוד לוחם</Text>
-          <Text style={styles.subtitle}>🔫 {equipment.length} פריטים במלאי</Text>
+        <View style={styles.headerCenter}>
+          <Text style={styles.headerTitle}>ניהול ציוד לוחם</Text>
+          <Text style={styles.headerSubtitle}>
+            🔫 {equipment.length} פריטים במערכת
+          </Text>
         </View>
-        <TouchableOpacity
-          style={styles.headerAddButton}
-          onPress={handleAddEquipment}
-        >
-          <Text style={styles.headerAddButtonText}>+</Text>
+        <TouchableOpacity style={styles.addButton} onPress={handleAddEquipment}>
+          <Text style={styles.addButtonText}>+</Text>
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.content}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[Colors.arme]} />
+        }
+      >
         {/* Stats Cards */}
         <View style={styles.statsRow}>
-          <View style={[styles.statCard, { backgroundColor: Colors.modules.arme }]}>
+          <View style={[styles.statCard, { backgroundColor: Colors.arme }]}>
             <Text style={styles.statNumber}>{equipment.length}</Text>
             <Text style={styles.statLabel}>סה"כ ציוד</Text>
           </View>
-          <View style={[styles.statCard, { backgroundColor: Colors.status.info }]}>
+          <View style={[styles.statCard, { backgroundColor: Colors.info }]}>
             <Text style={styles.statNumber}>
               {new Set(equipment.map(e => e.category)).size}
             </Text>
             <Text style={styles.statLabel}>קטגוריות</Text>
+          </View>
+          <View style={[styles.statCard, { backgroundColor: Colors.success }]}>
+            <Text style={styles.statNumber}>
+              {equipment.filter(e => e.hasSubEquipment).length}
+            </Text>
+            <Text style={styles.statLabel}>עם רכיבים</Text>
           </View>
         </View>
 
@@ -149,10 +175,15 @@ const CombatEquipmentListScreen: React.FC = () => {
           <TextInput
             style={styles.searchInput}
             placeholder="חיפוש לפי שם או מסטב..."
-            placeholderTextColor={Colors.text.light}
+            placeholderTextColor={Colors.placeholder}
             value={searchQuery}
             onChangeText={setSearchQuery}
           />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearButton}>
+              <Text style={styles.clearButtonText}>✕</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Category Filter */}
@@ -162,77 +193,98 @@ const CombatEquipmentListScreen: React.FC = () => {
           style={styles.categoryScroll}
           contentContainerStyle={styles.categoryContainer}
         >
-          {categories.map((category) => (
-            <TouchableOpacity
-              key={category}
-              style={[
-                styles.categoryChip,
-                selectedCategory === category && styles.categoryChipActive,
-              ]}
-              onPress={() => setSelectedCategory(category)}
-            >
-              <Text
+          {categories.map((cat) => {
+            const isActive = selectedCategory === cat;
+            const config = cat !== 'הכל' ? getCategoryConfig(cat) : null;
+
+            return (
+              <TouchableOpacity
+                key={cat}
                 style={[
-                  styles.categoryChipText,
-                  selectedCategory === category && styles.categoryChipTextActive,
+                  styles.categoryChip,
+                  isActive && styles.categoryChipActive,
                 ]}
+                onPress={() => setSelectedCategory(cat)}
               >
-                {category}
-              </Text>
-            </TouchableOpacity>
-          ))}
+                {config && <Text style={styles.categoryChipIcon}>{config.icon}</Text>}
+                <Text style={[
+                  styles.categoryChipText,
+                  isActive && styles.categoryChipTextActive,
+                ]}>
+                  {cat}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
         </ScrollView>
 
         {/* Equipment List */}
-        <Text style={styles.sectionTitle}>רשימת ציוד ({filteredEquipment.length})</Text>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionCount}>({filteredEquipment.length})</Text>
+          <Text style={styles.sectionTitle}>רשימת ציוד</Text>
+        </View>
+
         <View style={styles.equipmentList}>
-          {filteredEquipment.map((item) => (
-            <TouchableOpacity
-              key={item.id}
-              style={styles.equipmentCard}
-              onPress={() => handleEquipmentPress(item.id)}
-            >
-              <View style={styles.equipmentIcon}>
-                <Text style={styles.equipmentIconText}>
-                  {item.category === 'נשק' ? '🔫' :
-                   item.category === 'אופטיקה' ? '🔭' :
-                   item.category === 'ציוד מגן' ? '🛡️' : '📦'}
-                </Text>
-              </View>
-              <View style={styles.equipmentInfo}>
-                <Text style={styles.equipmentName}>{item.name}</Text>
-                <View style={styles.equipmentMeta}>
-                  <Text style={styles.equipmentCategory}>{item.category}</Text>
-                  {item.serial && (
-                    <Text style={styles.equipmentSerial}>מסטב: {item.serial}</Text>
+          {filteredEquipment.map((item) => {
+            const config = getCategoryConfig(item.category);
+
+            return (
+              <TouchableOpacity
+                key={item.id}
+                style={styles.equipmentCard}
+                onPress={() => handleEquipmentPress(item.id)}
+                activeOpacity={0.7}
+              >
+                <View style={[styles.equipmentIcon, { backgroundColor: config.color }]}>
+                  <Text style={styles.equipmentIconText}>{config.icon}</Text>
+                </View>
+
+                <View style={styles.equipmentInfo}>
+                  <Text style={styles.equipmentName}>{item.name}</Text>
+                  <View style={styles.equipmentMeta}>
+                    <Text style={[styles.equipmentCategory, { color: config.color }]}>
+                      {item.category}
+                    </Text>
+                    {item.serial && (
+                      <Text style={styles.equipmentSerial}>מסטב: {item.serial}</Text>
+                    )}
+                  </View>
+                  {item.hasSubEquipment && item.subEquipments && (
+                    <View style={styles.subBadge}>
+                      <Text style={styles.subBadgeText}>
+                        {item.subEquipments.length} רכיבים
+                      </Text>
+                    </View>
                   )}
                 </View>
-                {item.hasSubEquipment && item.subEquipments && (
-                  <View style={styles.subEquipmentContainer}>
-                    <Text style={styles.subEquipmentLabel}>
-                      {item.subEquipments.length} רכיבים נוספים
-                    </Text>
-                  </View>
-                )}
-              </View>
-              <Text style={styles.chevron}>›</Text>
-            </TouchableOpacity>
-          ))}
+
+                <View style={styles.chevronContainer}>
+                  <Text style={styles.chevron}>‹</Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
 
           {filteredEquipment.length === 0 && (
             <View style={styles.emptyCard}>
+              <Text style={styles.emptyIcon}>📭</Text>
               <Text style={styles.emptyText}>לא נמצא ציוד</Text>
               <Text style={styles.emptySubtext}>
                 {searchQuery
                   ? 'נסה חיפוש אחר או שנה את הפילטר'
-                  : 'לחץ על + בראש העמוד להוסיף ציוד'}
+                  : 'לחץ על + להוספת ציוד חדש'}
               </Text>
             </View>
           )}
-
-          <View style={{ height: 20 }} />
         </View>
+
+        <View style={styles.bottomSpacer} />
       </ScrollView>
+
+      {/* Floating Action Button */}
+      <TouchableOpacity style={styles.fab} onPress={handleAddEquipment}>
+        <Text style={styles.fabIcon}>+</Text>
+      </TouchableOpacity>
     </View>
   );
 };
@@ -240,162 +292,213 @@ const CombatEquipmentListScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background.primary,
+    backgroundColor: Colors.background,
   },
+
+  // Header
   header: {
-    backgroundColor: Colors.modules.arme,
+    backgroundColor: Colors.arme,
     paddingTop: 50,
-    paddingHorizontal: 20,
     paddingBottom: 20,
+    paddingHorizontal: Spacing.xl,
     flexDirection: 'row',
     alignItems: 'center',
     ...Shadows.medium,
   },
-  headerAddButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 12,
-  },
-  headerAddButtonText: {
-    fontSize: 28,
-    color: '#FFF',
-    fontWeight: 'bold',
-    marginTop: -2,
-  },
   backButton: {
     width: 40,
     height: 40,
-    borderRadius: 20,
+    borderRadius: BorderRadius.full,
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 15,
   },
   backButtonText: {
-    fontSize: 24,
-    color: '#FFF',
-  },
-  headerContent: {
-    flex: 1,
-  },
-  title: {
-    fontSize: 22,
+    fontSize: 20,
+    color: Colors.textWhite,
     fontWeight: 'bold',
-    color: '#FFF',
   },
-  subtitle: {
-    fontSize: 13,
-    color: 'rgba(255, 255, 255, 0.9)',
-    marginTop: 4,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 20,
-  },
-  statCard: {
+  headerCenter: {
     flex: 1,
-    padding: 20,
-    borderRadius: 12,
     alignItems: 'center',
-    ...Shadows.small,
   },
-  statNumber: {
-    fontSize: 32,
+  headerTitle: {
+    fontSize: FontSize.xl,
     fontWeight: 'bold',
-    color: '#FFF',
+    color: Colors.textWhite,
   },
-  statLabel: {
-    fontSize: 13,
-    color: 'rgba(255, 255, 255, 0.9)',
+  headerSubtitle: {
+    fontSize: FontSize.sm,
+    color: 'rgba(255, 255, 255, 0.8)',
     marginTop: 4,
   },
-  content: {
-    flex: 1,
-    padding: 20,
+  headerSpacer: {
+    width: 40,
   },
+  addButton: {
+    width: 40,
+    height: 40,
+    borderRadius: BorderRadius.full,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  addButtonText: {
+    fontSize: 24,
+    color: Colors.textWhite,
+    fontWeight: 'bold',
+  },
+
+  // Loading
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    gap: Spacing.md,
   },
+  loadingText: {
+    fontSize: FontSize.base,
+    color: Colors.textSecondary,
+    marginTop: Spacing.sm,
+  },
+
+  // Content
+  content: {
+    flex: 1,
+  },
+  scrollContent: {
+    padding: Spacing.xl,
+  },
+
+  // Stats
+  statsRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    marginBottom: Spacing.xl,
+  },
+  statCard: {
+    flex: 1,
+    padding: Spacing.md,
+    borderRadius: BorderRadius.lg,
+    alignItems: 'center',
+    ...Shadows.small,
+  },
+  statNumber: {
+    fontSize: FontSize.xxl,
+    fontWeight: 'bold',
+    color: Colors.textWhite,
+  },
+  statLabel: {
+    fontSize: FontSize.xs,
+    color: 'rgba(255, 255, 255, 0.9)',
+    marginTop: 4,
+  },
+
+  // Search
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFF',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    marginBottom: 15,
-    ...Shadows.small,
+    backgroundColor: Colors.backgroundCard,
+    borderRadius: BorderRadius.lg,
+    paddingHorizontal: Spacing.md,
+    marginBottom: Spacing.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    ...Shadows.xs,
   },
   searchIcon: {
-    fontSize: 18,
-    marginLeft: 8,
+    fontSize: 16,
+    marginRight: Spacing.sm,
   },
   searchInput: {
     flex: 1,
-    padding: 16,
+    paddingVertical: Spacing.md,
+    fontSize: FontSize.base,
+    color: Colors.text,
+    textAlign: 'right',
+  },
+  clearButton: {
+    padding: Spacing.sm,
+  },
+  clearButtonText: {
     fontSize: 16,
-    color: Colors.text,
-    textAlign: 'right',
+    color: Colors.textLight,
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: Colors.text,
-    marginBottom: 12,
-    textAlign: 'right',
-  },
+
+  // Category Filter
   categoryScroll: {
-    marginBottom: 15,
+    marginBottom: Spacing.lg,
   },
   categoryContainer: {
-    gap: 8,
-    paddingVertical: 5,
+    gap: Spacing.sm,
+    paddingVertical: Spacing.xs,
   },
   categoryChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: Colors.background.card,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.full,
+    backgroundColor: Colors.backgroundCard,
     borderWidth: 1,
-    borderColor: Colors.border.light,
+    borderColor: Colors.border,
+    gap: Spacing.xs,
   },
   categoryChipActive: {
-    backgroundColor: Colors.status.info,
-    borderColor: Colors.status.info,
+    backgroundColor: Colors.arme,
+    borderColor: Colors.arme,
+  },
+  categoryChipIcon: {
+    fontSize: 14,
   },
   categoryChipText: {
-    fontSize: 14,
-    color: Colors.text.secondary,
+    fontSize: FontSize.sm,
+    fontWeight: '600',
+    color: Colors.textSecondary,
   },
   categoryChipTextActive: {
-    color: Colors.text.white,
-    fontWeight: 'bold',
+    color: Colors.textWhite,
   },
+
+  // Section Header
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    marginBottom: Spacing.md,
+    gap: Spacing.sm,
+  },
+  sectionTitle: {
+    fontSize: FontSize.lg,
+    fontWeight: 'bold',
+    color: Colors.text,
+  },
+  sectionCount: {
+    fontSize: FontSize.md,
+    color: Colors.textSecondary,
+  },
+
+  // Equipment List
   equipmentList: {
-    gap: 12,
+    gap: Spacing.sm,
   },
   equipmentCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFF',
-    borderRadius: 12,
-    padding: 16,
+    backgroundColor: Colors.backgroundCard,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.md,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
     ...Shadows.small,
   },
   equipmentIcon: {
-    width: 50,
-    height: 50,
-    borderRadius: 12,
-    backgroundColor: Colors.modules.arme,
+    width: 48,
+    height: 48,
+    borderRadius: BorderRadius.md,
     justifyContent: 'center',
     alignItems: 'center',
-    marginLeft: 15,
+    marginLeft: Spacing.md,
   },
   equipmentIconText: {
     fontSize: 24,
@@ -405,56 +508,91 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   equipmentName: {
-    fontSize: 16,
+    fontSize: FontSize.base,
     fontWeight: 'bold',
-    color: Colors.text.primary,
-    marginBottom: 6,
+    color: Colors.text,
+    marginBottom: 4,
   },
   equipmentMeta: {
     flexDirection: 'row',
-    gap: 12,
-    marginBottom: 4,
+    alignItems: 'center',
+    gap: Spacing.sm,
   },
   equipmentCategory: {
-    fontSize: 13,
-    color: Colors.status.info,
+    fontSize: FontSize.sm,
+    fontWeight: '600',
   },
   equipmentSerial: {
-    fontSize: 13,
-    color: Colors.text.secondary,
+    fontSize: FontSize.sm,
+    color: Colors.textSecondary,
   },
-  subEquipmentContainer: {
+  subBadge: {
+    backgroundColor: Colors.successLight,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
+    borderRadius: BorderRadius.sm,
     marginTop: 4,
   },
-  subEquipmentLabel: {
-    fontSize: 12,
-    color: Colors.status.success,
+  subBadgeText: {
+    fontSize: FontSize.xs,
+    color: Colors.success,
+    fontWeight: '600',
+  },
+  chevronContainer: {
+    marginLeft: Spacing.sm,
   },
   chevron: {
     fontSize: 24,
-    color: Colors.military.navyBlue,
-    marginRight: 5,
+    color: Colors.textLight,
   },
+
+  // Empty State
   emptyCard: {
-    backgroundColor: Colors.background.card,
-    borderRadius: 12,
-    padding: 40,
+    backgroundColor: Colors.backgroundCard,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.xxxl,
     alignItems: 'center',
-    marginTop: 20,
     borderWidth: 1,
-    borderColor: Colors.border.light,
-    ...Shadows.small,
+    borderColor: Colors.border,
+    ...Shadows.xs,
+  },
+  emptyIcon: {
+    fontSize: 48,
+    marginBottom: Spacing.md,
   },
   emptyText: {
-    color: Colors.text.primary,
-    fontSize: 16,
+    fontSize: FontSize.lg,
     fontWeight: 'bold',
-    marginBottom: 8,
+    color: Colors.text,
+    marginBottom: Spacing.xs,
   },
   emptySubtext: {
-    color: Colors.text.secondary,
-    fontSize: 14,
+    fontSize: FontSize.md,
+    color: Colors.textSecondary,
     textAlign: 'center',
+  },
+
+  bottomSpacer: {
+    height: 80,
+  },
+
+  // FAB
+  fab: {
+    position: 'absolute',
+    bottom: Spacing.xl,
+    left: Spacing.xl,
+    width: 56,
+    height: 56,
+    borderRadius: BorderRadius.full,
+    backgroundColor: Colors.arme,
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...Shadows.large,
+  },
+  fabIcon: {
+    fontSize: 28,
+    color: Colors.textWhite,
+    fontWeight: 'bold',
   },
 });
 

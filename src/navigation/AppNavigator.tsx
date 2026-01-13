@@ -27,6 +27,7 @@ import AddCombatEquipmentScreen from '../screens/arme/AddCombatEquipmentScreen';
 import CombatAssignmentScreen from '../screens/arme/CombatAssignmentScreen';
 import AdminPanelScreen from '../screens/admin/AdminPanelScreen';
 import UserManagementScreen from '../screens/admin/UserManagementScreen';
+import DatabaseDebugScreen from '../screens/admin/DatabaseDebugScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -83,6 +84,7 @@ const AppNavigator: React.FC = () => {
             {/* Module Admin */}
             <Stack.Screen name="AdminPanel" component={AdminPanelScreen} />
             <Stack.Screen name="UserManagement" component={UserManagementScreen} />
+            <Stack.Screen name="DatabaseDebug" component={DatabaseDebugScreen} />
 
             {/* Signature commune */}
             <Stack.Screen name="SignatureScreen" component={ClothingSignatureScreen} />

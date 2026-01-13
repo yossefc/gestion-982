@@ -185,6 +185,14 @@ const AdminPanelScreen: React.FC = () => {
         <View style={styles.actionsList}>
           <TouchableOpacity
             style={styles.actionCard}
+            onPress={() => navigation.navigate('DatabaseDebug')}
+          >
+            <Text style={styles.actionIcon}>🔍</Text>
+            <Text style={styles.actionText}>בדיקת בסיס נתונים</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.actionCard}
             onPress={handleInitializeData}
           >
             <Text style={styles.actionIcon}>🔄</Text>

@@ -16,6 +16,7 @@
     "db:list": "node scripts/list-soldiers.js",
     "db:fix": "node scripts/fix-soldiers.js",
     "db:clean": "node scripts/clean-soldiers.js",
+    "db:analyze": "node scripts/analyze-firestore.js",
     "force-logout": "node scripts/force-logout.js"
   },
   "dependencies": {

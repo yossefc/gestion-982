@@ -1,5 +1,6 @@
 // Écran d'accueil du module Arme (מנות וציוד לחימה)
-import React, { useEffect, useState } from 'react';
+// Design professionnel avec UX améliorée
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,30 +8,44 @@ import {
   StyleSheet,
   ScrollView,
   ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import { Colors, Shadows } from '../../theme/colors';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/colors';
 import { dashboardService, manaService, combatEquipmentService } from '../../services/firebaseService';
 import { useAuth } from '../../contexts/AuthContext';
+
+interface MenuItemProps {
+  id: string;
+  title: string;
+  subtitle: string;
+  icon: string;
+  color: string;
+  badge?: number;
+  action: () => void;
+}
 
 const ArmeHomeScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const { user, loading: authLoading } = useAuth();
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [stats, setStats] = useState({
     activeManot: 0,
     equipmentItems: 0,
     signed: 0,
+    pending: 0,
   });
 
-  useEffect(() => {
-    // Attendre que l'auth soit prête avant de charger les stats
-    if (!authLoading && user) {
-      loadStats();
-    } else if (!authLoading) {
-      setLoading(false);
-    }
-  }, [authLoading, user]);
+  useFocusEffect(
+    useCallback(() => {
+      if (!authLoading && user) {
+        loadStats();
+      } else if (!authLoading) {
+        setLoading(false);
+      }
+    }, [authLoading, user])
+  );
 
   const loadStats = async () => {
     try {
@@ -43,22 +58,30 @@ const ArmeHomeScreen: React.FC = () => {
       setStats({
         activeManot: manot.length,
         equipmentItems: equipment.length,
-        signed: dashboardStats.signedSoldiers,
+        signed: dashboardStats.signedSoldiers || 0,
+        pending: dashboardStats.pendingSoldiers || 0,
       });
     } catch (error) {
       console.error('Error loading stats:', error);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
-  const menuItems = [
+  const onRefresh = () => {
+    setRefreshing(true);
+    loadStats();
+  };
+
+  const menuItems: MenuItemProps[] = [
     {
       id: 'manot',
       title: 'ניהול מנות',
-      subtitle: 'מנת מפקד, מנת לוחם, וכו\'',
+      subtitle: 'מנת מפקד, מנת לוחם, ערכות',
       icon: '📦',
-      color: Colors.modules.arme,
+      color: '#E53935',
+      badge: stats.activeManot,
       action: () => navigation.navigate('ManotList'),
     },
     {
@@ -66,7 +89,8 @@ const ArmeHomeScreen: React.FC = () => {
       title: 'ניהול ציוד',
       subtitle: 'נשק, אופטיקה, ציוד לוחם',
       icon: '🔫',
-      color: Colors.military.darkGreen,
+      color: Colors.arme,
+      badge: stats.equipmentItems,
       action: () => navigation.navigate('CombatEquipmentList'),
     },
     {
@@ -74,16 +98,40 @@ const ArmeHomeScreen: React.FC = () => {
       title: 'החתמת חייל',
       subtitle: 'הנפקת ציוד לחימה',
       icon: '✍️',
-      color: Colors.status.success,
+      color: Colors.success,
       action: () => navigation.navigate('SoldierSearch', { mode: 'combat' }),
     },
     {
-      id: 'pdf',
-      title: 'יצירת טופס 982',
-      subtitle: 'הפקת מסמך חתימה',
-      icon: '📄',
-      color: Colors.status.info,
+      id: 'return',
+      title: 'זיכוי חייל',
+      subtitle: 'החזרת ציוד לחימה',
+      icon: '↩️',
+      color: Colors.warning,
+      action: () => navigation.navigate('SoldierSearch', { mode: 'combat-return' }),
+    },
+  ];
+
+  const quickActions = [
+    {
+      id: 'quick-sign',
+      title: 'החתמה מהירה',
+      icon: '⚡',
+      color: Colors.info,
       action: () => navigation.navigate('SoldierSearch', { mode: 'combat' }),
+    },
+    {
+      id: 'quick-pdf',
+      title: 'טופס 982',
+      icon: '📄',
+      color: '#9C27B0',
+      action: () => navigation.navigate('SoldierSearch', { mode: 'pdf-combat' }),
+    },
+    {
+      id: 'quick-report',
+      title: 'דוחות',
+      icon: '📊',
+      color: '#FF5722',
+      action: () => Alert.alert('בקרוב', 'מסך דוחות יהיה זמין בקרוב'),
     },
   ];
 
@@ -91,47 +139,71 @@ const ArmeHomeScreen: React.FC = () => {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Text style={styles.backButtonText}>←</Text>
+        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+          <Text style={styles.backButtonText}>→</Text>
         </TouchableOpacity>
-        <View style={styles.headerContent}>
-          <Text style={styles.title}>נשקיה</Text>
-          <Text style={styles.subtitle}>🔫 מערכת ניהול גדוד 982</Text>
+        <View style={styles.headerCenter}>
+          <Text style={styles.headerTitle}>נשקייה</Text>
+          <Text style={styles.headerSubtitle}>מערכת ניהול ציוד לחימה</Text>
+        </View>
+        <View style={styles.headerIcon}>
+          <Text style={styles.headerIconText}>🔫</Text>
         </View>
       </View>
 
-      <ScrollView 
-        style={styles.content} 
+      <ScrollView
+        style={styles.content}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[Colors.arme]} />
+        }
       >
         {/* Quick Stats */}
         {loading ? (
           <View style={styles.loadingStats}>
-            <ActivityIndicator size="small" color={Colors.modules.arme} />
+            <ActivityIndicator size="small" color={Colors.arme} />
+            <Text style={styles.loadingStatsText}>טוען נתונים...</Text>
           </View>
         ) : (
-          <View style={styles.statsRow}>
-            <View style={[styles.statCard, { backgroundColor: Colors.modules.arme }]}>
+          <View style={styles.statsGrid}>
+            <View style={[styles.statCard, styles.statCardLarge]}>
+              <Text style={styles.statIcon}>📦</Text>
               <Text style={styles.statNumber}>{stats.activeManot}</Text>
               <Text style={styles.statLabel}>מנות פעילות</Text>
             </View>
-            <View style={[styles.statCard, { backgroundColor: Colors.military.darkGreen }]}>
-              <Text style={styles.statNumber}>{stats.equipmentItems}</Text>
-              <Text style={styles.statLabel}>פריטי ציוד</Text>
-            </View>
-            <View style={[styles.statCard, { backgroundColor: Colors.status.success }]}>
-              <Text style={styles.statNumber}>{stats.signed}</Text>
-              <Text style={styles.statLabel}>חתומים</Text>
+            <View style={styles.statColumn}>
+              <View style={[styles.statCardSmall, { backgroundColor: Colors.arme }]}>
+                <Text style={styles.statNumberSmall}>{stats.equipmentItems}</Text>
+                <Text style={styles.statLabelSmall}>פריטי ציוד</Text>
+              </View>
+              <View style={[styles.statCardSmall, { backgroundColor: Colors.success }]}>
+                <Text style={styles.statNumberSmall}>{stats.signed}</Text>
+                <Text style={styles.statLabelSmall}>חתומים</Text>
+              </View>
             </View>
           </View>
         )}
 
-        {/* Menu Items */}
-        <Text style={styles.sectionTitle}>פעולות</Text>
+        {/* Quick Actions */}
+        <View style={styles.quickActionsContainer}>
+          {quickActions.map((action) => (
+            <TouchableOpacity
+              key={action.id}
+              style={styles.quickActionButton}
+              onPress={action.action}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.quickActionIcon, { backgroundColor: action.color }]}>
+                <Text style={styles.quickActionIconText}>{action.icon}</Text>
+              </View>
+              <Text style={styles.quickActionTitle}>{action.title}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* Main Menu */}
+        <Text style={styles.sectionTitle}>פעולות עיקריות</Text>
         <View style={styles.menuContainer}>
           {menuItems.map((item) => (
             <TouchableOpacity
@@ -147,135 +219,242 @@ const ArmeHomeScreen: React.FC = () => {
                 <Text style={styles.menuTitle}>{item.title}</Text>
                 <Text style={styles.menuSubtitle}>{item.subtitle}</Text>
               </View>
-              <Text style={styles.chevron}>›</Text>
+              {item.badge !== undefined && item.badge > 0 && (
+                <View style={[styles.menuBadge, { backgroundColor: item.color }]}>
+                  <Text style={styles.menuBadgeText}>{item.badge}</Text>
+                </View>
+              )}
+              <Text style={styles.menuChevron}>‹</Text>
             </TouchableOpacity>
           ))}
         </View>
 
-        {/* Recent Activity */}
-        <Text style={styles.sectionTitle}>פעילות אחרונה</Text>
-        <View style={styles.activityCard}>
-          <Text style={styles.emptyActivityText}>אין פעילות אחרונה</Text>
-          <Text style={styles.emptyActivitySubtext}>
-            החתמות והנפקות יופיעו כאן
-          </Text>
-        </View>
-
         {/* Info Card */}
         <View style={styles.infoCard}>
-          <Text style={styles.infoTitle}>⚠️ חשוב</Text>
-          <Text style={styles.infoText}>
-            יש לוודא תקינות הציוד לפני החתמה. כל הנפקה מתועדת במערכת ונשמרת לצורכי ביקורת.
-          </Text>
+          <View style={styles.infoIconContainer}>
+            <Text style={styles.infoIcon}>⚠️</Text>
+          </View>
+          <View style={styles.infoContent}>
+            <Text style={styles.infoTitle}>חשוב לדעת</Text>
+            <Text style={styles.infoText}>
+              יש לוודא תקינות הציוד לפני החתמה. כל הנפקה מתועדת במערכת ונשמרת לצורכי ביקורת.
+            </Text>
+          </View>
         </View>
+
+        <View style={styles.bottomSpacer} />
       </ScrollView>
     </View>
   );
 };
 
+// Alert component placeholder
+const Alert = {
+  alert: (title: string, message: string) => {
+    console.log(`${title}: ${message}`);
+  },
+};
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background.primary,
+    backgroundColor: Colors.background,
   },
+
+  // Header
   header: {
-    backgroundColor: Colors.background.header,
-    paddingTop: 60,
-    paddingHorizontal: 20,
-    paddingBottom: 20,
+    backgroundColor: Colors.arme,
+    paddingTop: 50,
+    paddingBottom: 24,
+    paddingHorizontal: Spacing.xl,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
     ...Shadows.medium,
   },
   backButton: {
-    position: 'absolute',
-    left: 20,
-    bottom: 20,
-    padding: 5,
-  },
-  backButtonText: {
-    fontSize: 28,
-    color: Colors.text.white,
-  },
-  headerContent: {
-    alignItems: 'flex-end',
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: Colors.text.white,
-    marginBottom: 5,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.8)',
-  },
-  content: {
-    flex: 1,
-    padding: 20,
-  },
-  scrollContent: {
-    paddingBottom: 100,
-  },
-  loadingStats: {
-    height: 100,
+    width: 40,
+    height: 40,
+    borderRadius: BorderRadius.full,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 25,
   },
-  statsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 25,
-    gap: 10,
+  backButtonText: {
+    fontSize: 20,
+    color: Colors.textWhite,
+    fontWeight: 'bold',
   },
-  statCard: {
+  headerCenter: {
     flex: 1,
-    padding: 16,
-    borderRadius: 12,
     alignItems: 'center',
+  },
+  headerTitle: {
+    fontSize: FontSize.xxl,
+    fontWeight: 'bold',
+    color: Colors.textWhite,
+  },
+  headerSubtitle: {
+    fontSize: FontSize.sm,
+    color: 'rgba(255, 255, 255, 0.8)',
+    marginTop: 4,
+  },
+  headerIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: BorderRadius.full,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerIconText: {
+    fontSize: 20,
+  },
+
+  // Content
+  content: {
+    flex: 1,
+  },
+  scrollContent: {
+    padding: Spacing.xl,
+  },
+
+  // Loading Stats
+  loadingStats: {
+    height: 120,
+    backgroundColor: Colors.backgroundCard,
+    borderRadius: BorderRadius.lg,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: Spacing.xl,
     ...Shadows.small,
   },
+  loadingStatsText: {
+    fontSize: FontSize.sm,
+    color: Colors.textSecondary,
+    marginTop: Spacing.sm,
+  },
+
+  // Stats Grid
+  statsGrid: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+    marginBottom: Spacing.xl,
+  },
+  statCard: {
+    backgroundColor: Colors.backgroundCard,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.lg,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+    ...Shadows.small,
+  },
+  statCardLarge: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  statColumn: {
+    flex: 1,
+    gap: Spacing.md,
+  },
+  statCardSmall: {
+    flex: 1,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Shadows.small,
+  },
+  statIcon: {
+    fontSize: 32,
+    marginBottom: Spacing.sm,
+  },
   statNumber: {
-    fontSize: 28,
+    fontSize: FontSize.xxxl,
     fontWeight: 'bold',
-    color: Colors.text.white,
+    color: Colors.arme,
   },
   statLabel: {
-    fontSize: 11,
-    color: 'rgba(255,255,255,0.9)',
+    fontSize: FontSize.sm,
+    color: Colors.textSecondary,
     marginTop: 4,
+  },
+  statNumberSmall: {
+    fontSize: FontSize.xxl,
+    fontWeight: 'bold',
+    color: Colors.textWhite,
+  },
+  statLabelSmall: {
+    fontSize: FontSize.xs,
+    color: 'rgba(255, 255, 255, 0.9)',
+    marginTop: 2,
+  },
+
+  // Quick Actions
+  quickActionsContainer: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+    marginBottom: Spacing.xl,
+  },
+  quickActionButton: {
+    flex: 1,
+    backgroundColor: Colors.backgroundCard,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.md,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+    ...Shadows.xs,
+  },
+  quickActionIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: BorderRadius.full,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: Spacing.sm,
+  },
+  quickActionIconText: {
+    fontSize: 24,
+  },
+  quickActionTitle: {
+    fontSize: FontSize.sm,
+    fontWeight: '600',
+    color: Colors.text,
     textAlign: 'center',
   },
+
+  // Section Title
   sectionTitle: {
-    fontSize: 18,
+    fontSize: FontSize.lg,
     fontWeight: 'bold',
-    color: Colors.text.primary,
-    marginBottom: 15,
+    color: Colors.text,
+    marginBottom: Spacing.md,
     textAlign: 'right',
   },
+
+  // Menu
   menuContainer: {
-    gap: 12,
-    marginBottom: 25,
+    gap: Spacing.sm,
+    marginBottom: Spacing.xl,
   },
   menuCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.background.card,
-    borderRadius: 12,
-    padding: 16,
+    backgroundColor: Colors.backgroundCard,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.lg,
     borderWidth: 1,
-    borderColor: Colors.border.light,
-    ...Shadows.medium,
+    borderColor: Colors.borderLight,
+    ...Shadows.small,
   },
   menuIcon: {
-    width: 55,
-    height: 55,
-    borderRadius: 12,
+    width: 52,
+    height: 52,
+    borderRadius: BorderRadius.lg,
     justifyContent: 'center',
     alignItems: 'center',
-    marginLeft: 15,
+    marginLeft: Spacing.md,
   },
   menuIconText: {
     fontSize: 26,
@@ -285,60 +464,73 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   menuTitle: {
-    fontSize: 17,
+    fontSize: FontSize.base,
     fontWeight: 'bold',
-    color: Colors.text.primary,
-    marginBottom: 4,
+    color: Colors.text,
+    marginBottom: 2,
   },
   menuSubtitle: {
-    fontSize: 13,
-    color: Colors.text.secondary,
+    fontSize: FontSize.sm,
+    color: Colors.textSecondary,
   },
-  chevron: {
-    fontSize: 28,
-    color: Colors.military.navyBlue,
-    marginRight: 5,
-  },
-  activityCard: {
-    backgroundColor: Colors.background.card,
-    borderRadius: 12,
-    padding: 30,
+  menuBadge: {
+    minWidth: 28,
+    height: 28,
+    borderRadius: BorderRadius.full,
+    justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: Colors.border.light,
-    ...Shadows.small,
+    marginRight: Spacing.sm,
   },
-  emptyActivityText: {
-    color: Colors.text.primary,
-    fontSize: 15,
-    fontWeight: '600',
-    marginBottom: 6,
+  menuBadgeText: {
+    fontSize: FontSize.sm,
+    fontWeight: 'bold',
+    color: Colors.textWhite,
   },
-  emptyActivitySubtext: {
-    color: Colors.text.secondary,
-    fontSize: 13,
+  menuChevron: {
+    fontSize: 24,
+    color: Colors.textLight,
   },
+
+  // Info Card
   infoCard: {
-    backgroundColor: '#fff9e6',
-    borderRadius: 12,
-    padding: 16,
+    flexDirection: 'row',
+    backgroundColor: '#FFF8E1',
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.lg,
     borderWidth: 1,
-    borderColor: '#f0e68c',
-    marginBottom: 20,
+    borderColor: '#FFE082',
+  },
+  infoIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: BorderRadius.full,
+    backgroundColor: '#FFE082',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: Spacing.md,
+  },
+  infoIcon: {
+    fontSize: 20,
+  },
+  infoContent: {
+    flex: 1,
+    alignItems: 'flex-end',
   },
   infoTitle: {
-    fontSize: 16,
+    fontSize: FontSize.base,
     fontWeight: 'bold',
-    color: Colors.text.primary,
-    marginBottom: 8,
-    textAlign: 'right',
+    color: '#F57F17',
+    marginBottom: 4,
   },
   infoText: {
-    fontSize: 14,
-    color: Colors.text.secondary,
+    fontSize: FontSize.sm,
+    color: '#795548',
     lineHeight: 20,
     textAlign: 'right',
+  },
+
+  bottomSpacer: {
+    height: Spacing.xxl,
   },
 });
 

@@ -1,5 +1,6 @@
 // Écran de liste des Manot (מנות) pour le module Arme
-import React, { useEffect, useState } from 'react';
+// Design professionnel avec UX améliorée
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,20 +9,21 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
+  RefreshControl,
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { Mana } from '../../types';
-import { Colors, Shadows } from '../../theme/colors';
-import { getAllManot, addMana, deleteMana, DEFAULT_MANOT } from '../../services/equipmentService';
+import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/colors';
+import { getAllManot, addMana, DEFAULT_MANOT } from '../../services/equipmentService';
 
 const ManotListScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [manot, setManot] = useState<Mana[]>([]);
 
-  // Recharger les données à chaque fois que l'écran est focus
   useFocusEffect(
-    React.useCallback(() => {
+    useCallback(() => {
       loadManot();
     }, [])
   );
@@ -30,7 +32,6 @@ const ManotListScreen: React.FC = () => {
     try {
       const data = await getAllManot();
 
-      // Si aucune מנה n'existe, proposer d'initialiser les données par défaut
       if (data.length === 0) {
         Alert.alert(
           'אין מנות במערכת',
@@ -38,13 +39,13 @@ const ManotListScreen: React.FC = () => {
           [
             { text: 'לא', style: 'cancel' },
             {
-              text: 'כן',
+              text: 'כן, הוסף',
               onPress: async () => {
                 try {
                   for (const mana of DEFAULT_MANOT) {
                     await addMana(mana);
                   }
-                  loadManot(); // Recharger après ajout
+                  loadManot();
                 } catch (error) {
                   console.error('Error adding default manot:', error);
                   Alert.alert('שגיאה', 'נכשל בהוספת מנות ברירת מחדל');
@@ -61,7 +62,13 @@ const ManotListScreen: React.FC = () => {
       Alert.alert('שגיאה', 'נכשל בטעינת המנות');
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
+  };
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    loadManot();
   };
 
   const handleManaPress = (manaId: string) => {
@@ -72,23 +79,25 @@ const ManotListScreen: React.FC = () => {
     navigation.navigate('AddMana');
   };
 
+  const totalEquipments = manot.reduce((sum, m) => sum + m.equipments.length, 0);
+  const totalItems = manot.reduce(
+    (sum, m) => sum + m.equipments.reduce((s, e) => s + e.quantity, 0),
+    0
+  );
+
   if (loading) {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}
-          >
-            <Text style={styles.backButtonText}>←</Text>
+          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+            <Text style={styles.backButtonText}>→</Text>
           </TouchableOpacity>
-          <View style={styles.headerContent}>
-            <Text style={styles.title}>ניהול מנות</Text>
-            <Text style={styles.subtitle}>מנת מפקד, מנת לוחם</Text>
-          </View>
+          <Text style={styles.headerTitle}>ניהול מנות</Text>
+          <View style={styles.headerSpacer} />
         </View>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={Colors.modules.arme} />
+          <ActivityIndicator size="large" color={Colors.arme} />
+          <Text style={styles.loadingText}>טוען מנות...</Text>
         </View>
       </View>
     );
@@ -98,94 +107,154 @@ const ManotListScreen: React.FC = () => {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Text style={styles.backButtonText}>←</Text>
+        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+          <Text style={styles.backButtonText}>→</Text>
         </TouchableOpacity>
-        <View style={styles.headerContent}>
-          <Text style={styles.title}>ניהול מנות וערכות</Text>
-          <Text style={styles.subtitle}>📦 {manot.length} פריטים פעילים</Text>
+        <View style={styles.headerCenter}>
+          <Text style={styles.headerTitle}>ניהול מנות וערכות</Text>
+          <Text style={styles.headerSubtitle}>
+            📦 {manot.length} חבילות במערכת
+          </Text>
         </View>
+        <TouchableOpacity style={styles.addButton} onPress={handleAddMana}>
+          <Text style={styles.addButtonText}>+</Text>
+        </TouchableOpacity>
       </View>
 
-      <ScrollView 
-        style={styles.content} 
+      <ScrollView
+        style={styles.content}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[Colors.arme]} />
+        }
       >
         {/* Stats Row */}
         <View style={styles.statsRow}>
-          <View style={[styles.statCard, { backgroundColor: '#e74c3c' }]}>
+          <View style={[styles.statCard, { backgroundColor: '#E53935' }]}>
             <Text style={styles.statNumber}>{manot.length}</Text>
-            <Text style={styles.statLabel}>מנות</Text>
+            <Text style={styles.statLabel}>מנות/ערכות</Text>
           </View>
-          <View style={[styles.statCard, { backgroundColor: '#27ae60' }]}>
-            <Text style={styles.statNumber}>
-              {manot.reduce((sum, m) => sum + m.equipments.length, 0)}
-            </Text>
-            <Text style={styles.statLabel}>פריטי ציוד</Text>
+          <View style={[styles.statCard, { backgroundColor: '#43A047' }]}>
+            <Text style={styles.statNumber}>{totalEquipments}</Text>
+            <Text style={styles.statLabel}>סוגי ציוד</Text>
+          </View>
+          <View style={[styles.statCard, { backgroundColor: '#1E88E5' }]}>
+            <Text style={styles.statNumber}>{totalItems}</Text>
+            <Text style={styles.statLabel}>סה"כ פריטים</Text>
           </View>
         </View>
 
-        {/* Add Mana Button */}
-        <TouchableOpacity style={styles.addButton} onPress={handleAddMana}>
-          <Text style={styles.addButtonText}>+ הוסף מנה/ערכה חדשה</Text>
+        {/* Quick Add Button */}
+        <TouchableOpacity style={styles.quickAddButton} onPress={handleAddMana}>
+          <View style={styles.quickAddIcon}>
+            <Text style={styles.quickAddIconText}>+</Text>
+          </View>
+          <View style={styles.quickAddContent}>
+            <Text style={styles.quickAddTitle}>הוסף מנה/ערכה חדשה</Text>
+            <Text style={styles.quickAddSubtitle}>צור חבילת ציוד מוכנה להנפקה</Text>
+          </View>
+          <Text style={styles.quickAddChevron}>‹</Text>
         </TouchableOpacity>
 
         {/* Manot List */}
-        <Text style={styles.sectionTitle}>רשימת מנות וערכות</Text>
-        <View style={styles.manotList}>
-          {manot.map((mana) => (
-            <TouchableOpacity
-              key={mana.id}
-              style={styles.manaCard}
-              onPress={() => handleManaPress(mana.id)}
-            >
-              <View style={styles.manaIcon}>
-                <Text style={styles.manaIconText}>📦</Text>
-              </View>
-              <View style={styles.manaInfo}>
-                <View style={styles.manaHeader}>
-                  <Text style={styles.manaName}>{mana.name}</Text>
-                  {mana.type && (
-                    <View style={[
-                      styles.typeBadge,
-                      { backgroundColor: mana.type === 'מנה' ? '#3498db' : '#9b59b6' }
-                    ]}>
-                      <Text style={styles.typeBadgeText}>{mana.type}</Text>
-                    </View>
-                  )}
-                </View>
-                <Text style={styles.manaDetails}>
-                  {mana.equipments.length} פריטי ציוד
-                </Text>
-                <View style={styles.equipmentPreview}>
-                  {mana.equipments.slice(0, 2).map((eq, idx) => (
-                    <Text key={idx} style={styles.equipmentPreviewText}>
-                      • {eq.equipmentName} ({eq.quantity})
-                    </Text>
-                  ))}
-                  {mana.equipments.length > 2 && (
-                    <Text style={styles.equipmentPreviewText}>
-                      ועוד {mana.equipments.length - 2}...
-                    </Text>
-                  )}
-                </View>
-              </View>
-              <Text style={styles.chevron}>›</Text>
-            </TouchableOpacity>
-          ))}
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionCount}>({manot.length})</Text>
+          <Text style={styles.sectionTitle}>רשימת מנות וערכות</Text>
         </View>
 
-        {manot.length === 0 && (
-          <View style={styles.emptyCard}>
-            <Text style={styles.emptyText}>אין מנות במערכת</Text>
-            <Text style={styles.emptySubtext}>לחץ על "הוסף מנה חדשה" להתחיל</Text>
-          </View>
-        )}
+        <View style={styles.manotList}>
+          {manot.map((mana) => {
+            const itemCount = mana.equipments.reduce((sum, e) => sum + e.quantity, 0);
+            const isMana = mana.type === 'מנה' || !mana.type;
+
+            return (
+              <TouchableOpacity
+                key={mana.id}
+                style={styles.manaCard}
+                onPress={() => handleManaPress(mana.id)}
+                activeOpacity={0.7}
+              >
+                <View style={[
+                  styles.manaIcon,
+                  { backgroundColor: isMana ? Colors.arme : '#7C3AED' }
+                ]}>
+                  <Text style={styles.manaIconText}>{isMana ? '📦' : '🧰'}</Text>
+                </View>
+
+                <View style={styles.manaInfo}>
+                  <View style={styles.manaHeader}>
+                    <Text style={styles.manaName}>{mana.name}</Text>
+                    <View style={[
+                      styles.typeBadge,
+                      { backgroundColor: isMana ? Colors.armeLight : '#EDE9FE' }
+                    ]}>
+                      <Text style={[
+                        styles.typeBadgeText,
+                        { color: isMana ? Colors.arme : '#7C3AED' }
+                      ]}>
+                        {mana.type || 'מנה'}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.manaStats}>
+                    <View style={styles.manaStat}>
+                      <Text style={styles.manaStatValue}>{mana.equipments.length}</Text>
+                      <Text style={styles.manaStatLabel}>סוגים</Text>
+                    </View>
+                    <View style={styles.manaStatDivider} />
+                    <View style={styles.manaStat}>
+                      <Text style={styles.manaStatValue}>{itemCount}</Text>
+                      <Text style={styles.manaStatLabel}>פריטים</Text>
+                    </View>
+                  </View>
+
+                  {/* Equipment Preview */}
+                  <View style={styles.equipmentPreview}>
+                    {mana.equipments.slice(0, 3).map((eq, idx) => (
+                      <View key={idx} style={styles.previewItem}>
+                        <Text style={styles.previewText}>
+                          {eq.equipmentName} ({eq.quantity})
+                        </Text>
+                      </View>
+                    ))}
+                    {mana.equipments.length > 3 && (
+                      <Text style={styles.previewMore}>
+                        +{mana.equipments.length - 3} נוספים
+                      </Text>
+                    )}
+                  </View>
+                </View>
+
+                <View style={styles.chevronContainer}>
+                  <Text style={styles.chevron}>‹</Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+
+          {manot.length === 0 && (
+            <View style={styles.emptyCard}>
+              <Text style={styles.emptyIcon}>📭</Text>
+              <Text style={styles.emptyText}>אין מנות במערכת</Text>
+              <Text style={styles.emptySubtext}>
+                לחץ על הכפתור למעלה להוספת מנה ראשונה
+              </Text>
+              <TouchableOpacity style={styles.emptyButton} onPress={handleAddMana}>
+                <Text style={styles.emptyButtonText}>+ צור מנה חדשה</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+
+        <View style={styles.bottomSpacer} />
       </ScrollView>
+
+      {/* FAB */}
+      <TouchableOpacity style={styles.fab} onPress={handleAddMana}>
+        <Text style={styles.fabIcon}>+</Text>
+      </TouchableOpacity>
     </View>
   );
 };
@@ -193,119 +262,195 @@ const ManotListScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background.primary,
+    backgroundColor: Colors.background,
   },
+
+  // Header
   header: {
-    backgroundColor: Colors.background.header,
-    paddingTop: 60,
-    paddingHorizontal: 20,
+    backgroundColor: Colors.arme,
+    paddingTop: 50,
     paddingBottom: 20,
+    paddingHorizontal: Spacing.xl,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
     ...Shadows.medium,
   },
   backButton: {
-    position: 'absolute',
-    left: 20,
-    bottom: 20,
-    padding: 5,
+    width: 40,
+    height: 40,
+    borderRadius: BorderRadius.full,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   backButtonText: {
-    fontSize: 28,
-    color: Colors.text.white,
-  },
-  headerContent: {
-    alignItems: 'flex-end',
-  },
-  title: {
-    fontSize: 24,
+    fontSize: 20,
+    color: Colors.textWhite,
     fontWeight: 'bold',
-    color: Colors.text.white,
-    marginBottom: 5,
   },
-  subtitle: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.8)',
-  },
-  content: {
+  headerCenter: {
     flex: 1,
-    padding: 20,
+    alignItems: 'center',
   },
-  scrollContent: {
-    paddingBottom: 100,
+  headerTitle: {
+    fontSize: FontSize.xl,
+    fontWeight: 'bold',
+    color: Colors.textWhite,
   },
+  headerSubtitle: {
+    fontSize: FontSize.sm,
+    color: 'rgba(255, 255, 255, 0.8)',
+    marginTop: 4,
+  },
+  headerSpacer: {
+    width: 40,
+  },
+  addButton: {
+    width: 40,
+    height: 40,
+    borderRadius: BorderRadius.full,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  addButtonText: {
+    fontSize: 24,
+    color: Colors.textWhite,
+    fontWeight: 'bold',
+  },
+
+  // Loading
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    gap: Spacing.md,
   },
+  loadingText: {
+    fontSize: FontSize.base,
+    color: Colors.textSecondary,
+    marginTop: Spacing.sm,
+  },
+
+  // Content
+  content: {
+    flex: 1,
+  },
+  scrollContent: {
+    padding: Spacing.xl,
+  },
+
+  // Stats
   statsRow: {
     flexDirection: 'row',
-    gap: 12,
-    marginBottom: 20,
+    gap: Spacing.sm,
+    marginBottom: Spacing.xl,
   },
   statCard: {
     flex: 1,
-    padding: 20,
-    borderRadius: 12,
+    padding: Spacing.md,
+    borderRadius: BorderRadius.lg,
     alignItems: 'center',
     ...Shadows.small,
   },
   statNumber: {
-    fontSize: 32,
+    fontSize: FontSize.xxl,
     fontWeight: 'bold',
-    color: Colors.text.white,
+    color: Colors.textWhite,
   },
   statLabel: {
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.9)',
-    marginTop: 8,
+    fontSize: FontSize.xs,
+    color: 'rgba(255, 255, 255, 0.9)',
+    marginTop: 4,
   },
-  addButton: {
-    backgroundColor: Colors.status.success,
-    borderRadius: 12,
-    padding: 16,
+
+  // Quick Add Button
+  quickAddButton: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 20,
-    ...Shadows.small,
+    backgroundColor: Colors.successLight,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.lg,
+    marginBottom: Spacing.xl,
+    borderWidth: 2,
+    borderColor: Colors.success,
+    borderStyle: 'dashed',
   },
-  addButtonText: {
-    fontSize: 16,
+  quickAddIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: BorderRadius.full,
+    backgroundColor: Colors.success,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: Spacing.md,
+  },
+  quickAddIconText: {
+    fontSize: 24,
+    color: Colors.textWhite,
     fontWeight: 'bold',
-    color: Colors.text.white,
+  },
+  quickAddContent: {
+    flex: 1,
+    alignItems: 'flex-end',
+  },
+  quickAddTitle: {
+    fontSize: FontSize.base,
+    fontWeight: 'bold',
+    color: Colors.successDark,
+  },
+  quickAddSubtitle: {
+    fontSize: FontSize.sm,
+    color: Colors.success,
+    marginTop: 2,
+  },
+  quickAddChevron: {
+    fontSize: 24,
+    color: Colors.success,
+  },
+
+  // Section Header
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    marginBottom: Spacing.md,
+    gap: Spacing.sm,
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: FontSize.lg,
     fontWeight: 'bold',
-    color: Colors.text.primary,
-    marginBottom: 15,
-    textAlign: 'right',
+    color: Colors.text,
   },
+  sectionCount: {
+    fontSize: FontSize.md,
+    color: Colors.textSecondary,
+  },
+
+  // Manot List
   manotList: {
-    gap: 12,
+    gap: Spacing.md,
   },
   manaCard: {
     flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.background.card,
-    borderRadius: 12,
-    padding: 16,
+    alignItems: 'flex-start',
+    backgroundColor: Colors.backgroundCard,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.lg,
     borderWidth: 1,
-    borderColor: Colors.border.light,
-    ...Shadows.medium,
+    borderColor: Colors.borderLight,
+    ...Shadows.small,
   },
   manaIcon: {
-    width: 50,
-    height: 50,
-    borderRadius: 12,
-    backgroundColor: Colors.modules.arme,
+    width: 56,
+    height: 56,
+    borderRadius: BorderRadius.lg,
     justifyContent: 'center',
     alignItems: 'center',
-    marginLeft: 15,
+    marginLeft: Spacing.md,
   },
   manaIconText: {
-    fontSize: 24,
+    fontSize: 28,
   },
   manaInfo: {
     flex: 1,
@@ -314,60 +459,135 @@ const styles = StyleSheet.create({
   manaHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 4,
+    gap: Spacing.sm,
+    marginBottom: Spacing.sm,
   },
   manaName: {
-    fontSize: 18,
+    fontSize: FontSize.lg,
     fontWeight: 'bold',
-    color: Colors.text.primary,
+    color: Colors.text,
   },
   typeBadge: {
-    paddingHorizontal: 8,
+    paddingHorizontal: Spacing.sm,
     paddingVertical: 2,
-    borderRadius: 8,
+    borderRadius: BorderRadius.sm,
   },
   typeBadgeText: {
-    fontSize: 10,
-    color: '#FFF',
+    fontSize: FontSize.xs,
     fontWeight: 'bold',
   },
-  manaDetails: {
-    fontSize: 13,
-    color: Colors.text.secondary,
-    marginBottom: 8,
+  manaStats: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    marginBottom: Spacing.sm,
+  },
+  manaStat: {
+    alignItems: 'center',
+  },
+  manaStatValue: {
+    fontSize: FontSize.lg,
+    fontWeight: 'bold',
+    color: Colors.arme,
+  },
+  manaStatLabel: {
+    fontSize: FontSize.xs,
+    color: Colors.textSecondary,
+  },
+  manaStatDivider: {
+    width: 1,
+    height: 24,
+    backgroundColor: Colors.border,
   },
   equipmentPreview: {
     alignItems: 'flex-end',
+    gap: 2,
   },
-  equipmentPreviewText: {
-    fontSize: 12,
-    color: Colors.status.info,
+  previewItem: {
+    backgroundColor: Colors.background,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
+    borderRadius: BorderRadius.xs,
+  },
+  previewText: {
+    fontSize: FontSize.sm,
+    color: Colors.textSecondary,
+  },
+  previewMore: {
+    fontSize: FontSize.sm,
+    color: Colors.info,
+    fontWeight: '600',
     marginTop: 2,
+  },
+  chevronContainer: {
+    justifyContent: 'center',
+    paddingLeft: Spacing.sm,
   },
   chevron: {
     fontSize: 24,
-    color: Colors.military.navyBlue,
-    marginRight: 5,
+    color: Colors.textLight,
   },
+
+  // Empty State
   emptyCard: {
-    backgroundColor: Colors.background.card,
-    borderRadius: 12,
-    padding: 40,
+    backgroundColor: Colors.backgroundCard,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.xxxl,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: Colors.border.light,
-    ...Shadows.small,
+    borderColor: Colors.border,
+    ...Shadows.xs,
+  },
+  emptyIcon: {
+    fontSize: 48,
+    marginBottom: Spacing.md,
   },
   emptyText: {
-    color: Colors.text.primary,
-    fontSize: 16,
+    fontSize: FontSize.lg,
     fontWeight: 'bold',
-    marginBottom: 8,
+    color: Colors.text,
+    marginBottom: Spacing.xs,
   },
   emptySubtext: {
-    color: Colors.text.secondary,
-    fontSize: 14,
+    fontSize: FontSize.md,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: Spacing.lg,
+  },
+  emptyButton: {
+    backgroundColor: Colors.success,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.md,
+    ...Shadows.small,
+  },
+  emptyButtonText: {
+    fontSize: FontSize.base,
+    fontWeight: 'bold',
+    color: Colors.textWhite,
+  },
+
+  bottomSpacer: {
+    height: 80,
+  },
+
+  // FAB
+  fab: {
+    position: 'absolute',
+    bottom: Spacing.xl,
+    left: Spacing.xl,
+    width: 56,
+    height: 56,
+    borderRadius: BorderRadius.full,
+    backgroundColor: Colors.arme,
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...Shadows.large,
+  },
+  fabIcon: {
+    fontSize: 28,
+    color: Colors.textWhite,
+    fontWeight: 'bold',
   },
 });
 

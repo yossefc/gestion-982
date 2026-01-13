@@ -135,6 +135,7 @@ export type RootStackParamList = {
   AdminPanel: undefined;
   UserManagement: undefined;
   HoldingsRecalculate: undefined;
+  DatabaseDebug: undefined;
   // Signature
   SignatureScreen: { 
     soldierId: string; 
