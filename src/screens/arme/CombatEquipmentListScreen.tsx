@@ -10,21 +10,24 @@ import {
   Alert,
   TextInput,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { CombatEquipment } from '../../types';
 import { Colors, Shadows } from '../../theme/colors';
 import { getAllCombatEquipment, addCombatEquipment, DEFAULT_COMBAT_EQUIPMENT } from '../../services/equipmentService';
 
 const CombatEquipmentListScreen: React.FC = () => {
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
   const [loading, setLoading] = useState(true);
   const [equipment, setEquipment] = useState<CombatEquipment[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('הכל');
 
-  useEffect(() => {
-    loadEquipment();
-  }, []);
+  // Recharger à chaque fois qu'on revient sur l'écran
+  useFocusEffect(
+    React.useCallback(() => {
+      loadEquipment();
+    }, [])
+  );
 
   const loadEquipment = async () => {
     try {
@@ -74,11 +77,11 @@ const CombatEquipmentListScreen: React.FC = () => {
   });
 
   const handleAddEquipment = () => {
-    Alert.alert('בקרוב', 'תכונה זו תהיה זמינה בקרוב');
+    navigation.navigate('AddCombatEquipment');
   };
 
   const handleEquipmentPress = (equipmentId: string) => {
-    Alert.alert('בקרוב', 'תכונת עריכה תהיה זמינה בקרוב');
+    navigation.navigate('AddCombatEquipment', { equipmentId });
   };
 
   if (loading) {
@@ -114,14 +117,35 @@ const CombatEquipmentListScreen: React.FC = () => {
           <Text style={styles.backButtonText}>←</Text>
         </TouchableOpacity>
         <View style={styles.headerContent}>
-          <Text style={styles.title}>ניהול ציוד</Text>
-          <Text style={styles.subtitle}>🔫 {equipment.length} פריטים</Text>
+          <Text style={styles.title}>ניהול ציוד לוחם</Text>
+          <Text style={styles.subtitle}>🔫 {equipment.length} פריטים במלאי</Text>
         </View>
+        <TouchableOpacity
+          style={styles.headerAddButton}
+          onPress={handleAddEquipment}
+        >
+          <Text style={styles.headerAddButtonText}>+</Text>
+        </TouchableOpacity>
       </View>
 
-      <View style={styles.content}>
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        {/* Stats Cards */}
+        <View style={styles.statsRow}>
+          <View style={[styles.statCard, { backgroundColor: Colors.modules.arme }]}>
+            <Text style={styles.statNumber}>{equipment.length}</Text>
+            <Text style={styles.statLabel}>סה"כ ציוד</Text>
+          </View>
+          <View style={[styles.statCard, { backgroundColor: Colors.status.info }]}>
+            <Text style={styles.statNumber}>
+              {new Set(equipment.map(e => e.category)).size}
+            </Text>
+            <Text style={styles.statLabel}>קטגוריות</Text>
+          </View>
+        </View>
+
         {/* Search Bar */}
         <View style={styles.searchContainer}>
+          <Text style={styles.searchIcon}>🔍</Text>
           <TextInput
             style={styles.searchInput}
             placeholder="חיפוש לפי שם או מסטב..."
@@ -159,16 +183,9 @@ const CombatEquipmentListScreen: React.FC = () => {
           ))}
         </ScrollView>
 
-        {/* Add Equipment Button */}
-        <TouchableOpacity style={styles.addButton} onPress={handleAddEquipment}>
-          <Text style={styles.addButtonText}>+ הוסף ציוד חדש</Text>
-        </TouchableOpacity>
-
         {/* Equipment List */}
-        <ScrollView
-          style={styles.equipmentList}
-          showsVerticalScrollIndicator={false}
-        >
+        <Text style={styles.sectionTitle}>רשימת ציוד ({filteredEquipment.length})</Text>
+        <View style={styles.equipmentList}>
           {filteredEquipment.map((item) => (
             <TouchableOpacity
               key={item.id}
@@ -208,12 +225,14 @@ const CombatEquipmentListScreen: React.FC = () => {
               <Text style={styles.emptySubtext}>
                 {searchQuery
                   ? 'נסה חיפוש אחר או שנה את הפילטר'
-                  : 'לחץ על "הוסף ציוד חדש" להתחיל'}
+                  : 'לחץ על + בראש העמוד להוסיף ציוד'}
               </Text>
             </View>
           )}
-        </ScrollView>
-      </View>
+
+          <View style={{ height: 20 }} />
+        </View>
+      </ScrollView>
     </View>
   );
 };
@@ -224,37 +243,76 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background.primary,
   },
   header: {
-    backgroundColor: Colors.background.header,
-    paddingTop: 60,
+    backgroundColor: Colors.modules.arme,
+    paddingTop: 50,
     paddingHorizontal: 20,
     paddingBottom: 20,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
     ...Shadows.medium,
   },
+  headerAddButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 12,
+  },
+  headerAddButtonText: {
+    fontSize: 28,
+    color: '#FFF',
+    fontWeight: 'bold',
+    marginTop: -2,
+  },
   backButton: {
-    position: 'absolute',
-    left: 20,
-    bottom: 20,
-    padding: 5,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 15,
   },
   backButtonText: {
-    fontSize: 28,
-    color: Colors.text.white,
+    fontSize: 24,
+    color: '#FFF',
   },
   headerContent: {
-    alignItems: 'flex-end',
+    flex: 1,
   },
   title: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: 'bold',
-    color: Colors.text.white,
-    marginBottom: 5,
+    color: '#FFF',
   },
   subtitle: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.8)',
+    fontSize: 13,
+    color: 'rgba(255, 255, 255, 0.9)',
+    marginTop: 4,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 20,
+  },
+  statCard: {
+    flex: 1,
+    padding: 20,
+    borderRadius: 12,
+    alignItems: 'center',
+    ...Shadows.small,
+  },
+  statNumber: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: '#FFF',
+  },
+  statLabel: {
+    fontSize: 13,
+    color: 'rgba(255, 255, 255, 0.9)',
+    marginTop: 4,
   },
   content: {
     flex: 1,
@@ -266,16 +324,30 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF',
+    borderRadius: 12,
+    paddingHorizontal: 16,
     marginBottom: 15,
+    ...Shadows.small,
+  },
+  searchIcon: {
+    fontSize: 18,
+    marginLeft: 8,
   },
   searchInput: {
-    backgroundColor: Colors.background.card,
-    borderWidth: 1,
-    borderColor: Colors.border.medium,
-    borderRadius: 12,
+    flex: 1,
     padding: 16,
     fontSize: 16,
-    color: Colors.text.primary,
+    color: Colors.text,
+    textAlign: 'right',
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: Colors.text,
+    marginBottom: 12,
     textAlign: 'right',
   },
   categoryScroll: {
@@ -305,32 +377,16 @@ const styles = StyleSheet.create({
     color: Colors.text.white,
     fontWeight: 'bold',
   },
-  addButton: {
-    backgroundColor: Colors.status.success,
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-    marginBottom: 15,
-    ...Shadows.small,
-  },
-  addButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: Colors.text.white,
-  },
   equipmentList: {
-    flex: 1,
+    gap: 12,
   },
   equipmentCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.background.card,
+    backgroundColor: '#FFF',
     borderRadius: 12,
     padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: Colors.border.light,
-    ...Shadows.medium,
+    ...Shadows.small,
   },
   equipmentIcon: {
     width: 50,

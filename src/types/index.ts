@@ -122,6 +122,7 @@ export type RootStackParamList = {
   ManotDetails: { manaId: string };
   AddMana: { manaId?: string };  // manaId optionnel pour mode édition
   CombatEquipmentList: undefined;
+  AddCombatEquipment: { equipmentId?: string };  // equipmentId optionnel pour mode édition
   CombatAssignment: { soldierId: string };
   CombatReturn: { soldierId: string };
   // Module Vêtement

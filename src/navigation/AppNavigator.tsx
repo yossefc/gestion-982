@@ -23,6 +23,7 @@ import ManotListScreen from '../screens/arme/ManotListScreen';
 import ManotDetailsScreen from '../screens/arme/ManotDetailsScreen';
 import AddManaScreen from '../screens/arme/AddManaScreen';
 import CombatEquipmentListScreen from '../screens/arme/CombatEquipmentListScreen';
+import AddCombatEquipmentScreen from '../screens/arme/AddCombatEquipmentScreen';
 import CombatAssignmentScreen from '../screens/arme/CombatAssignmentScreen';
 import AdminPanelScreen from '../screens/admin/AdminPanelScreen';
 import UserManagementScreen from '../screens/admin/UserManagementScreen';
@@ -76,6 +77,7 @@ const AppNavigator: React.FC = () => {
             <Stack.Screen name="ManotDetails" component={ManotDetailsScreen} />
             <Stack.Screen name="AddMana" component={AddManaScreen} />
             <Stack.Screen name="CombatEquipmentList" component={CombatEquipmentListScreen} />
+            <Stack.Screen name="AddCombatEquipment" component={AddCombatEquipmentScreen} />
             <Stack.Screen name="CombatAssignment" component={CombatAssignmentScreen} />
 
             {/* Module Admin */}
