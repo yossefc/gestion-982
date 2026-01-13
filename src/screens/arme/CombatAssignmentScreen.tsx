@@ -33,7 +33,6 @@ interface EquipmentItem {
   name: string;
   category: string;
   quantity: number;
-  selected: boolean;
   serial?: string;
   needsSerial: boolean;
   subEquipments?: SubEquipment[];
@@ -55,91 +54,18 @@ const CombatAssignmentScreen: React.FC = () => {
   const [manot, setManot] = useState<Mana[]>([]);
   const [categories, setCategories] = useState<{name: string; color: string}[]>([]);
 
-  // ==========================================
-  // NOUVEAUX ÉTATS POUR FIX DU BUG MANA
-  // ==========================================
   // Mode de sélection: 'mana' ou 'manual'
   const [selectionMode, setSelectionMode] = useState<'mana' | 'manual'>('mana');
 
-  // ID de la מנה sélectionnée (stable, ne reset pas)
+  // ID de la מנה sélectionnée
   const [selectedManaId, setSelectedManaId] = useState<string>('');
 
-  // Items confirmés depuis la מנה (ne change que lors de confirmation)
-  const [manaItems, setManaItems] = useState<EquipmentItem[]>([]);
-
-  // Items ajoutés manuellement (indépendants de la מנה)
-  const [manualItems, setManualItems] = useState<EquipmentItem[]>([]);
+  // Items finaux (merge de mana + manual)
+  const [finalItems, setFinalItems] = useState<EquipmentItem[]>([]);
 
   // États pour signature
   const [showSignature, setShowSignature] = useState(false);
   const [scrollEnabled, setScrollEnabled] = useState(true);
-
-  // ANCIEN CODE HARDCODÉ - NE PLUS UTILISER
-  /*
-  const [equipment, setEquipment] = useState<EquipmentItem[]>([
-    // נשק ראשי
-    { id: 'w1', name: 'M16', category: 'נשק ראשי', quantity: 1, selected: false, needsSerial: true,
-      subEquipments: [
-        { id: 'w1s1', name: 'מחסנית', selected: false },
-        { id: 'w1s2', name: 'רצועה', selected: false },
-        { id: 'w1s3', name: 'כלי טעינה', selected: false },
-      ]
-    },
-    { id: 'w2', name: 'M203', category: 'נשק ראשי', quantity: 1, selected: false, needsSerial: true,
-      subEquipments: [
-        { id: 'w2s1', name: 'מחסנית', selected: false },
-        { id: 'w2s2', name: 'רצועה', selected: false },
-        { id: 'w2s3', name: 'כלי טעינה', selected: false },
-        { id: 'w2s4', name: 'קנה M203', selected: false },
-      ]
-    },
-    { id: 'w3', name: 'קלע', category: 'נשק ראשי', quantity: 1, selected: false, needsSerial: true },
-    { id: 'w4', name: 'נגב', category: 'נשק ראשי', quantity: 1, selected: false, needsSerial: true,
-      subEquipments: [
-        { id: 'w4s1', name: 'מחסנית', selected: false },
-        { id: 'w4s2', name: 'רצועה', selected: false },
-        { id: 'w4s3', name: 'חצובה', selected: false },
-      ]
-    },
-    { id: 'w5', name: 'מאג', category: 'נשק ראשי', quantity: 1, selected: false, needsSerial: true,
-      subEquipments: [
-        { id: 'w5s1', name: 'מחסנית', selected: false },
-        { id: 'w5s2', name: 'רצועה', selected: false },
-        { id: 'w5s3', name: 'חצובה', selected: false },
-      ]
-    },
-    { id: 'w6', name: 'נגמ"ש', category: 'נשק ראשי', quantity: 1, selected: false, needsSerial: true },
-
-    // אביזרי נשק
-    { id: 'a1', name: 'אופטיקה (טריג\'יקון)', category: 'אביזרי נשק', quantity: 1, selected: false, needsSerial: true },
-    { id: 'a2', name: 'אופטיקה (מאורס)', category: 'אביזרי נשק', quantity: 1, selected: false, needsSerial: true },
-    { id: 'a3', name: 'לייזר', category: 'אביזרי נשק', quantity: 1, selected: false, needsSerial: true },
-    { id: 'a4', name: 'פנס נשק', category: 'אביזרי נשק', quantity: 1, selected: false, needsSerial: true },
-    { id: 'a5', name: 'ידית אחיזה', category: 'אביזרי נשק', quantity: 1, selected: false, needsSerial: false },
-    { id: 'a6', name: 'רתע', category: 'אביזרי נשק', quantity: 1, selected: false, needsSerial: false },
-
-    // ציוד לוחם
-    { id: 'c1', name: 'אפוד טקטי', category: 'ציוד לוחם', quantity: 1, selected: false, needsSerial: false },
-    { id: 'c2', name: 'וסט קרמי', category: 'ציוד לוחם', quantity: 1, selected: false, needsSerial: true },
-    { id: 'c3', name: 'קסדה', category: 'ציוד לוחם', quantity: 1, selected: false, needsSerial: true },
-    { id: 'c4', name: 'מוביל מחסניות', category: 'ציוד לוחם', quantity: 1, selected: false, needsSerial: false },
-    { id: 'c5', name: 'פאוץ\' רימונים', category: 'ציוד לוחם', quantity: 1, selected: false, needsSerial: false },
-    { id: 'c6', name: 'תיק גב לחימה', category: 'ציוד לוחם', quantity: 1, selected: false, needsSerial: false },
-    { id: 'c7', name: 'חגורת לחימה', category: 'ציוד לוחם', quantity: 1, selected: false, needsSerial: false },
-
-    // אופטיקה ותצפית
-    { id: 'o1', name: 'משקפי לילה', category: 'אופטיקה ותצפית', quantity: 1, selected: false, needsSerial: true },
-    { id: 'o2', name: 'דרבן תצפית', category: 'אופטיקה ותצפית', quantity: 1, selected: false, needsSerial: true },
-    { id: 'o3', name: 'מצפן', category: 'אופטיקה ותצפית', quantity: 1, selected: false, needsSerial: true },
-
-    // קשר
-    { id: 'r1', name: 'מכשיר קשר', category: 'קשר', quantity: 1, selected: false, needsSerial: true },
-    { id: 'r2', name: 'אוזניות קשר', category: 'קשר', quantity: 1, selected: false, needsSerial: true },
-    { id: 'r3', name: 'סוללות קשר', category: 'קשר', quantity: 2, selected: false, needsSerial: false },
-  ]);
-
-  */
-  // FIN ANCIEN CODE HARDCODÉ
 
   useEffect(() => {
     loadSoldierData();
@@ -147,7 +73,6 @@ const CombatAssignmentScreen: React.FC = () => {
 
   const loadSoldierData = async () => {
     try {
-      // Charger toutes les données + ASSIGNMENT ACTUEL en parallèle depuis Firebase
       const [soldierData, combatEquipment, manotData, currentAssignment] = await Promise.all([
         soldierService.getById(soldierId),
         combatEquipmentService.getAll(),
@@ -157,9 +82,8 @@ const CombatAssignmentScreen: React.FC = () => {
 
       setSoldier(soldierData);
 
-      // Transformer les équipements Firebase en EquipmentItem pour l'UI
+      // Transformer les équipements Firebase en EquipmentItem
       const equipmentItems: EquipmentItem[] = combatEquipment.map((eq: CombatEquipment) => {
-        // Chercher si cet équipement est dans l'assignment actuel
         const currentItem = currentAssignment?.items?.find(
           item => item.equipmentId === eq.id
         );
@@ -169,12 +93,10 @@ const CombatAssignmentScreen: React.FC = () => {
           name: eq.name,
           category: eq.category,
           quantity: currentItem?.quantity || 1,
-          selected: !!currentItem, // Pré-cocher SEULEMENT si dans l'assignment
           serial: currentItem?.serial || undefined,
           needsSerial: eq.serial !== undefined || ['נשק', 'אופטיקה'].includes(eq.category),
           subEquipments: eq.hasSubEquipment && eq.subEquipments
             ? eq.subEquipments.map(sub => {
-                // Chercher si ce sous-équipement est dans l'assignment
                 const existingSub = currentItem?.subEquipments?.find(
                   s => s.name === sub.name
                 );
@@ -191,12 +113,28 @@ const CombatAssignmentScreen: React.FC = () => {
       setEquipment(equipmentItems);
       setManot(manotData);
 
-      // Afficher un message si des items existent déjà
+      // Si un assignment existe, pré-remplir finalItems
       if (currentAssignment?.items && currentAssignment.items.length > 0) {
-        console.log(`Found ${currentAssignment.items.length} items in current combat assignment for soldier ${soldierId}`);
+        const existingItems: EquipmentItem[] = currentAssignment.items.map(item => {
+          const eq = equipmentItems.find(e => e.id === item.equipmentId);
+          if (!eq) return null;
+
+          return {
+            ...eq,
+            quantity: item.quantity,
+            serial: item.serial,
+            subEquipments: eq.subEquipments?.map(sub => ({
+              ...sub,
+              selected: item.subEquipments?.some(s => s.name === sub.name) || false,
+            })),
+          };
+        }).filter(item => item !== null) as EquipmentItem[];
+
+        setFinalItems(existingItems);
+        console.log(`Loaded ${existingItems.length} items from existing assignment`);
       }
 
-      // Extraire les catégories uniques depuis les équipements
+      // Extraire les catégories
       const uniqueCategories = Array.from(
         new Set(combatEquipment.map((e: CombatEquipment) => e.category))
       );
@@ -206,11 +144,8 @@ const CombatAssignmentScreen: React.FC = () => {
         'אופטיקה': '#9b59b6',
         'ציוד מגן': '#27ae60',
         'ציוד נוסף': '#3498db',
-        'נשק ראשי': '#e74c3c',
-        'אביזרי נשק': '#e67e22',
+        'אביזרים': '#e67e22',
         'ציוד לוחם': '#27ae60',
-        'אופטיקה ותצפית': '#9b59b6',
-        'קשר': '#3498db',
       };
 
       const categoriesData = uniqueCategories.map(cat => ({
@@ -280,9 +215,6 @@ const CombatAssignmentScreen: React.FC = () => {
     setSignature(sig);
     setShowSignature(false);
     setScrollEnabled(true);
-
-    // Déclencher automatiquement la sauvegarde après capture de signature
-    // On passe la signature en paramètre car le state ne sera pas encore à jour
     await handleSaveAndSign(sig);
   };
 
@@ -291,120 +223,115 @@ const CombatAssignmentScreen: React.FC = () => {
     setSignature(null);
   };
 
-  // ==========================================
-  // NOUVELLES FONCTIONS - FIX BUG MANA
-  // ==========================================
-
-  // Sélectionner une מנה (ne fait que stocker l'ID, pas de reset)
+  // Sélectionner une מנה et ajouter ses items à finalItems
   const handleSelectMana = (manaId: string) => {
-    console.log('[MANA] Selected mana ID:', manaId);
-    setSelectedManaId(manaId); // État stable
-  };
+    const mana = manot.find(m => m.id === manaId);
+    if (!mana) return;
 
-  // Confirmer la מנה sélectionnée (transforme en items)
-  const confirmMana = () => {
-    const mana = manot.find(m => m.id === selectedManaId);
-    if (!mana) {
-      Alert.alert('שגיאה', 'אנא בחר מנה תחילה');
-      return;
-    }
+    console.log('[MANA] Selecting mana:', mana.name);
+    setSelectedManaId(manaId);
 
-    console.log('[MANA] Confirming mana:', mana.name);
-    console.log('[MANA] Equipment in mana:', mana.equipments);
-
-    // Convertir les équipements de la מנה en EquipmentItem[]
+    // Convertir les équipements de la מנה en EquipmentItem[] et les ajouter à finalItems
     const manaEquipmentItems: EquipmentItem[] = mana.equipments.map(manaEq => {
-      // Trouver l'équipement complet dans la liste equipment
       const fullEquipment = equipment.find(eq => eq.name === manaEq.equipmentName);
-
-      if (!fullEquipment) {
-        console.warn(`[MANA] Equipment not found: ${manaEq.equipmentName}`);
-        return null;
-      }
+      if (!fullEquipment) return null;
 
       return {
         ...fullEquipment,
         quantity: manaEq.quantity,
-        selected: true,
         subEquipments: fullEquipment.subEquipments?.map(sub => ({
           ...sub,
-          selected: true,
+          selected: true, // Sélectionner tous les sous-équipements par défaut
         })),
       };
     }).filter(item => item !== null) as EquipmentItem[];
 
-    console.log('[MANA] Items created from mana:', manaEquipmentItems.length);
-    setManaItems(manaEquipmentItems);
-    Alert.alert('הצלחה', `${mana.name} נבחרה - ${manaEquipmentItems.length} פריטים`);
-  };
+    // Merger avec finalItems existants
+    const mergedMap = new Map<string, EquipmentItem>();
 
-  // Ajouter un item manuel
-  const addManualItem = (itemId: string, quantity: number = 1) => {
-    const item = equipment.find(eq => eq.id === itemId);
-    if (!item) return;
-
-    console.log('[MANUAL] Adding item:', item.name, 'quantity:', quantity);
-
-    // Vérifier si déjà dans manualItems
-    const existingIndex = manualItems.findIndex(mi => mi.id === itemId);
-
-    if (existingIndex >= 0) {
-      // Mettre à jour la quantité
-      const updated = [...manualItems];
-      updated[existingIndex] = { ...updated[existingIndex], quantity };
-      setManualItems(updated);
-    } else {
-      // Ajouter nouveau
-      setManualItems(prev => [...prev, { ...item, selected: true, quantity }]);
-    }
-  };
-
-  // Supprimer un item manuel
-  const removeManualItem = (itemId: string) => {
-    console.log('[MANUAL] Removing item:', itemId);
-    setManualItems(prev => prev.filter(item => item.id !== itemId));
-  };
-
-  // Calculer la liste finale (merge mana + manual)
-  const getFinalEquipmentList = (): EquipmentItem[] => {
-    const finalMap = new Map<string, EquipmentItem>();
-
-    // 1. Ajouter les items de la מנה
-    manaItems.forEach(item => {
-      finalMap.set(item.id, { ...item });
+    // Ajouter les items existants
+    finalItems.forEach(item => {
+      mergedMap.set(item.id, { ...item });
     });
 
-    // 2. Ajouter/merger les items manuels
-    manualItems.forEach(item => {
-      if (finalMap.has(item.id)) {
-        // Item existe déjà (depuis מנה), additionner les quantités
-        const existing = finalMap.get(item.id)!;
-        finalMap.set(item.id, {
+    // Ajouter/merger les items de la מנה
+    manaEquipmentItems.forEach(item => {
+      if (mergedMap.has(item.id)) {
+        const existing = mergedMap.get(item.id)!;
+        mergedMap.set(item.id, {
           ...existing,
           quantity: existing.quantity + item.quantity,
         });
       } else {
-        // Nouvel item
-        finalMap.set(item.id, { ...item });
+        mergedMap.set(item.id, { ...item });
       }
     });
 
-    const finalList = Array.from(finalMap.values());
-    console.log('[FINAL] Final equipment list:', finalList.length, 'items');
-    return finalList;
+    const newFinalItems = Array.from(mergedMap.values());
+    setFinalItems(newFinalItems);
+
+    Alert.alert('הצלחה', `${mana.name} נוספה - סה"כ ${newFinalItems.length} פריטים`);
   };
 
-  // Passer à la signature (simplifié - pas de confirmation intermédiaire)
-  const proceedToSignature = () => {
-    const finalItems = getFinalEquipmentList();
+  // Ajouter un item manuel à finalItems
+  const addItemToFinalList = (itemId: string) => {
+    const item = equipment.find(eq => eq.id === itemId);
+    if (!item) return;
 
-    if (finalItems.length === 0) {
-      Alert.alert('שגיאה', 'אנא בחר לפחות פריט אחד (מנה או ציוד ידני)');
+    const existing = finalItems.find(fi => fi.id === itemId);
+
+    if (existing) {
+      // Augmenter la quantité
+      updateFinalItemQuantity(itemId, existing.quantity + 1);
+    } else {
+      // Ajouter nouveau
+      setFinalItems(prev => [...prev, { ...item, quantity: 1 }]);
+    }
+  };
+
+  // Retirer un item de finalItems
+  const removeItemFromFinalList = (itemId: string) => {
+    setFinalItems(prev => prev.filter(item => item.id !== itemId));
+  };
+
+  // Mettre à jour la quantité d'un item dans finalItems
+  const updateFinalItemQuantity = (itemId: string, quantity: number) => {
+    if (quantity <= 0) {
+      removeItemFromFinalList(itemId);
       return;
     }
 
-    console.log('[SIGNATURE] Proceeding with', finalItems.length, 'items');
-    setShowSignature(true);
+    setFinalItems(prev =>
+      prev.map(item =>
+        item.id === itemId ? { ...item, quantity } : item
+      )
+    );
+  };
+
+  // Mettre à jour le serial d'un item dans finalItems
+  const updateFinalItemSerial = (itemId: string, serial: string) => {
+    setFinalItems(prev =>
+      prev.map(item =>
+        item.id === itemId ? { ...item, serial } : item
+      )
+    );
+  };
+
+  // Toggle sous-équipement dans finalItems
+  const toggleFinalItemSubEquipment = (itemId: string, subId: string) => {
+    setFinalItems(prev =>
+      prev.map(item => {
+        if (item.id === itemId && item.subEquipments) {
+          return {
+            ...item,
+            subEquipments: item.subEquipments.map(sub =>
+              sub.id === subId ? { ...sub, selected: !sub.selected } : sub
+            ),
+          };
+        }
+        return item;
+      })
+    );
   };
 
   const toggleCategory = (categoryName: string) => {
@@ -419,56 +346,31 @@ const CombatAssignmentScreen: React.FC = () => {
     });
   };
 
-  const toggleEquipment = (id: string) => {
-    setEquipment(prev =>
-      prev.map(item =>
-        item.id === id ? { ...item, selected: !item.selected } : item
-      )
-    );
+  const proceedToSignature = () => {
+    if (finalItems.length === 0) {
+      Alert.alert('שגיאה', 'אנא בחר לפחות פריט אחד');
+      return;
+    }
+
+    // Validation: Vérifier que tous les items qui needsSerial ont un serial
+    const missingSerials = finalItems.filter(item => item.needsSerial && !item.serial);
+    if (missingSerials.length > 0) {
+      Alert.alert(
+        'שגיאה',
+        `יש להזין מסטב עבור: ${missingSerials.map(i => i.name).join(', ')}`,
+        [{ text: 'אישור' }]
+      );
+      return;
+    }
+
+    console.log('[SIGNATURE] Proceeding with', finalItems.length, 'items');
+    setShowSignature(true);
   };
 
-  const updateQuantity = (id: string, delta: number) => {
-    setEquipment(prev =>
-      prev.map(item => {
-        if (item.id === id) {
-          const newQuantity = Math.max(0, item.quantity + delta);
-          return { ...item, quantity: newQuantity };
-        }
-        return item;
-      })
-    );
-  };
-
-  const updateSerial = (id: string, serial: string) => {
-    setEquipment(prev =>
-      prev.map(item =>
-        item.id === id ? { ...item, serial } : item
-      )
-    );
-  };
-
-  const toggleSubEquipment = (equipmentId: string, subId: string) => {
-    setEquipment(prev =>
-      prev.map(item => {
-        if (item.id === equipmentId && item.subEquipments) {
-          return {
-            ...item,
-            subEquipments: item.subEquipments.map(sub =>
-              sub.id === subId ? { ...sub, selected: !sub.selected } : sub
-            ),
-          };
-        }
-        return item;
-      })
-    );
-  };
-
-  // Générer et uploader le PDF de signature
   const generateAndUploadPdf = async (assignmentId: string, assignmentData: any) => {
     try {
       console.log('Generating PDF for assignment:', assignmentId);
 
-      // 1. Générer le PDF
       const pdfBytes = await generateAssignmentPDF({
         ...assignmentData,
         id: assignmentId,
@@ -477,17 +379,14 @@ const CombatAssignmentScreen: React.FC = () => {
 
       console.log('PDF generated successfully, size:', pdfBytes.length, 'bytes');
 
-      // 2. Upload vers Storage avec chemin structuré
-      // Chemin: pdf/{type}/signature/{soldierId}.pdf
       const url = await pdfStorageService.uploadPdf(
         pdfBytes,
         assignmentData.soldierId,
         assignmentData.type,
-        'issue' // Action pour signature
+        'issue'
       );
       console.log('PDF uploaded to:', url);
 
-      // 3. Mettre à jour l'assignment avec le pdfUrl
       await assignmentService.update(assignmentId, { pdfUrl: url });
 
       return url;
@@ -498,7 +397,6 @@ const CombatAssignmentScreen: React.FC = () => {
     }
   };
 
-  // Partager le PDF sur WhatsApp
   const handleShareWhatsApp = async (pdfUrl: string) => {
     try {
       if (!soldier?.phone) {
@@ -515,7 +413,6 @@ const CombatAssignmentScreen: React.FC = () => {
   };
 
   const handleSaveAndSign = async (signatureData?: string) => {
-    // Utiliser le paramètre fourni ou le state signature
     const sig = signatureData || signature;
 
     if (!sig) {
@@ -523,17 +420,10 @@ const CombatAssignmentScreen: React.FC = () => {
       return;
     }
 
-    // Utiliser la liste finale (merge mana + manual)
-    const finalItems = getFinalEquipmentList();
-    console.log('[SAVE] Final items to save:', finalItems.length);
-
     if (finalItems.length === 0) {
       Alert.alert('שגיאה', 'אנא בחר לפחות פריט אחד');
       return;
     }
-
-    // Note: Validation des serials sera faite dans l'UI de sélection manuelle
-    // Pour simplifier, on retire cette validation ici
 
     setSaving(true);
     try {
@@ -544,12 +434,10 @@ const CombatAssignmentScreen: React.FC = () => {
           quantity: item.quantity,
         };
 
-        // Ajouter serial uniquement s'il existe
         if (item.serial) {
           itemData.serial = item.serial;
         }
 
-        // Ajouter subEquipments uniquement s'il y en a
         const selectedSubEquipments = item.subEquipments?.filter(sub => sub.selected);
         if (selectedSubEquipments && selectedSubEquipments.length > 0) {
           itemData.subEquipments = selectedSubEquipments.map(sub => ({ name: sub.name }));
@@ -565,12 +453,11 @@ const CombatAssignmentScreen: React.FC = () => {
         type: 'combat',
         action: 'issue',
         items: assignmentItems,
-        signature: sig, // Utiliser sig au lieu de signature
+        signature: sig,
         status: 'נופק לחייל',
         assignedBy: user?.id || '',
       };
 
-      // Ajouter les champs optionnels seulement s'ils existent
       if (soldier.phone) assignmentData.soldierPhone = soldier.phone;
       if (soldier.company) assignmentData.soldierCompany = soldier.company;
       if (user?.name) assignmentData.assignedByName = user.name;
@@ -579,10 +466,8 @@ const CombatAssignmentScreen: React.FC = () => {
       const assignmentId = await assignmentService.create(assignmentData);
       console.log('Combat assignment created/updated:', assignmentId);
 
-      // Générer et uploader le PDF
       const pdfUrl = await generateAndUploadPdf(assignmentId, assignmentData);
 
-      // Afficher succès avec option WhatsApp
       if (pdfUrl) {
         Alert.alert(
           'הצלחה',
@@ -611,7 +496,6 @@ const CombatAssignmentScreen: React.FC = () => {
           ]
         );
       } else {
-        // Si le PDF a échoué, naviguer quand même
         (navigation as any).reset({
           index: 0,
           routes: [{ name: 'Home' }],
@@ -654,9 +538,6 @@ const CombatAssignmentScreen: React.FC = () => {
     );
   }
 
-  // ====================
-  // VUE: Écran de signature simple
-  // ====================
   if (showSignature) {
     return (
       <View style={styles.container}>
@@ -705,12 +586,8 @@ const CombatAssignmentScreen: React.FC = () => {
     );
   }
 
-  // ====================
-  // VUE: Écran principal
-  // ====================
   return (
     <View style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
@@ -731,7 +608,7 @@ const CombatAssignmentScreen: React.FC = () => {
         contentContainerStyle={styles.scrollContent}
         scrollEnabled={scrollEnabled}
       >
-        {/* 1. פרטי החייל */}
+        {/* פרטי החייל */}
         <View style={styles.soldierCard}>
           <Text style={styles.soldierName}>{soldier.name}</Text>
           <Text style={styles.soldierMeta}>
@@ -739,7 +616,7 @@ const CombatAssignmentScreen: React.FC = () => {
           </Text>
         </View>
 
-        {/* 2. סֶלֶקְטוֹר קטגוריה - בחר מנה או ציוד ידני */}
+        {/* סלקטור - בחר מנה או ציוד ידני */}
         <View style={styles.categorySelector}>
           <TouchableOpacity
             style={[
@@ -772,56 +649,26 @@ const CombatAssignmentScreen: React.FC = () => {
           </TouchableOpacity>
         </View>
 
-        {/* 3. MODE MANA - Sélection et preview de מנה */}
+        {/* MODE MANA */}
         {selectionMode === 'mana' && (
           <View style={styles.manaSection}>
             <Text style={styles.sectionTitle}>בחירת מנה</Text>
-
-            {/* Dropdown/Picker de מנה */}
             <View style={styles.manaPickerContainer}>
-              <Text style={styles.inputLabel}>בחר מנה:</Text>
               {manot.map(mana => (
                 <TouchableOpacity
                   key={mana.id}
-                  style={[
-                    styles.manaOption,
-                    selectedManaId === mana.id && styles.manaOptionSelected
-                  ]}
+                  style={styles.manaOption}
                   onPress={() => handleSelectMana(mana.id)}
                 >
-                  <View style={styles.radioButton}>
-                    {selectedManaId === mana.id && <View style={styles.radioButtonInner} />}
-                  </View>
                   <Text style={styles.manaOptionText}>{mana.name}</Text>
+                  <Text style={styles.manaAddIcon}>+</Text>
                 </TouchableOpacity>
               ))}
             </View>
-
-            {/* Preview de la מנה sélectionnée */}
-            {selectedManaId && (() => {
-              const mana = manot.find(m => m.id === selectedManaId);
-              return mana ? (
-                <View style={styles.manaPreview}>
-                  <Text style={styles.previewTitle}>📋 תצוגה מקדימה - {mana.name}</Text>
-                  {mana.equipments.map((eq, idx) => (
-                    <View key={idx} style={styles.previewItem}>
-                      <Text style={styles.previewItemQuantity}>×{eq.quantity}</Text>
-                      <Text style={styles.previewItemName}>• {eq.equipmentName}</Text>
-                    </View>
-                  ))}
-                  <TouchableOpacity
-                    style={styles.confirmManaButton}
-                    onPress={confirmMana}
-                  >
-                    <Text style={styles.confirmManaButtonText}>✓ אשר מנה זו</Text>
-                  </TouchableOpacity>
-                </View>
-              ) : null;
-            })()}
           </View>
         )}
 
-        {/* 4. MODE MANUAL - Sélection manuelle d'équipement */}
+        {/* MODE MANUAL */}
         {selectionMode === 'manual' && (
           <View style={styles.manualSection}>
             <Text style={styles.sectionTitle}>בחירת ציוד ידני</Text>
@@ -843,55 +690,21 @@ const CombatAssignmentScreen: React.FC = () => {
                   {!isCollapsed && (
                     <View style={styles.categoryContent}>
                       {categoryEquipment.map(item => {
-                        const isInManualList = manualItems.some(mi => mi.id === item.id);
-                        const manualItem = manualItems.find(mi => mi.id === item.id);
+                        const isInFinalList = finalItems.some(fi => fi.id === item.id);
 
                         return (
                           <View key={item.id} style={styles.manualEquipmentItem}>
-                            <View style={styles.equipmentRow}>
-                              <Text style={styles.equipmentName}>{item.name}</Text>
-
-                              {!isInManualList ? (
-                                <TouchableOpacity
-                                  style={styles.addManualButton}
-                                  onPress={() => addManualItem(item.id, 1)}
-                                >
-                                  <Text style={styles.addManualButtonText}>+ הוסף</Text>
-                                </TouchableOpacity>
-                              ) : (
-                                <View style={styles.manualItemControls}>
-                                  <TouchableOpacity
-                                    style={styles.removeManualButton}
-                                    onPress={() => removeManualItem(item.id)}
-                                  >
-                                    <Text style={styles.removeManualButtonText}>🗑</Text>
-                                  </TouchableOpacity>
-
-                                  <View style={styles.quantityControls}>
-                                    <TouchableOpacity
-                                      style={styles.quantityButton}
-                                      onPress={() => addManualItem(item.id, (manualItem?.quantity || 1) + 1)}
-                                    >
-                                      <Text style={styles.quantityButtonText}>+</Text>
-                                    </TouchableOpacity>
-                                    <Text style={styles.quantityText}>{manualItem?.quantity || 1}</Text>
-                                    <TouchableOpacity
-                                      style={styles.quantityButton}
-                                      onPress={() => {
-                                        const newQty = (manualItem?.quantity || 1) - 1;
-                                        if (newQty > 0) {
-                                          addManualItem(item.id, newQty);
-                                        } else {
-                                          removeManualItem(item.id);
-                                        }
-                                      }}
-                                    >
-                                      <Text style={styles.quantityButtonText}>-</Text>
-                                    </TouchableOpacity>
-                                  </View>
-                                </View>
-                              )}
-                            </View>
+                            <Text style={styles.equipmentName}>{item.name}</Text>
+                            {!isInFinalList ? (
+                              <TouchableOpacity
+                                style={styles.addManualButton}
+                                onPress={() => addItemToFinalList(item.id)}
+                              >
+                                <Text style={styles.addManualButtonText}>+ הוסף</Text>
+                              </TouchableOpacity>
+                            ) : (
+                              <Text style={styles.alreadyAddedText}>✓ נוסף</Text>
+                            )}
                           </View>
                         );
                       })}
@@ -903,36 +716,100 @@ const CombatAssignmentScreen: React.FC = () => {
           </View>
         )}
 
-        {/* 5. LISTE FINALE - Merge מנה + manuel */}
-        {(() => {
-          const finalList = getFinalEquipmentList();
-          if (finalList.length === 0) return null;
+        {/* ÉDITION FINALE - Liste de tous les items avec serial, quantité, etc. */}
+        {finalItems.length > 0 && (
+          <View style={styles.finalEditSection}>
+            <Text style={styles.finalEditTitle}>
+              ✏️ עריכת ציוד להחתמה ({finalItems.length} פריטים)
+            </Text>
+            <Text style={styles.finalEditSubtitle}>
+              ניתן לערוך כמות, מסטב, ורכיבים נוספים
+            </Text>
 
-          return (
-            <View style={styles.finalListSection}>
-              <Text style={styles.finalListTitle}>
-                ✅ ציוד סופי להחתמה ({finalList.length} פריטים)
-              </Text>
-              {finalList.map(item => (
-                <View key={item.id} style={styles.finalListItem}>
-                  <Text style={styles.finalListItemQuantity}>×{item.quantity}</Text>
-                  <Text style={styles.finalListItemName}>{item.name}</Text>
+            {finalItems.map(item => (
+              <View key={item.id} style={styles.finalEditItem}>
+                {/* Header: Nom + Supprimer */}
+                <View style={styles.finalEditItemHeader}>
+                  <TouchableOpacity
+                    style={styles.removeItemButton}
+                    onPress={() => removeItemFromFinalList(item.id)}
+                  >
+                    <Text style={styles.removeItemButtonText}>🗑</Text>
+                  </TouchableOpacity>
+                  <Text style={styles.finalEditItemName}>{item.name}</Text>
                 </View>
-              ))}
-            </View>
-          );
-        })()}
 
-        {/* 6. כפתור חתימה */}
+                {/* Quantité */}
+                <View style={styles.finalEditRow}>
+                  <View style={styles.quantityControls}>
+                    <TouchableOpacity
+                      style={styles.quantityButton}
+                      onPress={() => updateFinalItemQuantity(item.id, item.quantity - 1)}
+                    >
+                      <Text style={styles.quantityButtonText}>-</Text>
+                    </TouchableOpacity>
+                    <Text style={styles.quantityText}>{item.quantity}</Text>
+                    <TouchableOpacity
+                      style={styles.quantityButton}
+                      onPress={() => updateFinalItemQuantity(item.id, item.quantity + 1)}
+                    >
+                      <Text style={styles.quantityButtonText}>+</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <Text style={styles.finalEditLabel}>:כמות</Text>
+                </View>
+
+                {/* Serial (si nécessaire) */}
+                {item.needsSerial && (
+                  <View style={styles.finalEditRow}>
+                    <TextInput
+                      style={styles.serialInput}
+                      value={item.serial || ''}
+                      onChangeText={(text) => updateFinalItemSerial(item.id, text)}
+                      placeholder="הזן מסטב..."
+                      placeholderTextColor={Colors.text.light}
+                    />
+                    <Text style={[styles.finalEditLabel, styles.requiredLabel]}>:מסטב *</Text>
+                  </View>
+                )}
+
+                {/* Sous-équipements */}
+                {item.subEquipments && item.subEquipments.length > 0 && (
+                  <View style={styles.subEquipmentContainer}>
+                    <Text style={styles.subEquipmentTitle}>רכיבים נוספים:</Text>
+                    {item.subEquipments.map(sub => (
+                      <TouchableOpacity
+                        key={sub.id}
+                        style={styles.subEquipmentRow}
+                        onPress={() => toggleFinalItemSubEquipment(item.id, sub.id)}
+                      >
+                        <View style={styles.subCheckbox}>
+                          {sub.selected && <Text style={styles.subCheckmark}>✓</Text>}
+                        </View>
+                        <Text style={styles.subEquipmentName}>{sub.name}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
+            ))}
+          </View>
+        )}
+
+        {/* כפתור חתימה */}
         <View style={styles.actionButtons}>
           <TouchableOpacity
-            style={[styles.signatureButton, saving && styles.buttonDisabled]}
+            style={[styles.signatureButton, (saving || finalItems.length === 0) && styles.buttonDisabled]}
             onPress={proceedToSignature}
-            disabled={saving || getFinalEquipmentList().length === 0}
+            disabled={saving || finalItems.length === 0}
           >
-            <Text style={styles.signatureButtonText}>
-              ✍️ חתימה ({getFinalEquipmentList().length} פריטים)
-            </Text>
+            {saving ? (
+              <ActivityIndicator color="#FFF" />
+            ) : (
+              <Text style={styles.signatureButtonText}>
+                ✍️ חתימה ({finalItems.length} פריטים)
+              </Text>
+            )}
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -1013,24 +890,6 @@ const styles = StyleSheet.create({
     borderColor: Colors.border.light,
     ...Shadows.small,
   },
-  soldierRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border.light,
-  },
-  soldierLabel: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: Colors.text.secondary,
-  },
-  soldierValue: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: Colors.text.primary,
-  },
   soldierName: {
     fontSize: 18,
     fontWeight: 'bold',
@@ -1042,39 +901,75 @@ const styles = StyleSheet.create({
     color: Colors.text.secondary,
     textAlign: 'right',
   },
-  inputLabel: {
-    fontSize: 15,
+  categorySelector: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 20,
+    backgroundColor: Colors.background.card,
+    borderRadius: 12,
+    padding: 4,
+    ...Shadows.small,
+  },
+  categorySelectorButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+  },
+  categorySelectorButtonActive: {
+    backgroundColor: Colors.modules.arme,
+    ...Shadows.small,
+  },
+  categorySelectorText: {
+    fontSize: 16,
     fontWeight: '600',
     color: Colors.text.secondary,
-    marginBottom: 8,
-    textAlign: 'right',
+  },
+  categorySelectorTextActive: {
+    color: Colors.text.white,
+    fontWeight: 'bold',
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     color: Colors.text.primary,
     marginBottom: 15,
-    marginTop: 10,
     textAlign: 'right',
   },
-  manaScroll: {
+  manaSection: {
     marginBottom: 20,
   },
-  manaContainer: {
+  manaPickerContainer: {
     gap: 10,
-    paddingVertical: 5,
   },
-  manaChip: {
-    backgroundColor: Colors.modules.arme,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
+  manaOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: Colors.background.card,
+    borderRadius: 10,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: Colors.border.light,
     ...Shadows.small,
   },
-  manaChipText: {
-    fontSize: 14,
+  manaOptionText: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.text.primary,
+    textAlign: 'right',
+  },
+  manaAddIcon: {
+    fontSize: 24,
     fontWeight: 'bold',
-    color: Colors.text.white,
+    color: Colors.status.success,
+    marginLeft: 10,
+  },
+  manualSection: {
+    marginBottom: 20,
   },
   categorySection: {
     marginBottom: 15,
@@ -1107,47 +1002,114 @@ const styles = StyleSheet.create({
     marginTop: 10,
     gap: 8,
   },
-  equipmentItem: {
+  manualEquipmentItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     backgroundColor: Colors.background.card,
     borderRadius: 10,
-    padding: 12,
+    padding: 14,
     borderWidth: 1,
     borderColor: Colors.border.light,
     ...Shadows.small,
-  },
-  equipmentRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  checkbox: {
-    width: 28,
-    height: 28,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: Colors.border.dark,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 12,
-  },
-  checkmark: {
-    fontSize: 18,
-    color: Colors.status.success,
-    fontWeight: 'bold',
-  },
-  equipmentMain: {
-    flex: 1,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  equipmentInfo: {
-    flex: 1,
-    alignItems: 'flex-end',
   },
   equipmentName: {
     fontSize: 16,
     fontWeight: '600',
     color: Colors.text.primary,
+    flex: 1,
+    textAlign: 'right',
+  },
+  addManualButton: {
+    backgroundColor: Colors.status.success,
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    minWidth: 80,
+    alignItems: 'center',
+  },
+  addManualButtonText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: Colors.text.white,
+  },
+  alreadyAddedText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: Colors.status.success,
+  },
+  finalEditSection: {
+    backgroundColor: '#f0f8ff',
+    borderRadius: 12,
+    padding: 16,
+    marginVertical: 20,
+    borderWidth: 2,
+    borderColor: Colors.modules.arme,
+    ...Shadows.medium,
+  },
+  finalEditTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: Colors.text.primary,
+    marginBottom: 4,
+    textAlign: 'right',
+  },
+  finalEditSubtitle: {
+    fontSize: 14,
+    color: Colors.text.secondary,
+    marginBottom: 16,
+    textAlign: 'right',
+  },
+  finalEditItem: {
+    backgroundColor: Colors.background.card,
+    borderRadius: 10,
+    padding: 14,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: Colors.border.light,
+    ...Shadows.small,
+  },
+  finalEditItemHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border.light,
+  },
+  finalEditItemName: {
+    flex: 1,
+    fontSize: 17,
+    fontWeight: 'bold',
+    color: Colors.text.primary,
+    textAlign: 'right',
+  },
+  removeItemButton: {
+    backgroundColor: Colors.status.danger,
+    borderRadius: 6,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    marginLeft: 10,
+  },
+  removeItemButtonText: {
+    fontSize: 16,
+    color: Colors.text.white,
+  },
+  finalEditRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  finalEditLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: Colors.text.secondary,
+    marginLeft: 10,
+  },
+  requiredLabel: {
+    color: Colors.status.danger,
   },
   quantityControls: {
     flexDirection: 'row',
@@ -1155,8 +1117,8 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   quantityButton: {
-    width: 32,
-    height: 32,
+    width: 36,
+    height: 36,
     borderRadius: 8,
     backgroundColor: Colors.modules.arme,
     justifyContent: 'center',
@@ -1175,19 +1137,18 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   serialInput: {
+    flex: 1,
     borderWidth: 1,
     borderColor: Colors.border.medium,
     borderRadius: 8,
-    padding: 8,
-    fontSize: 14,
+    padding: 10,
+    fontSize: 15,
     color: Colors.text.primary,
     backgroundColor: Colors.background.secondary,
-    minWidth: 100,
-    marginRight: 10,
+    textAlign: 'right',
   },
   subEquipmentContainer: {
-    marginTop: 12,
-    marginRight: 40,
+    marginTop: 10,
     backgroundColor: Colors.background.secondary,
     borderRadius: 8,
     padding: 10,
@@ -1224,49 +1185,25 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.text.primary,
   },
-  signatureContainer: {
-    height: 300,
-    width: '100%',
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    overflow: 'hidden',
-    borderWidth: 2,
-    borderColor: Colors.military.navyBlue,
-    marginBottom: 15,
-    ...Shadows.medium,
-  },
-  clearSignatureButton: {
-    backgroundColor: Colors.background.card,
-    borderRadius: 10,
-    padding: 12,
-    alignItems: 'center',
-    marginBottom: 15,
-    borderWidth: 2,
-    borderColor: Colors.status.danger,
-  },
-  clearSignatureText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: Colors.status.danger,
-  },
   actionButtons: {
     gap: 12,
     marginBottom: 30,
   },
-  saveButton: {
-    backgroundColor: Colors.status.success,
+  signatureButton: {
+    backgroundColor: Colors.military.navyBlue,
     borderRadius: 12,
     padding: 18,
     alignItems: 'center',
     ...Shadows.medium,
   },
-  saveButtonDisabled: {
-    opacity: 0.5,
-  },
-  saveButtonText: {
+  signatureButtonText: {
     fontSize: 18,
     fontWeight: 'bold',
     color: Colors.text.white,
+  },
+  buttonDisabled: {
+    opacity: 0.5,
+    backgroundColor: Colors.background.secondary,
   },
   cancelButton: {
     backgroundColor: Colors.background.card,
@@ -1281,201 +1218,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: Colors.status.danger,
   },
-
-  // ==================
-  // Styles: Modal de preview de מנה
-  // ==================
-  modalOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 1000,
-  },
-  modalContent: {
-    backgroundColor: Colors.background.card,
-    borderRadius: 16,
-    width: '90%',
-    maxHeight: '80%',
-    ...Shadows.large,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border.light,
-  },
-  modalTitle: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: Colors.text.primary,
-  },
-  modalCloseButton: {
-    padding: 8,
-  },
-  modalCloseText: {
-    fontSize: 24,
-    color: Colors.text.secondary,
-  },
-  modalBody: {
-    padding: 20,
-    maxHeight: 400,
-  },
-  modalSubtitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: Colors.text.secondary,
-    marginBottom: 15,
-    textAlign: 'right',
-  },
-  manaEquipmentItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    backgroundColor: Colors.background.secondary,
-    borderRadius: 8,
-    marginBottom: 8,
-  },
-  manaEquipmentName: {
-    fontSize: 15,
-    color: Colors.text.primary,
-    flex: 1,
-    textAlign: 'right',
-  },
-  manaEquipmentQuantity: {
-    fontSize: 15,
-    fontWeight: 'bold',
-    color: Colors.modules.arme,
-    marginLeft: 10,
-  },
-  modalFooter: {
-    padding: 20,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border.light,
-    gap: 10,
-  },
-  applyManaButton: {
-    backgroundColor: Colors.status.success,
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-    ...Shadows.small,
-  },
-  applyManaButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: Colors.text.white,
-  },
-  cancelManaButton: {
-    backgroundColor: Colors.background.secondary,
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-  },
-  cancelManaButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: Colors.text.primary,
-  },
-
-  // ==================
-  // Styles: Écran de confirmation
-  // ==================
-  summaryCard: {
-    backgroundColor: '#e8f4fd',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: '#b3d9f2',
-  },
-  summaryTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: Colors.text.primary,
-    marginBottom: 8,
-    textAlign: 'right',
-  },
-  summaryText: {
-    fontSize: 14,
-    color: Colors.text.secondary,
-    textAlign: 'right',
-  },
-  confirmationItem: {
-    backgroundColor: Colors.background.card,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: Colors.border.light,
-    ...Shadows.small,
-  },
-  confirmationItemHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  confirmationItemName: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: Colors.text.primary,
-    flex: 1,
-    textAlign: 'right',
-  },
-  confirmationItemQuantity: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: Colors.modules.arme,
-    marginLeft: 10,
-  },
-  confirmationItemSerial: {
-    fontSize: 13,
-    color: Colors.text.secondary,
-    marginTop: 4,
-    textAlign: 'right',
-  },
-  subEquipmentsContainer: {
-    marginTop: 8,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border.light,
-  },
-  subEquipmentText: {
-    fontSize: 13,
-    color: Colors.text.secondary,
-    marginBottom: 4,
-    textAlign: 'right',
-  },
-  confirmationButtons: {
-    gap: 12,
-    marginTop: 20,
-    marginBottom: 30,
-  },
-  confirmButton: {
-    backgroundColor: Colors.status.success,
-    borderRadius: 12,
-    padding: 18,
-    alignItems: 'center',
-    ...Shadows.medium,
-  },
-  confirmButtonText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: Colors.text.white,
-  },
-
-  // ==================
-  // Styles: Écran de signature fullscreen
-  // ==================
   signatureFullScreen: {
     flex: 1,
     padding: 20,
@@ -1514,247 +1256,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     color: Colors.text.white,
-  },
-
-  // ==================
-  // Styles: Nouvelle UI simplifiée (single-page)
-  // ==================
-  categorySelector: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 20,
-    backgroundColor: Colors.background.card,
-    borderRadius: 12,
-    padding: 4,
-    ...Shadows.small,
-  },
-  categorySelectorButton: {
-    flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 10,
-    alignItems: 'center',
-    backgroundColor: 'transparent',
-  },
-  categorySelectorButtonActive: {
-    backgroundColor: Colors.modules.arme,
-    ...Shadows.small,
-  },
-  categorySelectorText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: Colors.text.secondary,
-  },
-  categorySelectorTextActive: {
-    color: Colors.text.white,
-    fontWeight: 'bold',
-  },
-
-  // Mana selection mode
-  manaSection: {
-    marginBottom: 20,
-  },
-  manaPickerContainer: {
-    gap: 10,
-  },
-  manaOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.background.card,
-    borderRadius: 10,
-    padding: 14,
-    borderWidth: 2,
-    borderColor: Colors.border.light,
-    ...Shadows.small,
-  },
-  manaOptionSelected: {
-    borderColor: Colors.modules.arme,
-    backgroundColor: '#e8f4fd',
-  },
-  radioButton: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: Colors.border.dark,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 12,
-  },
-  radioButtonInner: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: Colors.modules.arme,
-  },
-  manaOptionText: {
-    flex: 1,
-    fontSize: 16,
-    fontWeight: '600',
-    color: Colors.text.primary,
-    textAlign: 'right',
-  },
-
-  // Mana preview
-  manaPreview: {
-    marginTop: 15,
-    backgroundColor: Colors.background.secondary,
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: Colors.border.light,
-  },
-  previewTitle: {
-    fontSize: 17,
-    fontWeight: 'bold',
-    color: Colors.text.primary,
-    marginBottom: 12,
-    textAlign: 'right',
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border.light,
-    paddingBottom: 8,
-  },
-  previewItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 6,
-    paddingHorizontal: 8,
-  },
-  previewItemQuantity: {
-    fontSize: 15,
-    fontWeight: 'bold',
-    color: Colors.modules.arme,
-    marginRight: 8,
-    minWidth: 35,
-    textAlign: 'center',
-  },
-  previewItemName: {
-    flex: 1,
-    fontSize: 15,
-    color: Colors.text.primary,
-    textAlign: 'right',
-  },
-  confirmManaButton: {
-    backgroundColor: Colors.status.success,
-    borderRadius: 10,
-    padding: 14,
-    alignItems: 'center',
-    marginTop: 12,
-    ...Shadows.small,
-  },
-  confirmManaButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: Colors.text.white,
-  },
-
-  // Manual selection mode
-  manualSection: {
-    marginBottom: 20,
-  },
-  manualEquipmentItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: Colors.background.card,
-    borderRadius: 10,
-    padding: 14,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: Colors.border.light,
-    ...Shadows.small,
-  },
-  manualItemControls: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  addManualButton: {
-    backgroundColor: Colors.status.success,
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    minWidth: 80,
-    alignItems: 'center',
-  },
-  addManualButtonText: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: Colors.text.white,
-  },
-  removeManualButton: {
-    backgroundColor: Colors.status.danger,
-    borderRadius: 8,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-  },
-  removeManualButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: Colors.text.white,
-  },
-
-  // Final equipment list
-  finalListSection: {
-    backgroundColor: '#d4edda',
-    borderRadius: 12,
-    padding: 16,
-    marginVertical: 20,
-    borderWidth: 2,
-    borderColor: Colors.status.success,
-    ...Shadows.small,
-  },
-  finalListTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: Colors.text.primary,
-    marginBottom: 12,
-    textAlign: 'right',
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border.medium,
-    paddingBottom: 8,
-  },
-  finalListItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 6,
-    paddingHorizontal: 8,
-    backgroundColor: 'rgba(255,255,255,0.5)',
-    borderRadius: 6,
-    marginBottom: 6,
-  },
-  finalListItemQuantity: {
-    fontSize: 15,
-    fontWeight: 'bold',
-    color: Colors.modules.arme,
-    marginRight: 8,
-    minWidth: 35,
-    textAlign: 'center',
-  },
-  finalListItemName: {
-    flex: 1,
-    fontSize: 15,
-    color: Colors.text.primary,
-    textAlign: 'right',
-  },
-
-  // Signature button
-  signatureButton: {
-    backgroundColor: Colors.military.navyBlue,
-    borderRadius: 12,
-    padding: 18,
-    alignItems: 'center',
-    marginBottom: 30,
-    ...Shadows.medium,
-  },
-  signatureButtonText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: Colors.text.white,
-  },
-  buttonDisabled: {
-    opacity: 0.5,
-    backgroundColor: Colors.background.secondary,
   },
 });
 
