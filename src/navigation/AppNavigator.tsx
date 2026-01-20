@@ -6,7 +6,7 @@ import { ActivityIndicator, View, StyleSheet } from 'react-native';
 
 import { useAuth } from '../contexts/AuthContext';
 import { RootStackParamList } from '../types';
-import { Colors } from '../theme/colors';
+import { Colors } from '../theme/Colors';
 
 // Screens
 import LoginScreen from '../screens/auth/LoginScreen';
@@ -17,6 +17,7 @@ import VetementHomeScreen from '../screens/vetement/VetementHomeScreen';
 import ClothingSignatureScreen from '../screens/vetement/ClothingSignatureScreen';
 import ClothingDashboardScreen from '../screens/vetement/ClothingDashboardScreen';
 import ClothingReturnScreen from '../screens/vetement/ClothingReturnScreen';
+import ClothingStockScreen from '../screens/vetement/ClothingStockScreen';
 import ClothingEquipmentManagementScreen from '../screens/vetement/ClothingEquipmentManagementScreen';
 import ArmeHomeScreen from '../screens/arme/ArmeHomeScreen';
 import ManotListScreen from '../screens/arme/ManotListScreen';
@@ -25,6 +26,14 @@ import AddManaScreen from '../screens/arme/AddManaScreen';
 import CombatEquipmentListScreen from '../screens/arme/CombatEquipmentListScreen';
 import AddCombatEquipmentScreen from '../screens/arme/AddCombatEquipmentScreen';
 import CombatAssignmentScreen from '../screens/arme/CombatAssignmentScreen';
+import CombatReturnScreen from '../screens/arme/CombatReturnScreen';
+import CombatStorageScreen from '../screens/arme/CombatStorageScreen';
+import CombatRetrieveScreen from '../screens/arme/CombatRetrieveScreen';
+import WeaponInventoryListScreen from '../screens/arme/WeaponInventoryListScreen';
+import AddWeaponToInventoryScreen from '../screens/arme/AddWeaponToInventoryScreen';
+import BulkImportWeaponsScreen from '../screens/arme/BulkImportWeaponsScreen';
+import AssignWeaponScreen from '../screens/arme/AssignWeaponScreen';
+import WeaponStorageScreen from '../screens/arme/WeaponStorageScreen';
 import AdminPanelScreen from '../screens/admin/AdminPanelScreen';
 import UserManagementScreen from '../screens/admin/UserManagementScreen';
 import DatabaseDebugScreen from '../screens/admin/DatabaseDebugScreen';
@@ -60,16 +69,17 @@ const AppNavigator: React.FC = () => {
           <>
             {/* Écran principal */}
             <Stack.Screen name="Home" component={HomeScreen} />
-            
+
             {/* Écrans communs */}
             <Stack.Screen name="SoldierSearch" component={SoldierSearchScreen} />
             <Stack.Screen name="AddSoldier" component={AddSoldierScreen} />
-            
+
             {/* Module Vêtement */}
             <Stack.Screen name="VetementHome" component={VetementHomeScreen} />
             <Stack.Screen name="ClothingSignature" component={ClothingSignatureScreen} />
             <Stack.Screen name="ClothingDashboard" component={ClothingDashboardScreen} />
             <Stack.Screen name="ClothingReturn" component={ClothingReturnScreen} />
+            <Stack.Screen name="ClothingStock" component={ClothingStockScreen} />
             <Stack.Screen name="ClothingEquipmentManagement" component={ClothingEquipmentManagementScreen} />
 
             {/* Module Arme */}
@@ -80,6 +90,14 @@ const AppNavigator: React.FC = () => {
             <Stack.Screen name="CombatEquipmentList" component={CombatEquipmentListScreen} />
             <Stack.Screen name="AddCombatEquipment" component={AddCombatEquipmentScreen} />
             <Stack.Screen name="CombatAssignment" component={CombatAssignmentScreen} />
+            <Stack.Screen name="CombatReturn" component={CombatReturnScreen} />
+            <Stack.Screen name="CombatStorage" component={CombatStorageScreen} />
+            <Stack.Screen name="CombatRetrieve" component={CombatRetrieveScreen} />
+            <Stack.Screen name="WeaponInventoryList" component={WeaponInventoryListScreen} />
+            <Stack.Screen name="AddWeaponToInventory" component={AddWeaponToInventoryScreen} />
+            <Stack.Screen name="BulkImportWeapons" component={BulkImportWeaponsScreen} />
+            <Stack.Screen name="AssignWeapon" component={AssignWeaponScreen} />
+            <Stack.Screen name="WeaponStorage" component={WeaponStorageScreen} />
 
             {/* Module Admin */}
             <Stack.Screen name="AdminPanel" component={AdminPanelScreen} />

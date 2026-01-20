@@ -1,7 +1,7 @@
 // Composant Card de module avec icône et état
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ViewStyle } from 'react-native';
-import { Colors, Shadows } from '../theme/colors';
+import { Colors, Shadows } from '../theme/Colors';
 
 interface ModuleCardProps {
   title: string;
@@ -39,7 +39,7 @@ export const ModuleCard: React.FC<ModuleCardProps> = ({
           </View>
         )}
       </View>
-      
+
       <View style={styles.content}>
         <Text style={styles.title}>{title}</Text>
         {subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}

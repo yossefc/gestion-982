@@ -1,7 +1,7 @@
 // Composant Card de statistique réutilisable
 import React from 'react';
 import { View, Text, StyleSheet, ViewStyle } from 'react-native';
-import { Colors, Shadows } from '../theme/colors';
+import { Colors, Shadows } from '../theme/Colors';
 
 interface StatCardProps {
   label: string;

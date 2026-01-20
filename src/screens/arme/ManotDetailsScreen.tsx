@@ -13,7 +13,7 @@ import {
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { RootStackParamList, Mana } from '../../types';
 import { manaService } from '../../services/firebaseService';
-import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/colors';
+import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
 
 type ManotDetailsRouteProp = RouteProp<RootStackParamList, 'ManotDetails'>;
 

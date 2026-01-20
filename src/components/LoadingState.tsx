@@ -1,7 +1,7 @@
 // Composant Loading State réutilisable
 import React from 'react';
 import { View, ActivityIndicator, Text, StyleSheet, ViewStyle } from 'react-native';
-import { Colors } from '../theme/colors';
+import { Colors } from '../theme/Colors';
 
 interface LoadingStateProps {
   message?: string;

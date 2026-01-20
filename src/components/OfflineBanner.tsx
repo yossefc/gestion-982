@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
-import { Colors } from '../theme/colors';
+import { Colors } from '../theme/Colors';
 
 export const OfflineBanner: React.FC = () => {
   const [isOffline, setIsOffline] = useState(false);

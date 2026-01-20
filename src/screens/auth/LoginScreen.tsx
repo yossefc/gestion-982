@@ -1,104 +1,174 @@
-// Écran de connexion
+/**
+ * LoginScreen.tsx - Écran de connexion
+ * Design militaire professionnel
+ */
+
 import React, { useState } from 'react';
 import {
   View,
   Text,
-  TextInput,
   StyleSheet,
+  TextInput,
+  TouchableOpacity,
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
+  Alert,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
 import { useAuth } from '../../contexts/AuthContext';
-import { Colors, Shadows } from '../../theme/colors';
-import { PrimaryButton } from '../../components';
-import { notifyError } from '../../utils/notify';
 
 const LoginScreen: React.FC = () => {
+  const { signIn } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const { signIn } = useAuth();
+  const [showPassword, setShowPassword] = useState(false);
+  const [focusedInput, setFocusedInput] = useState<string | null>(null);
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
-      notifyError(new Error('נא למלא את כל השדות'), 'התחברות');
+      Alert.alert('שגיאה', 'נא למלא את כל השדות');
       return;
     }
 
-    setLoading(true);
     try {
+      setLoading(true);
       await signIn(email.trim(), password);
-    } catch (error) {
-      notifyError(error, 'התחברות');
+    } catch (error: any) {
+      let message = 'שגיאה בהתחברות';
+      if (error.code === 'auth/user-not-found') {
+        message = 'משתמש לא קיים במערכת';
+      } else if (error.code === 'auth/wrong-password') {
+        message = 'סיסמה שגויה';
+      } else if (error.code === 'auth/invalid-email') {
+        message = 'כתובת אימייל לא תקינה';
+      }
+      Alert.alert('שגיאה', message);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <KeyboardAvoidingView 
+    <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <View style={styles.content}>
-        {/* Logo / Header */}
-        <View style={styles.header}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Logo Section */}
+        <View style={styles.logoSection}>
           <View style={styles.logoContainer}>
-            <Text style={styles.logoText}>982</Text>
+            <View style={styles.logo}>
+              <Text style={styles.logoText}>982</Text>
+            </View>
+            <View style={styles.logoRing} />
           </View>
           <Text style={styles.title}>מערכת ניהול ציוד</Text>
           <Text style={styles.subtitle}>גדוד 982</Text>
         </View>
 
-        {/* Form */}
-        <View style={styles.form}>
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>אימייל</Text>
-            <TextInput
-              style={styles.input}
-              value={email}
-              onChangeText={setEmail}
-              placeholder="example@email.com"
-              placeholderTextColor={Colors.text.light}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoCorrect={false}
-              textAlign="right"
-              accessibilityLabel="שדה הזנת אימייל"
-              accessibilityHint="הזן את כתובת האימייל שלך"
-            />
-          </View>
+        {/* Login Form */}
+        <View style={styles.formContainer}>
+          <View style={styles.formCard}>
+            {/* Email Input */}
+            <View style={styles.inputContainer}>
+              <Text style={styles.inputLabel}>אימייל</Text>
+              <View style={[
+                styles.inputWrapper,
+                focusedInput === 'email' && styles.inputWrapperFocused,
+              ]}>
+                <TextInput
+                  style={styles.input}
+                  placeholder="הזן כתובת אימייל"
+                  placeholderTextColor={Colors.placeholder}
+                  value={email}
+                  onChangeText={setEmail}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  onFocus={() => setFocusedInput('email')}
+                  onBlur={() => setFocusedInput(null)}
+                />
+                <Ionicons
+                  name="mail-outline"
+                  size={20}
+                  color={focusedInput === 'email' ? Colors.primary : Colors.textLight}
+                />
+              </View>
+            </View>
 
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>סיסמה</Text>
-            <TextInput
-              style={styles.input}
-              value={password}
-              onChangeText={setPassword}
-              placeholder="••••••••"
-              placeholderTextColor={Colors.text.light}
-              secureTextEntry
-              textAlign="right"
-              accessibilityLabel="שדה הזנת סיסמה"
-              accessibilityHint="הזן את הסיסמה שלך"
-            />
-          </View>
+            {/* Password Input */}
+            <View style={styles.inputContainer}>
+              <Text style={styles.inputLabel}>סיסמה</Text>
+              <View style={[
+                styles.inputWrapper,
+                focusedInput === 'password' && styles.inputWrapperFocused,
+              ]}>
+                <TouchableOpacity
+                  onPress={() => setShowPassword(!showPassword)}
+                  style={styles.passwordToggle}
+                >
+                  <Ionicons
+                    name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                    size={20}
+                    color={Colors.textLight}
+                  />
+                </TouchableOpacity>
+                <TextInput
+                  style={styles.input}
+                  placeholder="הזן סיסמה"
+                  placeholderTextColor={Colors.placeholder}
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry={!showPassword}
+                  onFocus={() => setFocusedInput('password')}
+                  onBlur={() => setFocusedInput(null)}
+                />
+                <Ionicons
+                  name="lock-closed-outline"
+                  size={20}
+                  color={focusedInput === 'password' ? Colors.primary : Colors.textLight}
+                />
+              </View>
+            </View>
 
-          <PrimaryButton
-            title="התחברות"
-            onPress={handleLogin}
-            loading={loading}
-            disabled={loading}
-            accessibilityLabel="כפתור התחברות"
-            accessibilityHint="לחץ להתחבר למערכת"
-          />
+            {/* Login Button */}
+            <TouchableOpacity
+              style={[styles.loginButton, loading && styles.loginButtonDisabled]}
+              onPress={handleLogin}
+              disabled={loading}
+              activeOpacity={0.8}
+            >
+              {loading ? (
+                <ActivityIndicator size="small" color={Colors.textWhite} />
+              ) : (
+                <>
+                  <Text style={styles.loginButtonText}>התחבר</Text>
+                  <Ionicons name="arrow-back" size={20} color={Colors.textWhite} />
+                </>
+              )}
+            </TouchableOpacity>
+
+            {/* Forgot Password */}
+            <TouchableOpacity style={styles.forgotPassword}>
+              <Text style={styles.forgotPasswordText}>שכחת סיסמה?</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Footer */}
-        <Text style={styles.footer}>
-          © 2024 מערכת ניהול ציוד צבאי
-        </Text>
-      </View>
+        <View style={styles.footer}>
+          <Text style={styles.footerText}>מערכת ניהול ציוד צה״ל</Text>
+          <Text style={styles.versionText}>גרסה 1.0.0</Text>
+        </View>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 };
@@ -106,72 +176,167 @@ const LoginScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background.primary,
+    backgroundColor: Colors.primary,
   },
-  content: {
-    flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 30,
+
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: Spacing.xxl,
   },
-  header: {
+
+  // Logo Section
+  logoSection: {
     alignItems: 'center',
-    marginBottom: 50,
+    paddingTop: Platform.OS === 'ios' ? 80 : 60,
+    paddingBottom: Spacing.xxl,
   },
+
   logoContainer: {
+    position: 'relative',
+    marginBottom: Spacing.lg,
+  },
+
+  logo: {
     width: 100,
     height: 100,
     borderRadius: 50,
-    backgroundColor: Colors.status.info,
-    justifyContent: 'center',
+    backgroundColor: Colors.textWhite,
     alignItems: 'center',
-    marginBottom: 20,
+    justifyContent: 'center',
     ...Shadows.large,
   },
+
+  logoRing: {
+    position: 'absolute',
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    top: -10,
+    left: -10,
+  },
+
   logoText: {
     fontSize: 36,
-    fontWeight: 'bold',
-    color: Colors.text.white,
+    fontWeight: '800',
+    color: Colors.primary,
   },
+
   title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: Colors.text.white,
-    marginBottom: 8,
+    fontSize: FontSize.xxl,
+    fontWeight: '700',
+    color: Colors.textWhite,
+    marginTop: Spacing.md,
   },
+
   subtitle: {
-    fontSize: 18,
-    color: Colors.text.secondary,
+    fontSize: FontSize.lg,
+    color: 'rgba(255, 255, 255, 0.8)',
+    marginTop: Spacing.xs,
   },
-  form: {
-    backgroundColor: Colors.background.card,
-    borderRadius: 20,
-    padding: 25,
-    ...Shadows.medium,
+
+  // Form Section
+  formContainer: {
+    flex: 1,
+    paddingHorizontal: Spacing.lg,
   },
+
+  formCard: {
+    backgroundColor: Colors.backgroundCard,
+    borderRadius: BorderRadius.xl,
+    padding: Spacing.xl,
+    ...Shadows.large,
+  },
+
   inputContainer: {
-    marginBottom: 20,
+    marginBottom: Spacing.lg,
   },
-  label: {
-    fontSize: 14,
-    color: Colors.text.secondary,
-    marginBottom: 8,
+
+  inputLabel: {
+    fontSize: FontSize.md,
+    fontWeight: '500',
+    color: Colors.text,
+    marginBottom: Spacing.sm,
     textAlign: 'right',
   },
-  input: {
-    backgroundColor: Colors.background.primary,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 16,
-    color: Colors.text.primary,
-    borderWidth: 1,
-    borderColor: Colors.border.medium,
+
+  inputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.backgroundInput,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    paddingHorizontal: Spacing.md,
   },
+
+  inputWrapperFocused: {
+    borderColor: Colors.primary,
+    backgroundColor: Colors.backgroundCard,
+  },
+
+  input: {
+    flex: 1,
+    paddingVertical: Spacing.md,
+    fontSize: FontSize.base,
+    color: Colors.text,
+    textAlign: 'right',
+    marginRight: Spacing.sm,
+  },
+
+  passwordToggle: {
+    padding: Spacing.xs,
+  },
+
+  loginButton: {
+    backgroundColor: Colors.primary,
+    borderRadius: BorderRadius.md,
+    paddingVertical: Spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.sm,
+    marginTop: Spacing.md,
+    ...Shadows.small,
+  },
+
+  loginButtonDisabled: {
+    backgroundColor: Colors.primaryLight,
+  },
+
+  loginButtonText: {
+    fontSize: FontSize.lg,
+    fontWeight: '600',
+    color: Colors.textWhite,
+  },
+
+  forgotPassword: {
+    alignItems: 'center',
+    marginTop: Spacing.lg,
+  },
+
+  forgotPasswordText: {
+    fontSize: FontSize.md,
+    color: Colors.primary,
+    fontWeight: '500',
+  },
+
+  // Footer
   footer: {
-    textAlign: 'center',
-    color: Colors.text.secondary,
-    fontSize: 12,
-    marginTop: 40,
+    alignItems: 'center',
+    paddingTop: Spacing.xxl,
+  },
+
+  footerText: {
+    fontSize: FontSize.sm,
+    color: 'rgba(255, 255, 255, 0.6)',
+  },
+
+  versionText: {
+    fontSize: FontSize.xs,
+    color: 'rgba(255, 255, 255, 0.4)',
+    marginTop: Spacing.xs,
   },
 });
 

@@ -1,193 +1,261 @@
-// Écran d'accueil principal
-import React, { useEffect, useState, useCallback } from 'react';
+/**
+ * HomeScreen.tsx - Écran d'accueil principal
+ * Design militaire professionnel
+ */
+
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
-  TouchableOpacity,
   StyleSheet,
   ScrollView,
+  TouchableOpacity,
+  ActivityIndicator,
+  Platform,
+  RefreshControl,
 } from 'react-native';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
+import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
 import { useAuth } from '../../contexts/AuthContext';
-import { Colors, Shadows } from '../../theme/colors';
-import { soldierService, assignmentService } from '../../services/firebaseService';
-import { StatCard, ModuleCard } from '../../components';
-import { confirmAction } from '../../utils/notify';
+import { soldierService } from '../../services/soldierService';
+import { assignmentService } from '../../services/assignmentService';
 
 const HomeScreen: React.FC = () => {
-  const navigation = useNavigation<any>();
-  const { user, signOut, hasPermission } = useAuth();
+  const navigation = useNavigation();
+  const { user, userRole } = useAuth();
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [stats, setStats] = useState({
     totalSoldiers: 0,
     todayAssignments: 0,
     pendingSignatures: 0,
   });
-  const [loading, setLoading] = useState(true);
 
-  const loadStats = useCallback(async () => {
+  useEffect(() => {
+    loadStats();
+  }, []);
+
+  const loadStats = async () => {
     try {
       const soldiers = await soldierService.getAll();
-      // TODO: Charger les vraies stats
+      const assignments = await assignmentService.getAll();
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const todayAssignments = assignments.filter((a: any) => {
+        const date = a.createdAt?.toDate?.() || new Date(a.createdAt);
+        return date >= today;
+      });
+
+      const pending = assignments.filter((a: any) => a.status === 'OPEN');
+
       setStats({
         totalSoldiers: soldiers.length,
-        todayAssignments: 0,
-        pendingSignatures: 0,
+        todayAssignments: todayAssignments.length,
+        pendingSignatures: pending.length,
       });
     } catch (error) {
       console.error('Error loading stats:', error);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
-  }, []);
+  };
 
-  // Recharger les stats à chaque fois que l'écran devient actif
-  useFocusEffect(
-    useCallback(() => {
-      loadStats();
-    }, [loadStats])
+  const onRefresh = () => {
+    setRefreshing(true);
+    loadStats();
+  };
+
+  const canAccessArme = userRole === 'admin' || userRole === 'both' || userRole === 'arme';
+  const canAccessVetement = userRole === 'admin' || userRole === 'both' || userRole === 'vetement';
+  const canAccessAdmin = userRole === 'admin';
+
+  const getRoleBadge = () => {
+    const roleConfig: Record<string, { label: string; color: string; bg: string }> = {
+      admin: { label: 'מנהל', color: Colors.soldatsDark, bg: Colors.soldatsLight },
+      both: { label: 'מלא', color: Colors.successDark, bg: Colors.successLight },
+      arme: { label: 'נשק', color: Colors.armeDark, bg: Colors.armeLight },
+      vetement: { label: 'ביגוד', color: Colors.vetementDark, bg: Colors.vetementLight },
+    };
+    return roleConfig[userRole || ''] || { label: 'משתמש', color: Colors.textSecondary, bg: Colors.backgroundSecondary };
+  };
+
+  const roleBadge = getRoleBadge();
+
+  const ModuleCard = ({
+    title,
+    subtitle,
+    icon,
+    color,
+    lightColor,
+    onPress,
+  }: {
+    title: string;
+    subtitle: string;
+    icon: string;
+    color: string;
+    lightColor: string;
+    onPress: () => void;
+  }) => (
+    <TouchableOpacity
+      style={[styles.moduleCard, { borderLeftColor: color }]}
+      onPress={onPress}
+      activeOpacity={0.7}
+    >
+      <View style={[styles.moduleIconContainer, { backgroundColor: lightColor }]}>
+        <Ionicons name={icon as any} size={32} color={color} />
+      </View>
+      <View style={styles.moduleContent}>
+        <Text style={styles.moduleTitle}>{title}</Text>
+        <Text style={styles.moduleSubtitle}>{subtitle}</Text>
+      </View>
+      <Ionicons name="chevron-back" size={24} color={Colors.textLight} />
+    </TouchableOpacity>
   );
 
-  const handleSignOut = () => {
-    confirmAction(
-      'התנתקות',
-      'האם אתה בטוח שברצונך להתנתק?',
-      signOut
+  const QuickActionButton = ({
+    title,
+    icon,
+    onPress,
+  }: {
+    title: string;
+    icon: string;
+    onPress: () => void;
+  }) => (
+    <TouchableOpacity style={styles.quickAction} onPress={onPress} activeOpacity={0.7}>
+      <View style={styles.quickActionIcon}>
+        <Ionicons name={icon as any} size={24} color={Colors.primary} />
+      </View>
+      <Text style={styles.quickActionText}>{title}</Text>
+    </TouchableOpacity>
+  );
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+      </View>
     );
-  };
-
-  const modules = [
-    {
-      id: 'arme',
-      title: 'נשקייה',
-      subtitle: 'ניהול נשק וציוד קרבי',
-      icon: '🔫',
-      color: Colors.modules.arme,
-      permission: 'arme',
-      screen: 'ArmeHome',
-    },
-    {
-      id: 'vetement',
-      title: 'אפסנאות',
-      subtitle: 'ניהול ביגוד והחתמות',
-      icon: '👕',
-      color: Colors.modules.vetement,
-      permission: 'vetement',
-      screen: 'VetementHome',
-    },
-    {
-      id: 'admin',
-      title: 'ניהול מערכת',
-      subtitle: 'משתמשים והגדרות',
-      icon: '⚙️',
-      color: Colors.military.olive,
-      permission: 'admin',
-      screen: 'AdminPanel',
-    },
-  ];
-
-  const getRoleText = (role: string) => {
-    switch (role) {
-      case 'admin': return 'מנהל מערכת';
-      case 'both': return 'גישה מלאה';
-      case 'arme': return 'ציוד לחימה';
-      case 'vetement': return 'ביגוד';
-      default: return role;
-    }
-  };
+  }
 
   return (
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerTop}>
-          <TouchableOpacity onPress={handleSignOut} style={styles.logoutButton}>
-            <Text style={styles.logoutText}>🚪 התנתק</Text>
+          <TouchableOpacity style={styles.notificationButton}>
+            <Ionicons name="notifications-outline" size={24} color={Colors.textWhite} />
           </TouchableOpacity>
-          <View style={styles.userInfo}>
-            <Text style={styles.welcomeText}>שלום,</Text>
-            <Text style={styles.userName}>{user?.name || 'משתמש'}</Text>
+
+          <View style={styles.logoContainer}>
+            <View style={styles.logo}>
+              <Text style={styles.logoText}>982</Text>
+            </View>
           </View>
+
+          <TouchableOpacity style={styles.settingsButton}>
+            <Ionicons name="settings-outline" size={24} color={Colors.textWhite} />
+          </TouchableOpacity>
         </View>
-        <View style={styles.roleContainer}>
-          <View style={styles.roleBadge}>
-            <Text style={styles.roleText}>{getRoleText(user?.role || '')}</Text>
+
+        <View style={styles.welcomeSection}>
+          <Text style={styles.welcomeText}>שלום,</Text>
+          <Text style={styles.userName}>{user?.displayName || user?.email?.split('@')[0]}</Text>
+          <View style={[styles.roleBadge, { backgroundColor: roleBadge.bg }]}>
+            <Text style={[styles.roleBadgeText, { color: roleBadge.color }]}>{roleBadge.label}</Text>
           </View>
         </View>
       </View>
 
-      {/* Content */}
-      <ScrollView 
-        style={styles.content} 
-        showsVerticalScrollIndicator={false}
+      <ScrollView
+        style={styles.content}
         contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[Colors.primary]} />
+        }
       >
-        {/* Title Section */}
-        <View style={styles.titleSection}>
-          <Text style={styles.mainTitle}>מערכת ניהול גדוד 982</Text>
-          <Text style={styles.subtitle}>ניהול ציוד והחתמות</Text>
-        </View>
-
         {/* Quick Stats */}
-        <View style={styles.statsContainer}>
-          <StatCard
-            value={stats.totalSoldiers}
-            label="חיילים"
-            backgroundColor={Colors.status.info}
-            textColor={Colors.text.white}
-          />
-          <StatCard
-            value={stats.todayAssignments}
-            label="היום"
-            backgroundColor={Colors.status.success}
-            textColor={Colors.text.white}
-          />
-          <StatCard
-            value={stats.pendingSignatures}
-            label="ממתינים"
-            backgroundColor={Colors.status.warning}
-            textColor={Colors.text.white}
-          />
+        <View style={styles.statsRow}>
+          <View style={[styles.statCard, { backgroundColor: Colors.infoLight }]}>
+            <Ionicons name="people" size={24} color={Colors.info} />
+            <Text style={[styles.statValue, { color: Colors.info }]}>{stats.totalSoldiers}</Text>
+            <Text style={styles.statLabel}>חיילים</Text>
+          </View>
+          <View style={[styles.statCard, { backgroundColor: Colors.successLight }]}>
+            <Ionicons name="today" size={24} color={Colors.success} />
+            <Text style={[styles.statValue, { color: Colors.success }]}>{stats.todayAssignments}</Text>
+            <Text style={styles.statLabel}>היום</Text>
+          </View>
+          <View style={[styles.statCard, { backgroundColor: Colors.warningLight }]}>
+            <Ionicons name="time" size={24} color={Colors.warning} />
+            <Text style={[styles.statValue, { color: Colors.warning }]}>{stats.pendingSignatures}</Text>
+            <Text style={styles.statLabel}>ממתינים</Text>
+          </View>
         </View>
 
-        {/* Modules */}
-        <Text style={styles.sectionTitle}>בחר מודול</Text>
+        {/* Module Cards */}
+        <Text style={styles.sectionTitle}>מודולים</Text>
 
-        <View style={styles.modulesContainer}>
-          {modules.map((module) => {
-            const hasAccess = hasPermission(module.permission as any);
+        {canAccessArme && (
+          <ModuleCard
+            title="נשק וציוד לוחם"
+            subtitle="החתמה וזיכוי ציוד קרבי"
+            icon="shield"
+            color={Colors.arme}
+            lightColor={Colors.armeLight}
+            onPress={() => navigation.navigate('ArmeHome' as never)}
+          />
+        )}
 
-            return (
-              <ModuleCard
-                key={module.id}
-                title={module.title}
-                subtitle={module.subtitle}
-                icon={module.icon}
-                onPress={() => navigation.navigate(module.screen)}
-                disabled={!hasAccess}
-                backgroundColor={Colors.background.card}
-              />
-            );
-          })}
-        </View>
+        {canAccessVetement && (
+          <ModuleCard
+            title="ביגוד"
+            subtitle="החתמה וזיכוי ציוד אישי"
+            icon="shirt"
+            color={Colors.vetement}
+            lightColor={Colors.vetementLight}
+            onPress={() => navigation.navigate('VetementHome' as never)}
+          />
+        )}
+
+        {canAccessAdmin && (
+          <ModuleCard
+            title="ניהול מערכת"
+            subtitle="הגדרות, משתמשים ודוחות"
+            icon="cog"
+            color={Colors.soldats}
+            lightColor={Colors.soldatsLight}
+            onPress={() => navigation.navigate('AdminPanel' as never)}
+          />
+        )}
 
         {/* Quick Actions */}
         <Text style={styles.sectionTitle}>פעולות מהירות</Text>
-        <View style={styles.quickActions}>
-          <TouchableOpacity
-            style={styles.quickActionButton}
-            onPress={() => navigation.navigate('AddSoldier')}
-          >
-            <Text style={styles.quickActionIcon}>👤</Text>
-            <Text style={styles.quickActionText}>הוסף חייל</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.quickActionButton}
-            onPress={() => hasPermission('vetement') && navigation.navigate('SoldierSearch', { mode: 'clothing' })}
-            disabled={!hasPermission('vetement')}
-          >
-            <Text style={styles.quickActionIcon}>✍️</Text>
-            <Text style={styles.quickActionText}>החתמה מהירה</Text>
-          </TouchableOpacity>
+        <View style={styles.quickActionsRow}>
+          <QuickActionButton
+            title="חייל חדש"
+            icon="person-add"
+            onPress={() => navigation.navigate('AddSoldier' as never)}
+          />
+          <QuickActionButton
+            title="החתמה מהירה"
+            icon="create"
+            onPress={() => navigation.navigate('SoldierSearch' as never, { mode: 'signature' })}
+          />
+        </View>
+
+        {/* Info Card */}
+        <View style={styles.infoCard}>
+          <View style={styles.infoIconContainer}>
+            <Ionicons name="information-circle" size={24} color={Colors.olive} />
+          </View>
+          <View style={styles.infoContent}>
+            <Text style={styles.infoTitle}>מערכת ניהול ציוד</Text>
+            <Text style={styles.infoText}>גדוד 982 - גרסה 1.0.0</Text>
+          </View>
         </View>
       </ScrollView>
     </View>
@@ -197,192 +265,246 @@ const HomeScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background.primary,
+    backgroundColor: Colors.background,
   },
+
+  loadingContainer: {
+    flex: 1,
+    backgroundColor: Colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  // Header
   header: {
-    backgroundColor: Colors.background.header,
-    paddingTop: 60,
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
-    ...Shadows.large,
-  },
-  headerTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  userInfo: {
-    alignItems: 'flex-end',
-  },
-  welcomeText: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.7)',
-  },
-  userName: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: Colors.text.white,
-  },
-  logoutButton: {
-    backgroundColor: 'rgba(231, 76, 60, 0.2)',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  logoutText: {
-    color: '#ff6b6b',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  roleContainer: {
-    marginTop: 15,
-    alignItems: 'flex-end',
-  },
-  roleBadge: {
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  roleText: {
-    color: Colors.text.white,
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  content: {
-    flex: 1,
-    paddingHorizontal: 20,
-    paddingTop: 20,
-  },
-  scrollContent: {
-    paddingBottom: 100,
-  },
-  titleSection: {
-    alignItems: 'center',
-    marginBottom: 25,
-  },
-  mainTitle: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: Colors.text.primary,
-    marginBottom: 5,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: Colors.text.secondary,
-  },
-  statsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 30,
-    gap: 12,
-  },
-  statCard: {
-    flex: 1,
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-    ...Shadows.small,
-  },
-  statNumber: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: Colors.text.white,
-    marginBottom: 4,
-  },
-  statLabel: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.9)',
-    textAlign: 'center',
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: Colors.text.primary,
-    marginBottom: 15,
-    textAlign: 'right',
-  },
-  modulesContainer: {
-    marginBottom: 30,
-    gap: 12,
-  },
-  moduleCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.background.card,
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: Colors.border.light,
+    backgroundColor: Colors.primary,
+    paddingTop: Platform.OS === 'ios' ? 50 : 20,
+    paddingBottom: Spacing.xxl,
+    paddingHorizontal: Spacing.lg,
+    borderBottomLeftRadius: BorderRadius.xl,
+    borderBottomRightRadius: BorderRadius.xl,
     ...Shadows.medium,
   },
-  moduleDisabled: {
-    opacity: 0.5,
-  },
-  moduleIcon: {
-    width: 55,
-    height: 55,
-    borderRadius: 12,
-    justifyContent: 'center',
+
+  headerTop: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginLeft: 15,
+    justifyContent: 'space-between',
+    marginBottom: Spacing.lg,
   },
-  moduleIconText: {
-    fontSize: 26,
+
+  notificationButton: {
+    width: 44,
+    height: 44,
+    borderRadius: BorderRadius.full,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  moduleInfo: {
+
+  settingsButton: {
+    width: 44,
+    height: 44,
+    borderRadius: BorderRadius.full,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  logoContainer: {
+    alignItems: 'center',
+  },
+
+  logo: {
+    width: 56,
+    height: 56,
+    borderRadius: BorderRadius.full,
+    backgroundColor: Colors.textWhite,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Shadows.small,
+  },
+
+  logoText: {
+    fontSize: FontSize.lg,
+    fontWeight: '800',
+    color: Colors.primary,
+  },
+
+  welcomeSection: {
+    alignItems: 'center',
+  },
+
+  welcomeText: {
+    fontSize: FontSize.base,
+    color: 'rgba(255, 255, 255, 0.8)',
+  },
+
+  userName: {
+    fontSize: FontSize.xxl,
+    fontWeight: '700',
+    color: Colors.textWhite,
+    marginTop: Spacing.xs,
+  },
+
+  roleBadge: {
+    paddingVertical: Spacing.xs,
+    paddingHorizontal: Spacing.md,
+    borderRadius: BorderRadius.full,
+    marginTop: Spacing.sm,
+  },
+
+  roleBadgeText: {
+    fontSize: FontSize.sm,
+    fontWeight: '600',
+  },
+
+  // Content
+  content: {
+    flex: 1,
+  },
+
+  scrollContent: {
+    padding: Spacing.lg,
+    paddingBottom: 100,
+  },
+
+  sectionTitle: {
+    fontSize: FontSize.lg,
+    fontWeight: '600',
+    color: Colors.text,
+    marginBottom: Spacing.md,
+    marginTop: Spacing.lg,
+    textAlign: 'right',
+  },
+
+  // Stats Row
+  statsRow: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+    marginTop: -Spacing.xl,
+  },
+
+  statCard: {
+    flex: 1,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.md,
+    alignItems: 'center',
+    ...Shadows.small,
+  },
+
+  statValue: {
+    fontSize: FontSize.xxl,
+    fontWeight: '700',
+    marginTop: Spacing.xs,
+  },
+
+  statLabel: {
+    fontSize: FontSize.xs,
+    color: Colors.textSecondary,
+    marginTop: Spacing.xs,
+  },
+
+  // Module Cards
+  moduleCard: {
+    backgroundColor: Colors.backgroundCard,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: Spacing.md,
+    borderLeftWidth: 4,
+    ...Shadows.small,
+  },
+
+  moduleIconContainer: {
+    width: 64,
+    height: 64,
+    borderRadius: BorderRadius.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: Spacing.md,
+  },
+
+  moduleContent: {
     flex: 1,
     alignItems: 'flex-end',
   },
+
   moduleTitle: {
-    fontSize: 17,
-    fontWeight: 'bold',
-    color: Colors.text.primary,
-    marginBottom: 4,
+    fontSize: FontSize.lg,
+    fontWeight: '600',
+    color: Colors.text,
   },
+
   moduleSubtitle: {
-    fontSize: 13,
-    color: Colors.text.secondary,
+    fontSize: FontSize.sm,
+    color: Colors.textSecondary,
+    marginTop: Spacing.xs,
   },
-  textDisabled: {
-    color: Colors.text.light,
-  },
-  chevron: {
-    fontSize: 28,
-    color: Colors.military.navyBlue,
-    marginRight: 5,
-  },
-  lockBadge: {
-    marginRight: 10,
-  },
-  lockText: {
-    fontSize: 22,
-  },
-  quickActions: {
+
+  // Quick Actions
+  quickActionsRow: {
     flexDirection: 'row',
-    gap: 12,
-    marginBottom: 30,
+    gap: Spacing.md,
   },
-  quickActionButton: {
+
+  quickAction: {
     flex: 1,
-    backgroundColor: Colors.background.card,
-    borderRadius: 12,
-    padding: 20,
+    backgroundColor: Colors.backgroundCard,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.lg,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: Colors.border.light,
     ...Shadows.small,
   },
+
   quickActionIcon: {
-    fontSize: 32,
-    marginBottom: 8,
+    width: 56,
+    height: 56,
+    borderRadius: BorderRadius.full,
+    backgroundColor: Colors.primaryLight + '20',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.sm,
   },
+
   quickActionText: {
-    fontSize: 14,
+    fontSize: FontSize.md,
+    fontWeight: '500',
+    color: Colors.text,
+  },
+
+  // Info Card
+  infoCard: {
+    backgroundColor: Colors.olive + '15',
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: Spacing.xl,
+    borderWidth: 1,
+    borderColor: Colors.olive + '30',
+  },
+
+  infoIconContainer: {
+    marginLeft: Spacing.md,
+  },
+
+  infoContent: {
+    flex: 1,
+    alignItems: 'flex-end',
+  },
+
+  infoTitle: {
+    fontSize: FontSize.md,
     fontWeight: '600',
-    color: Colors.text.primary,
+    color: Colors.olive,
+  },
+
+  infoText: {
+    fontSize: FontSize.sm,
+    color: Colors.olive,
+    marginTop: Spacing.xs,
   },
 });
 

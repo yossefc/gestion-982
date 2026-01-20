@@ -12,10 +12,16 @@ import {
   TextInput,
   RefreshControl,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { CombatEquipment } from '../../types';
-import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/colors';
-import { getAllCombatEquipment, addCombatEquipment, DEFAULT_COMBAT_EQUIPMENT } from '../../services/equipmentService';
+import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
+import {
+  getAllCombatEquipment,
+  addCombatEquipment,
+  deleteCombatEquipment,
+  DEFAULT_COMBAT_EQUIPMENT
+} from '../../services/equipmentService';
 
 const CATEGORY_CONFIG: { [key: string]: { icon: string; color: string } } = {
   'נשק': { icon: '🔫', color: '#E53935' },
@@ -103,6 +109,30 @@ const CombatEquipmentListScreen: React.FC = () => {
 
   const handleEquipmentPress = (equipmentId: string) => {
     navigation.navigate('AddCombatEquipment', { equipmentId });
+  };
+
+  const handleDeleteEquipment = (item: CombatEquipment) => {
+    Alert.alert(
+      'מחיקת ציוד',
+      `האם אתה בטוח שברצונך למחוק את "${item.name}"?`,
+      [
+        { text: 'ביטול', style: 'cancel' },
+        {
+          text: 'מחק',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteCombatEquipment(item.id);
+              Alert.alert('הצלחה', 'הציוד נמחק בהצלחה');
+              loadEquipment();
+            } catch (error) {
+              console.error('Error deleting equipment:', error);
+              Alert.alert('שגיאה', 'נכשל במחיקת הציוד');
+            }
+          },
+        },
+      ]
+    );
   };
 
   if (loading) {
@@ -229,39 +259,54 @@ const CombatEquipmentListScreen: React.FC = () => {
             const config = getCategoryConfig(item.category);
 
             return (
-              <TouchableOpacity
-                key={item.id}
-                style={styles.equipmentCard}
-                onPress={() => handleEquipmentPress(item.id)}
-                activeOpacity={0.7}
-              >
-                <View style={[styles.equipmentIcon, { backgroundColor: config.color }]}>
-                  <Text style={styles.equipmentIconText}>{config.icon}</Text>
-                </View>
+              <View key={item.id} style={styles.equipmentCard}>
+                <TouchableOpacity
+                  style={styles.equipmentMainContent}
+                  onPress={() => handleEquipmentPress(item.id)}
+                  activeOpacity={0.7}
+                >
+                  <View style={[styles.equipmentIcon, { backgroundColor: config.color }]}>
+                    <Text style={styles.equipmentIconText}>{config.icon}</Text>
+                  </View>
 
-                <View style={styles.equipmentInfo}>
-                  <Text style={styles.equipmentName}>{item.name}</Text>
-                  <View style={styles.equipmentMeta}>
-                    <Text style={[styles.equipmentCategory, { color: config.color }]}>
-                      {item.category}
-                    </Text>
-                    {item.serial && (
-                      <Text style={styles.equipmentSerial}>מסטב: {item.serial}</Text>
+                  <View style={styles.equipmentInfo}>
+                    <Text style={styles.equipmentName}>{item.name}</Text>
+                    <View style={styles.equipmentMeta}>
+                      <Text style={[styles.equipmentCategory, { color: config.color }]}>
+                        {item.category}
+                      </Text>
+                      {(item as any).requiresSerial && (
+                        <View style={styles.requiresSerialBadge}>
+                          <Text style={styles.requiresSerialText}>דורש מסטב</Text>
+                        </View>
+                      )}
+                    </View>
+                    {item.hasSubEquipment && item.subEquipments && (
+                      <View style={styles.subBadge}>
+                        <Text style={styles.subBadgeText}>
+                          {item.subEquipments.length} רכיבים
+                        </Text>
+                      </View>
                     )}
                   </View>
-                  {item.hasSubEquipment && item.subEquipments && (
-                    <View style={styles.subBadge}>
-                      <Text style={styles.subBadgeText}>
-                        {item.subEquipments.length} רכיבים
-                      </Text>
-                    </View>
-                  )}
-                </View>
+                </TouchableOpacity>
 
-                <View style={styles.chevronContainer}>
-                  <Text style={styles.chevron}>‹</Text>
+                {/* Action Buttons */}
+                <View style={styles.actionButtons}>
+                  <TouchableOpacity
+                    style={[styles.actionButton, styles.editButton]}
+                    onPress={() => handleEquipmentPress(item.id)}
+                  >
+                    <Ionicons name="create-outline" size={20} color={Colors.info} />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.actionButton, styles.deleteButton]}
+                    onPress={() => handleDeleteEquipment(item)}
+                  >
+                    <Ionicons name="trash-outline" size={20} color={Colors.danger} />
+                  </TouchableOpacity>
                 </View>
-              </TouchableOpacity>
+              </View>
             );
           })}
 
@@ -487,10 +532,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: Colors.backgroundCard,
     borderRadius: BorderRadius.lg,
-    padding: Spacing.md,
     borderWidth: 1,
     borderColor: Colors.borderLight,
     ...Shadows.small,
+  },
+  equipmentMainContent: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: Spacing.md,
   },
   equipmentIcon: {
     width: 48,
@@ -538,6 +588,40 @@ const styles = StyleSheet.create({
     color: Colors.success,
     fontWeight: '600',
   },
+  requiresSerialBadge: {
+    backgroundColor: Colors.warningLight,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
+    borderRadius: BorderRadius.sm,
+  },
+  requiresSerialText: {
+    fontSize: FontSize.xs,
+    color: Colors.warningDark,
+    fontWeight: '600',
+  },
+
+  // Action Buttons
+  actionButtons: {
+    flexDirection: 'row',
+    gap: Spacing.xs,
+    paddingRight: Spacing.md,
+    paddingLeft: Spacing.sm,
+  },
+  actionButton: {
+    width: 36,
+    height: 36,
+    borderRadius: BorderRadius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.backgroundInput,
+  },
+  editButton: {
+    backgroundColor: Colors.infoLight,
+  },
+  deleteButton: {
+    backgroundColor: Colors.dangerLight,
+  },
+
   chevronContainer: {
     marginLeft: Spacing.sm,
   },

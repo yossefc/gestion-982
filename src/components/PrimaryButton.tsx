@@ -1,7 +1,7 @@
 // Boutons réutilisables
 import React from 'react';
 import { TouchableOpacity, Text, StyleSheet, ViewStyle, ActivityIndicator } from 'react-native';
-import { Colors, Shadows } from '../theme/colors';
+import { Colors, Shadows } from '../theme/Colors';
 
 interface ButtonProps {
   title: string;

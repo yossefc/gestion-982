@@ -9,19 +9,17 @@ import {
   ActivityIndicator,
   Alert,
   TextInput,
+  Platform,
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import SignatureCanvas from 'react-native-signature-canvas';
 import { RootStackParamList, Soldier, AssignmentItem } from '../../types';
-import {
-  assignmentService,
-  soldierService,
-  pdfStorageService,
-} from '../../services/firebaseService';
+import { soldierService } from '../../services/firebaseService';
+import { assignmentService } from '../../services/assignmentService';
+import { weaponInventoryService } from '../../services/weaponInventoryService';
 import { useAuth } from '../../contexts/AuthContext';
-import { Colors, Shadows } from '../../theme/colors';
-import { generateAssignmentPDF } from '../../services/pdfService';
-import { downloadAndSharePdf, openWhatsAppChat } from '../../services/whatsappService';
+import { Colors, Shadows } from '../../theme/Colors';
+import { openWhatsAppChat } from '../../services/whatsappService';
 
 type CombatReturnRouteProp = RouteProp<RootStackParamList, 'CombatReturn'>;
 
@@ -35,7 +33,7 @@ interface ReturnItem extends AssignmentItem {
 const CombatReturnScreen: React.FC = () => {
   const navigation = useNavigation();
   const route = useRoute<CombatReturnRouteProp>();
-  const { soldierId } = route.params;
+  const { soldierId } = route.params || {};
   const { user } = useAuth();
 
   const signatureRef = useRef<any>(null);
@@ -49,15 +47,31 @@ const CombatReturnScreen: React.FC = () => {
   const [scrollEnabled, setScrollEnabled] = useState(true);
 
   useEffect(() => {
+    if (!soldierId) {
+      console.error('[CombatReturn] No soldierId provided in route params!');
+      Alert.alert('שגיאה', 'לא נמצא מזהה חייל');
+      navigation.goBack();
+      return;
+    }
     loadData();
-  }, []);
+  }, [soldierId]);
 
   const loadData = async () => {
     try {
+      console.log(`[CombatReturn] Loading data for soldier: ${soldierId}`);
+
       const [soldierData, currentItems] = await Promise.all([
         soldierService.getById(soldierId),
         assignmentService.calculateCurrentHoldings(soldierId, 'combat'),
       ]);
+
+      console.log(`[CombatReturn] Soldier: ${soldierData?.name}`);
+      console.log(`[CombatReturn] Current items from calculateCurrentHoldings:`, currentItems.length);
+      console.log(`[CombatReturn] Items details:`, currentItems.map(i => ({
+        name: i.equipmentName,
+        qty: i.quantity,
+        serial: i.serial,
+      })));
 
       setSoldier(soldierData);
 
@@ -68,6 +82,8 @@ const CombatReturnScreen: React.FC = () => {
           ? item.serial.split(',').map(s => s.trim())
           : [];
 
+        console.log(`[CombatReturn] Processing item ${item.equipmentName}: ${serialsArray.length} serials`);
+
         return {
           ...item,
           selected: false,
@@ -77,6 +93,7 @@ const CombatReturnScreen: React.FC = () => {
         };
       });
 
+      console.log(`[CombatReturn] Return items prepared: ${returnItems.length}`);
       setItems(returnItems);
     } catch (error) {
       console.error('Error loading data:', error);
@@ -221,6 +238,13 @@ const CombatReturnScreen: React.FC = () => {
                   itemData.serial = item.selectedSerials.join(', ');
                 }
 
+                console.log('[CombatReturn] Credit item prepared:', {
+                  equipmentId: itemData.equipmentId,
+                  equipmentName: itemData.equipmentName,
+                  quantity: itemData.quantity,
+                  serial: itemData.serial,
+                });
+
                 return itemData;
               });
 
@@ -232,7 +256,6 @@ const CombatReturnScreen: React.FC = () => {
                 type: 'combat' as const,
                 action: 'credit' as const,
                 items: creditItems,
-                signature,
                 status: 'זוכה' as const,
                 assignedBy: user?.id || '',
               };
@@ -243,65 +266,110 @@ const CombatReturnScreen: React.FC = () => {
               if (user?.name) assignmentData.assignedByName = user.name;
               if (user?.email) assignmentData.assignedByEmail = user.email;
 
-              const assignmentId = await assignmentService.create(assignmentData);
+              const assignmentId = await assignmentService.create(assignmentData, signature || undefined);
               console.log('Combat credit assignment created:', assignmentId);
 
-              // Générer PDF de crédit
-              const pdfBytes = await generateAssignmentPDF({
-                ...assignmentData,
-                id: assignmentId,
-              });
+              // Update weapon inventory status for returned weapons
+              console.log('[CombatReturn] =====================================');
+              console.log('[CombatReturn] DÉBUT MISE À JOUR weapons_inventory');
+              console.log('[CombatReturn] =====================================');
+              console.log('[CombatReturn] Selected items:', selectedItems.length);
 
-              // Upload PDF avec chemin structuré: pdf/combat/credit/{soldierId}.pdf
-              const pdfUrl = await pdfStorageService.uploadPdf(
-                pdfBytes,
-                soldierId,
-                'combat',
-                'credit'
-              );
+              for (const item of selectedItems) {
+                console.log(`[CombatReturn] Item: ${item.equipmentName}`);
+                console.log(`[CombatReturn]   - selectedSerials:`, item.selectedSerials);
+                console.log(`[CombatReturn]   - availableSerials:`, item.availableSerials);
 
-              await assignmentService.update(assignmentId, { pdfUrl });
-              console.log('Combat credit PDF generated and uploaded:', pdfUrl);
+                if (item.selectedSerials && item.selectedSerials.length > 0) {
+                  for (const serial of item.selectedSerials) {
+                    console.log(`[CombatReturn] Processing serial: "${serial}" (trimmed: "${serial.trim()}")`);
+
+                    if (serial.trim()) {
+                      try {
+                        // Find the weapon by serial number
+                        console.log(`[CombatReturn] Searching weapon with serial: ${serial.trim()}`);
+                        const weapon = await weaponInventoryService.getWeaponBySerialNumber(serial.trim());
+
+                        if (weapon) {
+                          console.log(`[CombatReturn] ✅ Weapon FOUND: ${weapon.serialNumber} (ID: ${weapon.id}, Status: ${weapon.status})`);
+                          console.log(`[CombatReturn] Calling returnWeapon(${weapon.id})...`);
+
+                          await weaponInventoryService.returnWeapon(weapon.id);
+
+                          console.log(`[CombatReturn] ✅ Weapon ${weapon.serialNumber} status updated to 'available'`);
+                        } else {
+                          console.warn(`[CombatReturn] ⚠️ Weapon NOT FOUND for serial: ${serial}`);
+                        }
+                      } catch (error) {
+                        console.error(`[CombatReturn] ❌ ERROR finding/updating weapon with serial ${serial}:`, error);
+                      }
+                    } else {
+                      console.log(`[CombatReturn] ⚠️ Serial vide après trim, skip`);
+                    }
+                  }
+                } else {
+                  console.log(`[CombatReturn] Pas de serials sélectionnés pour ${item.equipmentName}`);
+                }
+              }
+
+              console.log('[CombatReturn] =====================================');
+              console.log('[CombatReturn] FIN MISE À JOUR weapons_inventory');
+              console.log('[CombatReturn] =====================================');
 
               // Calculer les items restants (recalculer depuis assignments)
+              console.log('[CombatReturn] Recalculating current holdings after credit...');
               const remainingItems = await assignmentService.calculateCurrentHoldings(
                 soldierId,
                 'combat'
               );
 
-              const hasRemainingItems = remainingItems.length > 0;
+              console.log('[CombatReturn] Remaining items after credit:', remainingItems.length);
+              console.log('[CombatReturn] Remaining items details:', remainingItems.map(i => ({
+                name: i.equipmentName,
+                qty: i.quantity,
+                serial: i.serial,
+              })));
 
-              // LOGIQUE "TOUT RENDU" (Point E)
-              // Si le soldat n'a plus d'équipement, supprimer le PDF de signature
-              if (!hasRemainingItems) {
-                console.log('All combat items returned - deleting signature PDF');
-                await pdfStorageService.deletePdfByPath(
-                  soldierId,
-                  'combat',
-                  'issue'
-                );
-              }
+              const hasRemainingItems = remainingItems.length > 0;
+              console.log('[CombatReturn] hasRemainingItems:', hasRemainingItems);
 
               // Générer message WhatsApp
               let whatsappMessage = `שלום ${soldier?.name},\n\nהזיכוי בוצע בהצלחה.\n\n`;
 
+              // Montrer ce qui a été retourné
+              whatsappMessage += 'ציוד שהוחזר:\n';
+              selectedItems.forEach(item => {
+                whatsappMessage += `• ${item.equipmentName} - כמות: ${item.returnQuantity}`;
+                if (item.selectedSerials && item.selectedSerials.length > 0) {
+                  whatsappMessage += ` (מסטב: ${item.selectedSerials.join(', ')})`;
+                }
+                whatsappMessage += '\n';
+              });
+
+              // Montrer ce qui reste (s'il reste quelque chose)
               if (hasRemainingItems) {
-                whatsappMessage += 'ציוד פתוח:\n';
+                whatsappMessage += '\nציוד שנותר בידיך:\n';
                 remainingItems.forEach(item => {
-                  whatsappMessage += `• ${item.equipmentName} - כמות: ${item.quantity}\n`;
+                  whatsappMessage += `• ${item.equipmentName} - כמות: ${item.quantity}`;
+                  if (item.serial) {
+                    whatsappMessage += ` (מסטב: ${item.serial})`;
+                  }
+                  whatsappMessage += '\n';
                 });
               } else {
-                whatsappMessage += 'אין ציוד פתוח.\n';
+                whatsappMessage += '\nכל הציוד הוחזר. תודה!\n';
               }
 
               whatsappMessage += `\nתודה,\nגדוד 982`;
 
               // Afficher succès avec options WhatsApp
+              const returnedCount = selectedItems.reduce((sum, item) => sum + item.returnQuantity, 0);
+
               Alert.alert(
                 'הצלחה',
                 hasRemainingItems
-                  ? `הזיכוי בוצע בהצלחה. לחייל נותר ציוד פתוח (${remainingItems.length} פריטים).`
-                  : 'הזיכוי בוצע בהצלחה. החייל אין לו ציוד פתוח.',
+                  ? `הזיכוי בוצע בהצלחה!\n\n${returnedCount} פריטים הוחזרו.\nנותרו ${remainingItems.length} פריטים בידי החייל.`
+                  : `הזיכוי בוצע בהצלחה!\n\n${returnedCount} פריטים הוחזרו.\nהחייל החזיר את כל הציוד.`,
                 [
                   {
                     text: 'שלח WhatsApp',
@@ -311,14 +379,6 @@ const CombatReturnScreen: React.FC = () => {
                       } else {
                         Alert.alert('שגיאה', 'אין מספר טלפון לחייל');
                       }
-                      navigation.goBack();
-                    },
-                  },
-                  {
-                    text: 'שלח PDF',
-                    onPress: async () => {
-                      const fileName = `credit_${soldier?.personalNumber}_${Date.now()}.pdf`;
-                      await downloadAndSharePdf(pdfUrl, fileName);
                       navigation.goBack();
                     },
                   },
@@ -357,7 +417,7 @@ const CombatReturnScreen: React.FC = () => {
           </View>
         </View>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={Colors.modules.arme} />
+          <ActivityIndicator size="large" color={Colors.arme} />
         </View>
       </View>
     );
@@ -487,6 +547,17 @@ const CombatReturnScreen: React.FC = () => {
                   </View>
                   <View style={styles.itemInfo}>
                     <Text style={styles.itemName}>{item.equipmentName}</Text>
+
+                    {/* Display serials prominently */}
+                    {item.availableSerials && item.availableSerials.length > 0 && (
+                      <View style={styles.serialDisplayContainer}>
+                        <Text style={styles.serialDisplayLabel}>מסטבים:</Text>
+                        <Text style={styles.serialDisplayValue}>
+                          {item.availableSerials.join(', ')}
+                        </Text>
+                      </View>
+                    )}
+
                     <Text style={styles.itemQuantity}>
                       כמות זמינה: {item.quantity}
                     </Text>
@@ -618,10 +689,10 @@ const CombatReturnScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background.primary,
+    backgroundColor: Colors.background,
   },
   header: {
-    backgroundColor: Colors.background.header,
+    backgroundColor: Colors.backgroundHeader,
     paddingTop: 60,
     paddingHorizontal: 20,
     paddingBottom: 20,
@@ -638,7 +709,7 @@ const styles = StyleSheet.create({
   },
   backButtonText: {
     fontSize: 28,
-    color: Colors.text.white,
+    color: Colors.textWhite,
   },
   headerContent: {
     alignItems: 'flex-end',
@@ -646,7 +717,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: Colors.text.white,
+    color: Colors.textWhite,
     marginBottom: 5,
   },
   subtitle: {
@@ -666,12 +737,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   soldierCard: {
-    backgroundColor: Colors.background.card,
+    backgroundColor: Colors.backgroundCard,
     borderRadius: 12,
     padding: 20,
     marginBottom: 15,
     borderWidth: 1,
-    borderColor: Colors.border.light,
+    borderColor: Colors.borderLight,
     ...Shadows.small,
   },
   soldierInfo: {
@@ -680,12 +751,12 @@ const styles = StyleSheet.create({
   soldierName: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: Colors.text.primary,
+    color: Colors.text,
     marginBottom: 5,
   },
   soldierMeta: {
     fontSize: 14,
-    color: Colors.text.secondary,
+    color: Colors.textSecondary,
   },
   instructionsCard: {
     backgroundColor: '#e8f4fd',
@@ -698,20 +769,20 @@ const styles = StyleSheet.create({
   instructionsTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: Colors.text.primary,
+    color: Colors.text,
     marginBottom: 8,
     textAlign: 'right',
   },
   instructionsText: {
     fontSize: 14,
-    color: Colors.text.secondary,
+    color: Colors.textSecondary,
     lineHeight: 22,
     textAlign: 'right',
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: Colors.text.primary,
+    color: Colors.text,
     marginBottom: 15,
     textAlign: 'right',
   },
@@ -720,15 +791,15 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   itemCard: {
-    backgroundColor: Colors.background.card,
+    backgroundColor: Colors.backgroundCard,
     borderRadius: 12,
     padding: 16,
     borderWidth: 2,
-    borderColor: Colors.border.light,
+    borderColor: Colors.borderLight,
     ...Shadows.small,
   },
   itemCardSelected: {
-    borderColor: Colors.status.success,
+    borderColor: Colors.success,
     backgroundColor: '#f0fdf4',
   },
   itemHeader: {
@@ -740,14 +811,14 @@ const styles = StyleSheet.create({
     height: 28,
     borderRadius: 6,
     borderWidth: 2,
-    borderColor: Colors.border.dark,
+    borderColor: Colors.borderDark,
     marginLeft: 12,
     justifyContent: 'center',
     alignItems: 'center',
   },
   checkmark: {
     fontSize: 18,
-    color: Colors.status.success,
+    color: Colors.success,
     fontWeight: 'bold',
   },
   itemInfo: {
@@ -757,18 +828,40 @@ const styles = StyleSheet.create({
   itemName: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: Colors.text.primary,
+    color: Colors.text,
     marginBottom: 4,
+  },
+  serialDisplayContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.armeLight,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    marginBottom: 6,
+    alignSelf: 'flex-end',
+  },
+  serialDisplayLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.arme,
+    marginLeft: 6,
+  },
+  serialDisplayValue: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.armeDark,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
   },
   itemQuantity: {
     fontSize: 13,
-    color: Colors.text.secondary,
+    color: Colors.textSecondary,
   },
   itemDetails: {
     marginTop: 16,
     paddingTop: 16,
     borderTopWidth: 1,
-    borderTopColor: Colors.border.light,
+    borderTopColor: Colors.borderLight,
   },
   quantitySection: {
     marginBottom: 12,
@@ -776,7 +869,7 @@ const styles = StyleSheet.create({
   detailLabel: {
     fontSize: 14,
     fontWeight: 'bold',
-    color: Colors.text.primary,
+    color: Colors.text,
     marginBottom: 8,
     textAlign: 'right',
   },
@@ -787,7 +880,7 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   quantityButton: {
-    backgroundColor: Colors.modules.arme,
+    backgroundColor: Colors.arme,
     width: 40,
     height: 40,
     borderRadius: 8,
@@ -797,12 +890,12 @@ const styles = StyleSheet.create({
   quantityButtonText: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: Colors.text.white,
+    color: Colors.textWhite,
   },
   quantityValue: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: Colors.text.primary,
+    color: Colors.text,
     minWidth: 40,
     textAlign: 'center',
   },
@@ -816,56 +909,56 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   serialChip: {
-    backgroundColor: Colors.background.secondary,
+    backgroundColor: Colors.backgroundSecondary,
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
     borderWidth: 2,
-    borderColor: Colors.border.dark,
+    borderColor: Colors.borderDark,
   },
   serialChipSelected: {
-    backgroundColor: Colors.status.success,
-    borderColor: Colors.status.success,
+    backgroundColor: Colors.success,
+    borderColor: Colors.success,
   },
   serialChipText: {
     fontSize: 13,
-    color: Colors.text.primary,
+    color: Colors.text,
     fontWeight: '600',
   },
   serialChipTextSelected: {
-    color: Colors.text.white,
+    color: Colors.textWhite,
   },
   signatureSection: {
     marginTop: 20,
     marginBottom: 20,
   },
   signaturePreview: {
-    backgroundColor: Colors.background.card,
+    backgroundColor: Colors.backgroundCard,
     borderRadius: 12,
     padding: 20,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: Colors.status.success,
+    borderColor: Colors.success,
   },
   signatureStatus: {
     fontSize: 16,
-    color: Colors.status.success,
+    color: Colors.success,
     fontWeight: 'bold',
     marginBottom: 12,
   },
   changeSignatureButton: {
-    backgroundColor: Colors.background.secondary,
+    backgroundColor: Colors.backgroundSecondary,
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 8,
   },
   changeSignatureText: {
     fontSize: 14,
-    color: Colors.text.primary,
+    color: Colors.text,
     fontWeight: '600',
   },
   signButton: {
-    backgroundColor: Colors.modules.arme,
+    backgroundColor: Colors.arme,
     borderRadius: 12,
     padding: 18,
     alignItems: 'center',
@@ -874,7 +967,7 @@ const styles = StyleSheet.create({
   signButtonText: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: Colors.text.white,
+    color: Colors.textWhite,
   },
   signatureContainer: {
     flex: 1,
@@ -891,7 +984,7 @@ const styles = StyleSheet.create({
   },
   endSignatureButton: {
     flex: 1,
-    backgroundColor: Colors.status.success,
+    backgroundColor: Colors.success,
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
@@ -900,11 +993,11 @@ const styles = StyleSheet.create({
   endSignatureText: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: Colors.text.white,
+    color: Colors.textWhite,
   },
   clearSignatureButton: {
     flex: 1,
-    backgroundColor: Colors.status.danger,
+    backgroundColor: Colors.danger,
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
@@ -913,30 +1006,30 @@ const styles = StyleSheet.create({
   clearSignatureText: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: Colors.text.white,
+    color: Colors.textWhite,
   },
   emptyCard: {
-    backgroundColor: Colors.background.card,
+    backgroundColor: Colors.backgroundCard,
     borderRadius: 12,
     padding: 40,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: Colors.border.light,
+    borderColor: Colors.borderLight,
     ...Shadows.small,
   },
   emptyText: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: Colors.text.primary,
+    color: Colors.text,
     marginBottom: 8,
   },
   emptySubtext: {
     fontSize: 14,
-    color: Colors.text.secondary,
+    color: Colors.textSecondary,
     textAlign: 'center',
   },
   returnButton: {
-    backgroundColor: Colors.status.warning,
+    backgroundColor: Colors.warning,
     borderRadius: 12,
     padding: 18,
     alignItems: 'center',
@@ -949,7 +1042,7 @@ const styles = StyleSheet.create({
   returnButtonText: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: Colors.text.white,
+    color: Colors.textWhite,
   },
 });
 

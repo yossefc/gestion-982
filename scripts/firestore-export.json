@@ -1,0 +1,760 @@
+{
+  "exportDate": "2026-01-16T08:32:39.847Z",
+  "collections": {
+    "soldiers": [
+      {
+        "id": "JrVLDLWhsmhrFYKBnd20",
+        "company": "׳₪׳׳•׳'׳" ׳",
+        "searchKey": "׳׳¨׳§׳• 425361 ׳₪׳׳•׳'׳" ׳",
+        "createdAt": {
+          "type": "firestore/timestamp/1.0",
+          "seconds": 1768228050,
+          "nanoseconds": 906000000
+        },
+        "nameLower": "׳׳¨׳§׳•",
+        "personalNumber": "425361",
+        "updatedAt": {
+          "type": "firestore/timestamp/1.0",
+          "seconds": 1768228050,
+          "nanoseconds": 906000000
+        },
+        "name": "׳׳¨׳§׳•"
+      },
+      {
+        "id": "Nxf1svVXWf7gwjIiAbwa",
+        "department": "׳",
+        "phone": "0585789456",
+        "name": "׳׳׳™׳©׳'׳¢",
+        "nameLower": "׳׳׳™׳©׳'׳¢",
+        "company": "׳₪׳׳•׳'׳" ׳",
+        "searchKey": "׳׳׳™׳©׳'׳¢ 123456 0585789456 ׳₪׳׳•׳'׳" ׳",
+        "personalNumber": "123456",
+        "updatedAt": {
+          "type": "firestore/timestamp/1.0",
+          "seconds": 1766922380,
+          "nanoseconds": 603000000
+        },
+        "createdAt": {
+          "type": "firestore/timestamp/1.0",
+          "seconds": 1766922380,
+          "nanoseconds": 603000000
+        }
+      },
+      {
+        "id": "OUoQGGaeXoJupzd06959",
+        "searchKey": "׳™׳•׳¡׳£ ׳›׳"׳ ׳–׳¨׳"׳™ 7729185 0542512798",
+        "department": "׳׳₪׳¡׳ ׳׳•׳×",
+        "createdAt": {
+          "type": "firestore/timestamp/1.0",
+          "seconds": 1766671629,
+          "nanoseconds": 163000000
+        },
+        "personalNumber": "7729185",
+        "phone": "0542512798",
+        "company": "׳׳₪׳§׳"׳"",
+        "nameLower": "׳™׳•׳¡׳£ ׳›׳"׳ ׳–׳¨׳"׳™",
+        "name": "׳™׳•׳¡׳£ ׳›׳"׳ ׳–׳¨׳"׳™"
+      },
+      {
+        "id": "WoBqrYDux3kxmU0CGjBu",
+        "personalNumber": "11111",
+        "updatedAt": {
+          "type": "firestore/timestamp/1.0",
+          "seconds": 1768227919,
+          "nanoseconds": 113000000
+        },
+        "searchKey": "׳˜׳™׳˜׳˜ 11111 363669999 ׳₪׳׳•׳'׳" ׳"",
+        "company": "׳₪׳׳•׳'׳" ׳"",
+        "nameLower": "׳˜׳™׳˜׳˜",
+        "phone": "363669999",
+        "createdAt": {
+          "type": "firestore/timestamp/1.0",
+          "seconds": 1768227919,
+          "nanoseconds": 113000000
+        },
+        "name": "׳˜׳™׳˜׳˜"
+      },
+      {
+        "id": "YondB1K4WM4QDa6WN5Ud",
+        "department": "׳›׳™׳×׳" 1",
+        "personalNumber": "1111111",
+        "searchKey": "׳׳©׳" 1111111 0543333333 ׳₪׳׳•׳'׳" ׳'",
+        "createdAt": {
+          "type": "firestore/timestamp/1.0",
+          "seconds": 1766910108,
+          "nanoseconds": 380000000
+        },
+        "phone": "0543333333",
+        "company": "׳₪׳׳•׳'׳" ׳'",
+        "nameLower": "׳׳©׳"",
+        "updatedAt": {
+          "type": "firestore/timestamp/1.0",
+          "seconds": 1766910108,
+          "nanoseconds": 380000000
+        },
+        "name": "׳׳©׳""
+      },
+      {
+        "id": "YvVTXsN73h0P5wfChVGg",
+        "department": "׳",
+        "personalNumber": "33333333",
+        "searchKey": "׳"׳•׳" 33333333 36963258 ׳₪׳׳•׳'׳" ׳"",
+        "phone": "36963258",
+        "createdAt": {
+          "type": "firestore/timestamp/1.0",
+          "seconds": 1766910542,
+          "nanoseconds": 127000000
+        },
+        "company": "׳₪׳׳•׳'׳" ׳"",
+        "nameLower": "׳"׳•׳"",
+        "updatedAt": {
+          "type": "firestore/timestamp/1.0",
+          "seconds": 1766910542,
+          "nanoseconds": 127000000
+        },
+        "name": "׳"׳•׳""
+      }
+    ],
+    "users": [
+      {
+        "id": "dIjIXbxovxd8iDRSMPe6LIjIN472",
+        "createdAt": {
+          "type": "firestore/timestamp/1.0",
+          "seconds": 1766613600,
+          "nanoseconds": 740000000
+        },
+        "email": "yossefcohzar@gmail.com",
+        "role": "admin",
+        "name": "׳׳ ׳"׳ ׳׳¢׳¨׳›׳×"
+      }
+    ],
+    "soldier_equipment": [
+      {
+        "id": "Nxf1svVXWf7gwjIiAbwa",
+        "soldierPhone": "0585789456",
+        "lastUpdated": {
+          "type": "firestore/timestamp/1.0",
+          "seconds": 1768227458,
+          "nanoseconds": 528000000
+        },
+        "soldierName": "׳׳׳™׳©׳'׳¢",
+        "soldierPersonalNumber": "123456",
+        "items": [
+          {
+            "type": "clothing",
+            "quantity": 4,
+            "equipmentName": "׳׳–׳¨׳•׳",
+            "issuedAt": {
+              "type": "firestore/timestamp/1.0",
+              "seconds": 1767000508,
+              "nanoseconds": 734000000
+            },
+            "equipmentId": "3Q9plHi2J9es4SdEvWUW",
+            "issuedBy": "dIjIXbxovxd8iDRSMPe6LIjIN472"
+          },
+          {
+            "type": "clothing",
+            "equipmentName": "׳×׳"׳",
+            "equipmentId": "AmDMgkltmZJECyeaPyL8",
+            "quantity": 4,
+            "issuedBy": "dIjIXbxovxd8iDRSMPe6LIjIN472",
+            "issuedAt": {
+              "type": "firestore/timestamp/1.0",
+              "seconds": 1767000508,
+              "nanoseconds": 734000000
+            }
+          },
+          {
+            "issuedAt": {
+              "type": "firestore/timestamp/1.0",
+              "seconds": 1767000508,
+              "nanoseconds": 734000000
+            },
+            "issuedBy": "dIjIXbxovxd8iDRSMPe6LIjIN472",
+            "equipmentName": "׳ ׳¢׳׳™׳™׳",
+            "equipmentId": "BJIsCT1c6qKg8U1yXq4B",
+            "quantity": 1,
+            "type": "clothing"
+          }
+        ],
+        "clothingPdfUrl": "https://firebasestorage.googleapis.com/v0/b/gestion-982.firebasestorage.app/o/pdf%2Fassignments%2FNxf1svVXWf7gwjIiAbwa_clothing_issue.pdf?alt=media&token=2f3f477e-4f0a-4e01-b10a-f6bd3d790b24",
+        "soldierCompany": "׳₪׳׳•׳'׳" ׳",
+        "clothingSignature": "data:image/png;base64,iVBORw0KG",
+        "soldierId": "Nxf1svVXWf7gwjIiAbwa",
+        "createdAt": {
+          "type": "firestore/timestamp/1.0",
+          "seconds": 1768227458,
+          "nanoseconds": 528000000
+        }
+      }
+    ],
+    "soldier_holdings": [
+      {
+        "id": "Nxf1svVXWf7gwjIiAbwa_clothing",
+        "outstandingCount": 25,
+        "soldierName": "׳׳׳™׳©׳'׳¢",
+        "hasSignedEquipment": true,
+        "soldierId": "Nxf1svVXWf7gwjIiAbwa",
+        "lastUpdated": {
+          "type": "firestore/timestamp/1.0",
+          "seconds": 1766999409,
+          "nanoseconds": 767000000
+        },
+        "type": "clothing",
+        "soldierPersonalNumber": "123456",
+        "status": "OPEN",
+        "items": [
+          {
+            "serials": [],
+            "equipmentId": "3Q9plHi2J9es4SdEvWUW",
+            "equipmentName": "׳׳–׳¨׳•׳",
+            "quantity": 12
+          },
+          {
+            "equipmentName": "׳×׳"׳",
+            "quantity": 11,
+            "equipmentId": "AmDMgkltmZJECyeaPyL8",
+            "serials": []
+          },
+          {
+            "equipmentId": "BJIsCT1c6qKg8U1yXq4B",
+            "serials": [],
+            "equipmentName": "׳ ׳¢׳׳™׳™׳",
+            "quantity": 2
+          }
+        ]
+      }
+    ],
+    "equipment_combat": [
+      {
+        "id": "3pXx7eqvDufN9oWvWBgE",
+        "createdAt": {
+          "type": "firestore/timestamp/1.0",
+          "seconds": 1766671285,
+          "nanoseconds": 395000000
+        },
+        "hasSubEquipment": false,
+        "name": "׳׳©׳§׳₪׳™ ׳׳™׳׳"",
+        "category": "׳׳•׳₪׳˜׳™׳§׳""
+      },
+      {
+        "id": "8Bn8x7RmUp4qUT7JRgcg",
+        "createdAt": {
+          "type": "firestore/timestamp/1.0",
+          "seconds": 1766671285,
+          "nanoseconds": 125000000
+        },
+        "category": "׳¦׳™׳•׳" ׳׳•׳—׳",
+        "hasSubEquipment": false,
+        "name": "׳•׳¡׳˜ ׳§׳¨׳׳™"
+      },
+      {
+        "id": "Apxv7lLaUV3hAEJWXvO5",
+        "hasSubEquipment": false,
+        "category": "׳׳'׳™׳–׳¨׳™׳",
+        "name": "׳׳•׳₪׳˜׳™׳§׳"",
+        "createdAt": {
+          "type": "firestore/timestamp/1.0",
+          "seconds": 1766671283,
+          "nanoseconds": 373000000
+        }
+      },
+      {
+        "id": "a7qNSzZrY19KUGineqcF",
+        "hasSubEquipment": false,
+        "createdAt": {
+          "type": "firestore/timestamp/1.0",
+          "seconds": 1766671283,
+          "nanoseconds": 655000000
+        },
+        "category": "׳׳'׳™׳–׳¨׳™׳",
+        "name": "׳׳™׳™׳–׳¨"
+      },
+      {
+        "id": "i7TIoFzs321PzUBlrB4k",
+        "category": "׳ ׳©׳§",
+        "hasSubEquipment": true,
+        "name": "׳׳׳'",
+        "createdAt": {
+          "type": "firestore/timestamp/1.0",
+          "seconds": 1766671283,
+          "nanoseconds": 56000000
+        }
+      },
+      {
+        "id": "iH8iKqqNLZmt7ASS0oni",
+        "createdAt": {
+          "type": "firestore/timestamp/1.0",
+          "seconds": 1766671281,
+          "nanoseconds": 920000000
+        },
+        "hasSubEquipment": true,
+        "name": "M203",
+        "category": "׳ ׳©׳§"
+      },
+      {
+        "id": "jKFnJVHs8G0vVjKQ4jNc",
+        "category": "׳ ׳©׳§",
+        "hasSubEquipment": false,
+        "createdAt": {
+          "type": "firestore/timestamp/1.0",
+          "seconds": 1766671282,
+          "nanoseconds": 234000000
+        },
+        "name": "׳§׳׳¢"
+      },
+      {
+        "id": "lNoK9k9QPXhdelXnXBib",
+        "name": "M16",
+        "hasSubEquipment": true,
+        "createdAt": {
+          "type": "firestore/timestamp/1.0",
+          "seconds": 1766671280,
+          "nanoseconds": 425000000
+        },
+        "subEquipments": [
+          {
+            "id": "1",
+            "name": "׳׳—׳¡׳ ׳™׳×"
+          },
+          {
+            "name": "׳¨׳¦׳•׳¢׳"",
+            "id": "2"
+          },
+          {
+            "id": "3",
+            "name": "׳›׳׳™ ׳˜׳¢׳™׳ ׳""
+          }
+        ],
+        "category": "׳ ׳©׳§"
+      },
+      {
+        "id": "rK8pwS5yDy27vP3BuDmr",
+        "createdAt": {
+          "type": "firestore/timestamp/1.0",
+          "seconds": 1766671284,
+          "nanoseconds": 847000000
+        },
+        "hasSubEquipment": false,
+        "name": "׳§׳¡׳"׳"",
+        "category": "׳¦׳™׳•׳" ׳׳•׳—׳"
+      },
+      {
+        "id": "sN7xgQbrX0g2Mai2c2Rt",
+        "name": "׳׳₪׳•׳"",
+        "hasSubEquipment": false,
+        "createdAt": {
+          "type": "firestore/timestamp/1.0",
+          "seconds": 1766671284,
+          "nanoseconds": 438000000
+        },
+        "category": "׳¦׳™׳•׳" ׳׳•׳—׳"
+      },
+      {
+        "id": "tOfm91OmC1SDCKUBYyUs",
+        "createdAt": {
+          "type": "firestore/timestamp/1.0",
+          "seconds": 1768292888,
+          "nanoseconds": 4000000
+        },
+        "subEquipments": [
+          {
+            "id": "1768292882081",
+            "name": "׳—׳•׳¨"
+          },
+          {
+            "name": "׳₪׳•׳",
+            "id": "1768292886948"
+          }
+        ],
+        "category": "׳ ׳©׳§",
+        "serial": "90999",
+        "name": "׳¦׳׳£",
+        "hasSubEquipment": true
+      },
+      {
+        "id": "v5a7WfBMXZpsdb84leF9",
+        "hasSubEquipment": true,
+        "createdAt": {
+          "type": "firestore/timestamp/1.0",
+          "seconds": 1766671282,
+          "nanoseconds": 755000000
+        },
+        "name": "׳ ׳'׳'",
+        "category": "׳ ׳©׳§"
+      },
+      {
+        "id": "xibcri6u6oVbT9RP5GxJ",
+        "hasSubEquipment": false,
+        "name": "׳₪׳ ׳¡",
+        "createdAt": {
+          "type": "firestore/timestamp/1.0",
+          "seconds": 1766671283,
+          "nanoseconds": 933000000
+        },
+        "category": "׳׳'׳™׳–׳¨׳™׳"
+      }
+    ],
+    "equipment_clothing": [
+      {
+        "id": "1vLZDBvtujbwN8YWdDaL",
+        "yamach": 0,
+        "name": "׳׳›׳ ׳¡׳™׳™׳ ׳",
+        "createdAt": {
+          "type": "firestore/timestamp/1.0",
+          "seconds": 1766671287,
+          "nanoseconds": 103000000
+        }
+      },
+      {
+        "id": "5JkYzWgIYWcym5E4drfm",
+        "name": "׳—׳•׳׳¦׳" ׳'",
+        "yamach": 0,
+        "createdAt": {
+          "type": "firestore/timestamp/1.0",
+          "seconds": 1766671286,
+          "nanoseconds": 9000000
+        }
+      },
+      {
+        "id": "5eyQDDTUDPMOanzLeEQK",
+        "createdAt": {
+          "type": "firestore/timestamp/1.0",
+          "seconds": 1766671287,
+          "nanoseconds": 855000000
+        },
+        "name": "׳›׳•׳׳×׳"",
+        "yamach": 0
+      },
+      {
+        "id": "6e3EQdCuUhB8rpUtm7qG",
+        "createdAt": {
+          "type": "firestore/timestamp/1.0",
+          "seconds": 1766671288,
+          "nanoseconds": 914000000
+        },
+        "name": "׳×׳¨׳׳™׳",
+        "yamach": 0
+      },
+      {
+        "id": "ANl0v7UCr5PoBhZH85BO",
+        "name": "׳—׳•׳׳¦׳" ׳",
+        "yamach": 0,
+        "createdAt": {
+          "type": "firestore/timestamp/1.0",
+          "seconds": 1766671286,
+          "nanoseconds": 837000000
+        }
+      },
+      {
+        "id": "C6T0SGStKynKiOVg9DlV",
+        "name": "׳׳›׳ ׳¡׳™׳™׳ ׳'",
+        "yamach": 0,
+        "createdAt": {
+          "type": "firestore/timestamp/1.0",
+          "seconds": 1766671286,
+          "nanoseconds": 575000000
+        }
+      },
+      {
+        "id": "FBDNTCZpOh62JuTNjTkj",
+        "yamach": 0,
+        "name": "׳׳™׳׳™׳™׳"",
+        "createdAt": {
+          "type": "firestore/timestamp/1.0",
+          "seconds": 1766671289,
+          "nanoseconds": 347000000
+        }
+      },
+      {
+        "id": "FooTus449nNmxuIeJHcu",
+        "createdAt": {
+          "type": "firestore/timestamp/1.0",
+          "seconds": 1766671288,
+          "nanoseconds": 653000000
+        },
+        "name": "׳©׳§ ׳©׳™׳ ׳"",
+        "yamach": 0
+      },
+      {
+        "id": "GCNKHLFGLLzXnX9mqbFg",
+        "name": "׳×׳—׳×׳•׳ ׳™׳",
+        "createdAt": {
+          "type": "firestore/timestamp/1.0",
+          "seconds": 1766671290,
+          "nanoseconds": 397000000
+        },
+        "yamach": 0
+      },
+      {
+        "id": "MBhps3tYFRnhcki8zy1L",
+        "name": "׳•׳¡׳˜ ׳׳•׳—׳",
+        "createdAt": {
+          "type": "firestore/timestamp/1.0",
+          "seconds": 1766671288,
+          "nanoseconds": 397000000
+        },
+        "yamach": 0
+      },
+      {
+        "id": "TWHVxsKZgZZkbaUhXlCW",
+        "createdAt": {
+          "type": "firestore/timestamp/1.0",
+          "seconds": 1766671288,
+          "nanoseconds": 145000000
+        },
+        "name": "׳§׳¡׳"׳"",
+        "yamach": 0
+      },
+      {
+        "id": "UsPOJZlNfwXB5pNedkhx",
+        "name": "׳₪׳•׳ ׳¦'׳•",
+        "createdAt": {
+          "type": "firestore/timestamp/1.0",
+          "seconds": 1766671289,
+          "nanoseconds": 619000000
+        },
+        "yamach": 0
+      },
+      {
+        "id": "VzuumKj3a9h5PG4jWSZU",
+        "name": "׳—׳'׳•׳¨׳"",
+        "yamach": 0,
+        "createdAt": {
+          "type": "firestore/timestamp/1.0",
+          "seconds": 1766671289,
+          "nanoseconds": 868000000
+        }
+      },
+      {
+        "id": "qyRjz9Q2OrG7vae2lAw0",
+        "yamach": 0,
+        "createdAt": {
+          "type": "firestore/timestamp/1.0",
+          "seconds": 1766671287,
+          "nanoseconds": 433000000
+        },
+        "name": "׳ ׳¢׳׳™׳™׳"
+      },
+      {
+        "id": "tJeoVpQcTPjG1BDLSlvU",
+        "name": "׳'׳¨׳'׳™׳™׳",
+        "createdAt": {
+          "type": "firestore/timestamp/1.0",
+          "seconds": 1766671290,
+          "nanoseconds": 120000000
+        },
+        "yamach": 0
+      }
+    ],
+    "clothingEquipment": [
+      {
+        "id": "3Q9plHi2J9es4SdEvWUW",
+        "yamach": 0,
+        "name": "׳׳–׳¨׳•׳"
+      },
+      {
+        "id": "AmDMgkltmZJECyeaPyL8",
+        "yamach": 0,
+        "name": "׳×׳"׳"
+      },
+      {
+        "id": "BJIsCT1c6qKg8U1yXq4B",
+        "yamach": 0,
+        "name": "׳ ׳¢׳׳™׳™׳"
+      },
+      {
+        "id": "DB8JoQ3CVMLX0LEys9Gg",
+        "name": "׳׳—׳¡׳ ׳™׳×",
+        "yamach": 0
+      },
+      {
+        "id": "DDy3x4DoFF2N7o8kjZvW",
+        "name": "׳©׳§ ׳©׳™׳ ׳"",
+        "yamach": 0
+      },
+      {
+        "id": "FkCepaop098wXf0FmXQr",
+        "yamach": 0,
+        "name": "׳׳©׳§׳₪׳™ ׳׳'׳ + ׳ ׳¨׳×׳™׳§"
+      },
+      {
+        "id": "GHYJQGJQ7Ycw2N5cV9T3",
+        "yamach": 0,
+        "name": "׳׳›׳ ׳¡׳™׳™׳ ׳'"
+      },
+      {
+        "id": "JGzbUhWxc6BEhItVg1d9",
+        "name": "׳׳¢׳™׳ ׳'",
+        "yamach": 0
+      },
+      {
+        "id": "Ja9qL9sDpIEEHivkjibt",
+        "yamach": 0,
+        "name": "׳×׳¨׳'׳•׳× ׳׳™׳©׳™׳×"
+      },
+      {
+        "id": "KUS8Y5kbJQizJy6Z3Lp8",
+        "yamach": 0,
+        "name": "׳—׳•׳׳¦׳" ׳'"
+      },
+      {
+        "id": "PcjeBg9ZSn3Q3ykPmzYJ",
+        "yamach": 0,
+        "name": "׳—׳•׳¡׳ ׳¢׳•׳¨׳§׳™׳"
+      },
+      {
+        "id": "UG5PrA2bmkhjp2nGYP5Q",
+        "name": "׳—׳׳₪׳¡",
+        "yamach": 0
+      },
+      {
+        "id": "VhGmlTvTYnH78YFRhX3k",
+        "name": "׳—׳'׳•׳¨׳"",
+        "yamach": 0
+      },
+      {
+        "id": "ZRgMrf3aKdElxbLbkPIi",
+        "yamach": 0,
+        "name": "׳׳™׳׳™׳™׳""
+      },
+      {
+        "id": "dqnUE54ooqh8P8DiLAFV",
+        "yamach": 0,
+        "name": "׳˜׳¡׳˜ ׳׳˜׳•׳"
+      },
+      {
+        "id": "ecvgnI1UZivmmWtFBwuR",
+        "yamach": 0,
+        "name": "׳׳¦׳ ׳₪׳×"
+      },
+      {
+        "id": "esVDyGO3nNV5Cs67xKnO",
+        "yamach": 0,
+        "name": "׳'׳¨׳›׳™׳•׳×"
+      },
+      {
+        "id": "ljorT9FLH9ZoFJ4MhZs0",
+        "yamach": 0,
+        "name": "׳׳›׳ ׳¡׳™׳™׳ ׳'"
+      },
+      {
+        "id": "nOo5YJGB9iqFXVNGFEE3",
+        "yamach": 0,
+        "name": "׳§׳¡׳"׳""
+      },
+      {
+        "id": "tY0Pjz09GzFsRUupwZ7s",
+        "name": "׳©׳§ ׳—׳₪׳¦׳™׳",
+        "yamach": 0
+      },
+      {
+        "id": "tstKhsgwsP3HnARrRSRk",
+        "yamach": 0,
+        "name": "׳›׳•׳'׳¢ ׳¢׳'׳•׳"׳""
+      },
+      {
+        "id": "w6snvl5m2l9FY0oEuxhX",
+        "name": "׳—׳•׳׳¦׳" ׳",
+        "yamach": 0
+      },
+      {
+        "id": "xWJk4jWlHbtPm4l9bWQ2",
+        "yamach": 0,
+        "name": "׳˜׳¡׳˜ ׳׳•׳—׳"
+      }
+    ],
+    "assignments": [
+      {
+        "id": "Nxf1svVXWf7gwjIiAbwa_clothing_issue",
+        "assignedBy": "dIjIXbxovxd8iDRSMPe6LIjIN472",
+        "pdfUrl": "https://firebasestorage.googleapis.com/v0/b/gestion-982.firebasestorage.app/o/pdf%2Fassignments%2FNxf1svVXWf7gwjIiAbwa_clothing_issue.pdf?alt=media&token=2f3f477e-4f0a-4e01-b10a-f6bd3d790b24",
+        "assignedByEmail": "yossefcohzar@gmail.com",
+        "assignedByName": "׳׳ ׳"׳ ׳׳¢׳¨׳›׳×",
+        "status": "׳ ׳•׳₪׳§ ׳׳—׳™׳™׳",
+        "signature": "data:image/png;base64,iVBOR",
+        "type": "clothing",
+        "updatedAt": {
+          "type": "firestore/timestamp/1.0",
+          "seconds": 1768227990,
+          "nanoseconds": 383000000
+        },
+        "soldierPersonalNumber": "123456",
+        "soldierPhone": "0585789456",
+        "action": "issue",
+        "items": [
+          {
+            "equipmentId": "3Q9plHi2J9es4SdEvWUW",
+            "equipmentName": "׳׳–׳¨׳•׳",
+            "quantity": 4
+          },
+          {
+            "equipmentId": "AmDMgkltmZJECyeaPyL8",
+            "equipmentName": "׳×׳"׳",
+            "quantity": 4
+          },
+          {
+            "equipmentId": "BJIsCT1c6qKg8U1yXq4B",
+            "equipmentName": "׳ ׳¢׳׳™׳™׳",
+            "quantity": 1
+          },
+          {
+            "equipmentName": "׳׳—׳¡׳ ׳™׳×",
+            "equipmentId": "DB8JoQ3CVMLX0LEys9Gg",
+            "quantity": 3
+          }
+        ],
+        "soldierId": "Nxf1svVXWf7gwjIiAbwa",
+        "soldierName": "׳׳׳™׳©׳'׳¢",
+        "timestamp": {
+          "type": "firestore/timestamp/1.0",
+          "seconds": 1768227990,
+          "nanoseconds": 383000000
+        },
+        "soldierCompany": "׳₪׳׳•׳'׳" ׳"
+      },
+      {
+        "id": "YvVTXsN73h0P5wfChVGg_clothing_issue",
+        "assignedByEmail": "yossefcohzar@gmail.com",
+        "signature": "data:image/png;base64,iVBOR",
+        "soldierPhone": "36963258",
+        "soldierName": "׳"׳•׳"",
+        "type": "clothing",
+        "assignedBy": "dIjIXbxovxd8iDRSMPe6LIjIN472",
+        "items": [
+          {
+            "equipmentId": "3Q9plHi2J9es4SdEvWUW",
+            "equipmentName": "׳׳–׳¨׳•׳",
+            "quantity": 1
+          },
+          {
+            "quantity": 1,
+            "equipmentId": "AmDMgkltmZJECyeaPyL8",
+            "equipmentName": "׳×׳"׳"
+          },
+          {
+            "equipmentId": "BJIsCT1c6qKg8U1yXq4B",
+            "equipmentName": "׳ ׳¢׳׳™׳™׳",
+            "quantity": 1
+          }
+        ],
+        "soldierId": "YvVTXsN73h0P5wfChVGg",
+        "assignedByName": "׳׳ ׳"׳ ׳׳¢׳¨׳›׳×",
+        "status": "׳ ׳•׳₪׳§ ׳׳—׳™׳™׳",
+        "timestamp": {
+          "type": "firestore/timestamp/1.0",
+          "seconds": 1768227958,
+          "nanoseconds": 420000000
+        },
+        "updatedAt": {
+          "type": "firestore/timestamp/1.0",
+          "seconds": 1768227958,
+          "nanoseconds": 420000000
+        },
+        "soldierPersonalNumber": "33333333",
+        "soldierCompany": "׳₪׳׳•׳'׳" ׳"",
+        "action": "issue"
+      }
+    ]
+  }
+}

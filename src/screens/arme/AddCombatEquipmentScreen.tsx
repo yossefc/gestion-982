@@ -15,10 +15,13 @@ import {
   Platform,
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
-import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/colors';
+import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
 import { RootStackParamList, SubEquipment } from '../../types';
-import { addCombatEquipment } from '../../services/equipmentService';
-import { combatEquipmentService } from '../../services/firebaseService';
+import {
+  addCombatEquipment,
+  getCombatEquipmentById,
+  updateCombatEquipment,
+} from '../../services/equipmentService';
 
 type AddCombatEquipmentRouteProp = RouteProp<RootStackParamList, 'AddCombatEquipment'>;
 
@@ -43,7 +46,7 @@ const AddCombatEquipmentScreen: React.FC = () => {
   // Form state
   const [name, setName] = useState('');
   const [category, setCategory] = useState('נשק');
-  const [serial, setSerial] = useState('');
+  const [requiresSerial, setRequiresSerial] = useState(false);
   const [hasSubEquipment, setHasSubEquipment] = useState(false);
   const [subEquipments, setSubEquipments] = useState<SubEquipment[]>([]);
   const [newSubEquipmentName, setNewSubEquipmentName] = useState('');
@@ -58,11 +61,11 @@ const AddCombatEquipmentScreen: React.FC = () => {
 
   const loadEquipment = async () => {
     try {
-      const equipment = await combatEquipmentService.getById(equipmentId!);
+      const equipment = await getCombatEquipmentById(equipmentId!);
       if (equipment) {
         setName(equipment.name);
         setCategory(equipment.category);
-        setSerial(equipment.serial || '');
+        setRequiresSerial((equipment as any).requiresSerial || false);
         setHasSubEquipment(equipment.hasSubEquipment);
         setSubEquipments(equipment.subEquipments || []);
       }
@@ -107,16 +110,16 @@ const AddCombatEquipmentScreen: React.FC = () => {
     try {
       setLoading(true);
 
-      const equipmentData = {
+      const equipmentData: any = {
         name: name.trim(),
         category,
-        serial: serial.trim() || undefined,
         hasSubEquipment,
         subEquipments: hasSubEquipment ? subEquipments : [],
+        requiresSerial,
       };
 
       if (isEditMode && equipmentId) {
-        await combatEquipmentService.update(equipmentId, equipmentData);
+        await updateCombatEquipment(equipmentId, equipmentData);
         Alert.alert('הצלחה', 'הציוד עודכן בהצלחה', [
           { text: 'אישור', onPress: () => navigation.goBack() },
         ]);
@@ -224,18 +227,23 @@ const AddCombatEquipmentScreen: React.FC = () => {
             </View>
           </View>
 
-          {/* מסטב */}
+          {/* דורש מסטב */}
           <View style={styles.section}>
-            <Text style={styles.label}>מספר סידורי (מסטב)</Text>
-            <Text style={styles.labelHint}>אופציונלי - למעקב אחר פריטים ספציפיים</Text>
-            <TextInput
-              style={styles.input}
-              value={serial}
-              onChangeText={setSerial}
-              placeholder="הזן מספר סידורי..."
-              placeholderTextColor={Colors.placeholder}
-              keyboardType="default"
-            />
+            <View style={styles.toggleContainer}>
+              <Switch
+                value={requiresSerial}
+                onValueChange={setRequiresSerial}
+                trackColor={{ false: Colors.border, true: Colors.arme }}
+                thumbColor={Colors.backgroundCard}
+                ios_backgroundColor={Colors.border}
+              />
+              <View style={styles.toggleTextContainer}>
+                <Text style={styles.toggleLabel}>דורש מספר סידורי (מסטב)</Text>
+                <Text style={styles.toggleHint}>
+                  סמן אם כל יחידה של ציוד זה דורשת מסטב ייחודי בהחתמה
+                </Text>
+              </View>
+            </View>
           </View>
 
           {/* רכיבים נוספים */}
@@ -450,6 +458,10 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
     textAlign: 'right',
     color: Colors.text,
+  },
+  inputRequired: {
+    borderColor: Colors.arme,
+    borderWidth: 2,
   },
 
   // Category Grid

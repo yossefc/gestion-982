@@ -1,89 +1,151 @@
-// Écran Dashboard pour le module Vêtement
-import React, { useEffect, useState } from 'react';
+/**
+ * ClothingDashboardScreen.tsx - Tableau de bord vêtements
+ * Design militaire professionnel
+ */
+
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
-  TouchableOpacity,
   StyleSheet,
   ScrollView,
+  TouchableOpacity,
   ActivityIndicator,
+  Platform,
+  Dimensions,
+  RefreshControl,
+  Alert,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
-import { DashboardStats } from '../../types';
-import { Colors, Shadows } from '../../theme/colors';
-import { getAssignmentStats, getAssignmentsByType } from '../../services/assignmentService';
+import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
+import { assignmentService } from '../../services/assignmentService';
+import { soldierService } from '../../services/soldierService';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+interface DashboardStats {
+  totalAssignments: number;
+  openAssignments: number;
+  returnedAssignments: number;
+  totalSoldiers: number;
+  soldiersWithEquipment: number;
+  todayActivity: number;
+  weekActivity: number;
+}
 
 const ClothingDashboardScreen: React.FC = () => {
   const navigation = useNavigation();
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [stats, setStats] = useState<DashboardStats>({
+    totalAssignments: 0,
+    openAssignments: 0,
+    returnedAssignments: 0,
+    totalSoldiers: 0,
+    soldiersWithEquipment: 0,
+    todayActivity: 0,
+    weekActivity: 0,
+  });
+  const [recentActivity, setRecentActivity] = useState<any[]>([]);
 
   useEffect(() => {
-    loadStats();
+    loadDashboardData();
   }, []);
 
-  const loadStats = async () => {
+  const loadDashboardData = async () => {
     try {
-      // Charger les statistiques réelles depuis Firebase
-      const statsData = await getAssignmentStats('clothing');
-      const assignments = await getAssignmentsByType('clothing');
+      setLoading(true);
+      const [assignments, soldiers] = await Promise.all([
+        assignmentService.getAssignmentsByType('clothing'),
+        soldierService.getAll(),
+      ]);
 
-      // Calculer les statistiques par type d'équipement
-      const equipmentByType: { [key: string]: { issued: number; returned: number; pending: number } } = {};
+      // Calculate stats
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-      assignments.forEach(assignment => {
-        assignment.items.forEach(item => {
-          if (!equipmentByType[item.equipmentName]) {
-            equipmentByType[item.equipmentName] = { issued: 0, returned: 0, pending: 0 };
-          }
+      const openAssignments = assignments.filter((a: any) => a.action === 'issue');
+      const returnedAssignments = assignments.filter((a: any) => a.action === 'credit');
 
-          if (assignment.status === 'נופק לחייל') {
-            equipmentByType[item.equipmentName].issued += item.quantity;
-          } else if (assignment.status === 'זוכה') {
-            equipmentByType[item.equipmentName].returned += item.quantity;
-          } else if (assignment.status === 'לא חתום') {
-            equipmentByType[item.equipmentName].pending += item.quantity;
-          }
-        });
+      const todayActivity = assignments.filter((a: any) => {
+        const date = a.timestamp?.toDate?.() || new Date(a.timestamp);
+        return date >= today;
       });
 
-      const dashboardStats: DashboardStats = {
-        totalSoldiers: statsData.total,
-        signedSoldiers: statsData.signed,
-        pendingSoldiers: statsData.pending,
-        returnedEquipment: statsData.returned,
-        equipmentByType: Object.entries(equipmentByType).map(([name, counts]) => ({
-          name,
-          ...counts,
-        })),
-      };
+      const weekActivity = assignments.filter((a: any) => {
+        const date = a.timestamp?.toDate?.() || new Date(a.timestamp);
+        return date >= weekAgo;
+      });
 
-      setStats(dashboardStats);
+      // Calculer le nombre de soldats qui ont actuellement de l'équipement
+      const soldiersWithHoldings = await assignmentService.getSoldiersWithCurrentHoldings('clothing');
+      const soldiersWithEquipment = soldiersWithHoldings.length;
+
+      setStats({
+        totalAssignments: assignments.length,
+        openAssignments: openAssignments.length,
+        returnedAssignments: returnedAssignments.length,
+        totalSoldiers: soldiers.length,
+        soldiersWithEquipment,
+        todayActivity: todayActivity.length,
+        weekActivity: weekActivity.length,
+      });
+
+      // Recent activity
+      const recent = assignments
+        .sort((a: any, b: any) => {
+          const dateA = a.timestamp?.toDate?.() || new Date(a.timestamp);
+          const dateB = b.timestamp?.toDate?.() || new Date(b.timestamp);
+          return dateB.getTime() - dateA.getTime();
+        })
+        .slice(0, 5);
+      setRecentActivity(recent);
+
     } catch (error) {
-      console.error('Error loading stats:', error);
+      console.error('Error loading dashboard:', error);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
+  };
+
+  const StatCard = ({
+    title,
+    value,
+    icon,
+    color,
+    lightColor,
+    subtitle,
+  }: {
+    title: string;
+    value: number;
+    icon: string;
+    color: string;
+    lightColor: string;
+    subtitle?: string;
+  }) => (
+    <View style={[styles.statCard, { borderLeftColor: color }]}>
+      <View style={[styles.statIconContainer, { backgroundColor: lightColor }]}>
+        <Ionicons name={icon as any} size={24} color={color} />
+      </View>
+      <Text style={styles.statValue}>{value}</Text>
+      <Text style={styles.statTitle}>{title}</Text>
+      {subtitle && <Text style={styles.statSubtitle}>{subtitle}</Text>}
+    </View>
+  );
+
+  const formatDate = (date: any) => {
+    const d = date?.toDate?.() || new Date(date);
+    return d.toLocaleDateString('he-IL', { day: 'numeric', month: 'short' });
   };
 
   if (loading) {
     return (
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}
-          >
-            <Text style={styles.backButtonText}>←</Text>
-          </TouchableOpacity>
-          <View style={styles.headerContent}>
-            <Text style={styles.title}>דאשבורד ביגוד</Text>
-            <Text style={styles.subtitle}>סטטיסטיקות ודוחות</Text>
-          </View>
-        </View>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={Colors.modules.vetement} />
-        </View>
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={Colors.vetement} />
+        <Text style={styles.loadingText}>טוען נתונים...</Text>
       </View>
     );
   }
@@ -96,84 +158,165 @@ const ClothingDashboardScreen: React.FC = () => {
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <Text style={styles.backButtonText}>←</Text>
+          <Ionicons name="arrow-forward" size={24} color={Colors.textWhite} />
         </TouchableOpacity>
-        <View style={styles.headerContent}>
-          <Text style={styles.title}>דאשבורד ביגוד</Text>
-          <Text style={styles.subtitle}>📊 סטטיסטיקות ודוחות</Text>
+
+        <View style={styles.headerTitleContainer}>
+          <Text style={styles.headerTitle}>דאשבורד ביגוד</Text>
+          <Text style={styles.headerSubtitle}>סטטיסטיקות ודוחות</Text>
         </View>
+
+        <TouchableOpacity
+          style={styles.refreshButton}
+          onPress={loadDashboardData}
+        >
+          <Ionicons name="refresh" size={24} color={Colors.textWhite} />
+        </TouchableOpacity>
       </View>
 
-      <ScrollView 
-        style={styles.content} 
-        showsVerticalScrollIndicator={false}
+      <ScrollView
+        style={styles.content}
         contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => {
+              setRefreshing(true);
+              loadDashboardData();
+            }}
+            colors={[Colors.vetement]}
+          />
+        }
       >
-        {/* Main Stats */}
-        <View style={styles.statsGrid}>
-          <View style={[styles.statCard, { backgroundColor: '#3498db' }]}>
-            <Text style={styles.statNumber}>{stats?.totalSoldiers || 0}</Text>
-            <Text style={styles.statLabel}>סך הכל חיילים</Text>
+        {/* Quick Stats Row */}
+        <View style={styles.quickStatsRow}>
+          <View style={[styles.quickStat, { backgroundColor: Colors.successLight }]}>
+            <Ionicons name="today" size={20} color={Colors.success} />
+            <Text style={[styles.quickStatValue, { color: Colors.success }]}>{stats.todayActivity}</Text>
+            <Text style={styles.quickStatLabel}>היום</Text>
           </View>
-          <View style={[styles.statCard, { backgroundColor: '#27ae60' }]}>
-            <Text style={styles.statNumber}>{stats?.signedSoldiers || 0}</Text>
-            <Text style={styles.statLabel}>חתומים</Text>
+          <View style={[styles.quickStat, { backgroundColor: Colors.infoLight }]}>
+            <Ionicons name="calendar" size={20} color={Colors.info} />
+            <Text style={[styles.quickStatValue, { color: Colors.info }]}>{stats.weekActivity}</Text>
+            <Text style={styles.quickStatLabel}>השבוע</Text>
           </View>
-          <View style={[styles.statCard, { backgroundColor: '#e67e22' }]}>
-            <Text style={styles.statNumber}>{stats?.pendingSoldiers || 0}</Text>
-            <Text style={styles.statLabel}>ממתינים</Text>
-          </View>
-          <View style={[styles.statCard, { backgroundColor: '#9b59b6' }]}>
-            <Text style={styles.statNumber}>{stats?.returnedEquipment || 0}</Text>
-            <Text style={styles.statLabel}>זוכו</Text>
+          <View style={[styles.quickStat, { backgroundColor: Colors.warningLight }]}>
+            <Ionicons name="people" size={20} color={Colors.warning} />
+            <Text style={[styles.quickStatValue, { color: Colors.warning }]}>{stats.soldiersWithEquipment}</Text>
+            <Text style={styles.quickStatLabel}>עם ציוד</Text>
           </View>
         </View>
 
-        {/* Equipment Breakdown */}
-        <Text style={styles.sectionTitle}>פירוט לפי סוג ציוד</Text>
-        {stats?.equipmentByType && stats.equipmentByType.length > 0 ? (
-          <View style={styles.equipmentList}>
-            {stats.equipmentByType.map((item, index) => (
-              <View key={index} style={styles.equipmentCard}>
-                <View style={styles.equipmentHeader}>
-                  <Text style={styles.equipmentName}>{item.name}</Text>
-                </View>
-                <View style={styles.equipmentStats}>
-                  <View style={styles.equipmentStat}>
-                    <Text style={styles.equipmentStatValue}>{item.issued}</Text>
-                    <Text style={styles.equipmentStatLabel}>הונפק</Text>
-                  </View>
-                  <View style={styles.equipmentStat}>
-                    <Text style={styles.equipmentStatValue}>{item.pending}</Text>
-                    <Text style={styles.equipmentStatLabel}>ממתין</Text>
-                  </View>
-                  <View style={styles.equipmentStat}>
-                    <Text style={styles.equipmentStatValue}>{item.returned}</Text>
-                    <Text style={styles.equipmentStatLabel}>הוחזר</Text>
-                  </View>
-                </View>
-              </View>
-            ))}
-          </View>
-        ) : (
-          <View style={styles.emptyCard}>
-            <Text style={styles.emptyText}>אין נתוני ציוד זמינים</Text>
-          </View>
-        )}
+        {/* Main Stats */}
+        <Text style={styles.sectionTitle}>סטטיסטיקות כלליות</Text>
+        <View style={styles.statsGrid}>
+          <StatCard
+            title="סה״כ החתמות"
+            value={stats.totalAssignments}
+            icon="documents"
+            color={Colors.vetement}
+            lightColor={Colors.vetementLight}
+          />
+          <StatCard
+            title="החתמות פתוחות"
+            value={stats.openAssignments}
+            icon="time"
+            color={Colors.warning}
+            lightColor={Colors.warningLight}
+          />
+          <StatCard
+            title="הוחזרו"
+            value={stats.returnedAssignments}
+            icon="checkmark-done"
+            color={Colors.success}
+            lightColor={Colors.successLight}
+          />
+          <StatCard
+            title="חיילים במערכת"
+            value={stats.totalSoldiers}
+            icon="people"
+            color={Colors.info}
+            lightColor={Colors.infoLight}
+          />
+        </View>
 
         {/* Recent Activity */}
         <Text style={styles.sectionTitle}>פעילות אחרונה</Text>
-        <View style={styles.emptyCard}>
-          <Text style={styles.emptyText}>אין פעילות אחרונה</Text>
+        <View style={styles.activityCard}>
+          {recentActivity.length === 0 ? (
+            <View style={styles.emptyActivity}>
+              <Ionicons name="time-outline" size={48} color={Colors.textLight} />
+              <Text style={styles.emptyActivityText}>אין פעילות אחרונה</Text>
+            </View>
+          ) : (
+            recentActivity.map((activity, index) => (
+              <TouchableOpacity
+                key={activity.id || index}
+                style={[
+                  styles.activityItem,
+                  index < recentActivity.length - 1 && styles.activityItemBorder,
+                ]}
+                onPress={() => {
+                  // Afficher les détails de l'activité
+                  const itemsList = activity.items?.map((item: any) => `• ${item.equipmentName} (${item.quantity})`).join('\n') || 'אין פריטים';
+                  const validatorName = activity.assignedByName && !activity.assignedByName.includes('@')
+                    ? activity.assignedByName
+                    : (activity.assignedByEmail ? activity.assignedByEmail.split('@')[0] : 'לא ידוע');
+
+                  Alert.alert(
+                    `${activity.action === 'credit' ? 'זיכוי' : 'החתמה'} - ${activity.soldierName}`,
+                    `תאריך: ${formatDate(activity.timestamp)}\nאושר על ידי: ${validatorName}\n\nפריטים:\n${itemsList}`,
+                    [{ text: 'סגור', style: 'cancel' }]
+                  );
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={[
+                  styles.activityIcon,
+                  { backgroundColor: activity.action === 'credit' ? Colors.successLight : Colors.infoLight },
+                ]}>
+                  <Ionicons
+                    name={activity.action === 'credit' ? 'return-up-back' : 'create'}
+                    size={20}
+                    color={activity.action === 'credit' ? Colors.success : Colors.info}
+                  />
+                </View>
+                <View style={styles.activityContent}>
+                  <Text style={styles.activityTitle}>
+                    {activity.action === 'credit' ? 'זיכוי' : 'החתמה'} - {activity.soldierName}
+                  </Text>
+                  <Text style={styles.activitySubtitle}>
+                    {activity.items?.length || 0} פריטים • {formatDate(activity.timestamp)}
+                  </Text>
+                  <Text style={styles.activityValidator}>
+                    {activity.assignedByName && !activity.assignedByName.includes('@')
+                      ? activity.assignedByName
+                      : (activity.assignedByEmail ? activity.assignedByEmail.split('@')[0] : 'לא ידוע')} ✓
+                  </Text>
+                </View>
+                <Ionicons name="chevron-back" size={20} color={Colors.textLight} />
+              </TouchableOpacity>
+            ))
+          )}
         </View>
 
-        {/* Actions */}
-        <View style={styles.actionsContainer}>
-          <TouchableOpacity style={styles.actionButton}>
-            <Text style={styles.actionButtonText}>📥 ייצוא דוח Excel</Text>
+        {/* Quick Actions */}
+        <Text style={styles.sectionTitle}>פעולות מהירות</Text>
+        <View style={styles.actionsRow}>
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={() => navigation.navigate('SoldierSearch' as never, { mode: 'signature', type: 'clothing' } as never)}
+          >
+            <Ionicons name="create" size={24} color={Colors.vetement} />
+            <Text style={styles.actionButtonText}>החתמה חדשה</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.actionButton}>
-            <Text style={styles.actionButtonText}>📄 יצירת דוח PDF</Text>
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={() => navigation.navigate('SoldierSearch' as never, { mode: 'return', type: 'clothing' } as never)}
+          >
+            <Ionicons name="return-down-back" size={24} color={Colors.warning} />
+            <Text style={styles.actionButtonText}>זיכוי</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -184,155 +327,242 @@ const ClothingDashboardScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background.primary,
+    backgroundColor: Colors.background,
   },
-  header: {
-    backgroundColor: Colors.background.header,
-    paddingTop: 60,
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    ...Shadows.medium,
-  },
-  backButton: {
-    position: 'absolute',
-    left: 20,
-    bottom: 20,
-    padding: 5,
-  },
-  backButtonText: {
-    fontSize: 28,
-    color: Colors.text.white,
-  },
-  headerContent: {
-    alignItems: 'flex-end',
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: Colors.text.white,
-    marginBottom: 5,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.8)',
-  },
-  content: {
-    flex: 1,
-    padding: 20,
-  },
-  scrollContent: {
-    paddingBottom: 100,
-  },
+
   loadingContainer: {
     flex: 1,
+    backgroundColor: Colors.background,
+    alignItems: 'center',
     justifyContent: 'center',
+  },
+
+  loadingText: {
+    marginTop: Spacing.md,
+    fontSize: FontSize.base,
+    color: Colors.textSecondary,
+  },
+
+  // Header
+  header: {
+    backgroundColor: Colors.vetement,
+    paddingTop: Platform.OS === 'ios' ? 50 : 20,
+    paddingBottom: Spacing.xl,
+    paddingHorizontal: Spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderBottomLeftRadius: BorderRadius.xl,
+    borderBottomRightRadius: BorderRadius.xl,
+    ...Shadows.medium,
+  },
+
+  backButton: {
+    width: 44,
+    height: 44,
+    borderRadius: BorderRadius.full,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  headerTitleContainer: {
+    flex: 1,
     alignItems: 'center',
   },
+
+  headerTitle: {
+    fontSize: FontSize.xxl,
+    fontWeight: '700',
+    color: Colors.textWhite,
+  },
+
+  headerSubtitle: {
+    fontSize: FontSize.md,
+    color: 'rgba(255, 255, 255, 0.8)',
+    marginTop: Spacing.xs,
+  },
+
+  refreshButton: {
+    width: 44,
+    height: 44,
+    borderRadius: BorderRadius.full,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  // Content
+  content: {
+    flex: 1,
+  },
+
+  scrollContent: {
+    padding: Spacing.lg,
+    paddingBottom: 100,
+  },
+
+  sectionTitle: {
+    fontSize: FontSize.lg,
+    fontWeight: '600',
+    color: Colors.text,
+    marginBottom: Spacing.md,
+    marginTop: Spacing.lg,
+    textAlign: 'right',
+  },
+
+  // Quick Stats Row
+  quickStatsRow: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+    marginTop: -Spacing.xl,
+  },
+
+  quickStat: {
+    flex: 1,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.md,
+    alignItems: 'center',
+    ...Shadows.small,
+  },
+
+  quickStatValue: {
+    fontSize: FontSize.xl,
+    fontWeight: '700',
+    marginTop: Spacing.xs,
+  },
+
+  quickStatLabel: {
+    fontSize: FontSize.xs,
+    color: Colors.textSecondary,
+    marginTop: Spacing.xs,
+  },
+
+  // Stats Grid
   statsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
-    marginBottom: 25,
+    gap: Spacing.md,
   },
+
   statCard: {
-    flex: 1,
-    minWidth: '47%',
-    padding: 20,
-    borderRadius: 12,
+    backgroundColor: Colors.backgroundCard,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.lg,
+    width: (SCREEN_WIDTH - Spacing.lg * 3) / 2,
+    borderLeftWidth: 4,
+    ...Shadows.small,
+  },
+
+  statIconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: BorderRadius.md,
     alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.sm,
+  },
+
+  statValue: {
+    fontSize: FontSize.xxxl,
+    fontWeight: '700',
+    color: Colors.text,
+  },
+
+  statTitle: {
+    fontSize: FontSize.sm,
+    color: Colors.textSecondary,
+    marginTop: Spacing.xs,
+  },
+
+  statSubtitle: {
+    fontSize: FontSize.xs,
+    color: Colors.textLight,
+    marginTop: Spacing.xs,
+  },
+
+  // Activity Card
+  activityCard: {
+    backgroundColor: Colors.backgroundCard,
+    borderRadius: BorderRadius.lg,
+    overflow: 'hidden',
     ...Shadows.small,
   },
-  statNumber: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: Colors.text.white,
+
+  emptyActivity: {
+    padding: Spacing.xxl,
+    alignItems: 'center',
   },
-  statLabel: {
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.9)',
-    marginTop: 8,
-    textAlign: 'center',
+
+  emptyActivityText: {
+    fontSize: FontSize.md,
+    color: Colors.textSecondary,
+    marginTop: Spacing.md,
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: Colors.text.primary,
-    marginBottom: 15,
-    marginTop: 10,
-    textAlign: 'right',
-  },
-  equipmentList: {
-    gap: 12,
-    marginBottom: 25,
-  },
-  equipmentCard: {
-    backgroundColor: Colors.background.card,
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: Colors.border.light,
-    ...Shadows.small,
-  },
-  equipmentHeader: {
-    marginBottom: 15,
-  },
-  equipmentName: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: Colors.text.primary,
-    textAlign: 'right',
-  },
-  equipmentStats: {
+
+  activityItem: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
-  },
-  equipmentStat: {
     alignItems: 'center',
+    padding: Spacing.lg,
   },
-  equipmentStatValue: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: Colors.status.info,
+
+  activityItemBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
   },
-  equipmentStatLabel: {
-    fontSize: 12,
-    color: Colors.text.secondary,
-    marginTop: 4,
-  },
-  emptyCard: {
-    backgroundColor: Colors.background.card,
-    borderRadius: 12,
-    padding: 30,
+
+  activityIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: BorderRadius.full,
     alignItems: 'center',
-    marginBottom: 25,
-    borderWidth: 1,
-    borderColor: Colors.border.light,
-    ...Shadows.small,
+    justifyContent: 'center',
+    marginLeft: Spacing.md,
   },
-  emptyText: {
-    color: Colors.text.secondary,
-    fontSize: 14,
+
+  activityContent: {
+    flex: 1,
+    alignItems: 'flex-end',
   },
-  actionsContainer: {
-    gap: 12,
-    marginBottom: 20,
+
+  activityTitle: {
+    fontSize: FontSize.base,
+    fontWeight: '500',
+    color: Colors.text,
   },
+
+  activitySubtitle: {
+    fontSize: FontSize.sm,
+    color: Colors.textSecondary,
+    marginTop: Spacing.xs,
+  },
+
+  activityValidator: {
+    fontSize: FontSize.xs,
+    color: Colors.success,
+    marginTop: Spacing.xs,
+    fontWeight: '500',
+  },
+
+  // Actions Row
+  actionsRow: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+  },
+
   actionButton: {
-    backgroundColor: Colors.background.card,
-    borderRadius: 12,
-    padding: 16,
+    flex: 1,
+    backgroundColor: Colors.backgroundCard,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.lg,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: Colors.border.light,
     ...Shadows.small,
   },
+
   actionButtonText: {
-    fontSize: 16,
-    color: Colors.status.info,
-    fontWeight: '600',
+    fontSize: FontSize.md,
+    fontWeight: '500',
+    color: Colors.text,
+    marginTop: Spacing.sm,
   },
 });
 

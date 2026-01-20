@@ -12,8 +12,7 @@ import {
   orderBy,
   Timestamp
 } from 'firebase/firestore';
-import { ref, uploadString, getDownloadURL } from 'firebase/storage';
-import { db, storage } from '../config/firebase';
+import { db } from '../config/firebase';
 import { Assignment, AssignmentItem, EquipmentStatus } from '../types';
 
 const COLLECTION_NAME = 'assignments';
@@ -26,35 +25,50 @@ const convertDocToAssignment = (doc: any): Assignment => {
     soldierId: data.soldierId,
     soldierName: data.soldierName,
     soldierPersonalNumber: data.soldierPersonalNumber,
+    soldierPhone: data.soldierPhone,
+    soldierCompany: data.soldierCompany,
     type: data.type,
+    action: data.action, // IMPORTANT: lire le champ action
     items: data.items || [],
     signature: data.signature,
     pdfUrl: data.pdfUrl,
     status: data.status,
     timestamp: data.timestamp?.toDate() || new Date(),
     assignedBy: data.assignedBy,
+    assignedByName: data.assignedByName,
+    assignedByEmail: data.assignedByEmail,
   };
 };
 
-// Récupérer l'assignment actuel d'un soldat (par ID déterministe)
+// DEPRECATED: Cette fonction n'est plus utilisée car les IDs ne sont plus déterministes
+// Utilisez getAssignmentsBySoldier à la place
 export const getCurrentAssignment = async (
   soldierId: string,
   type: 'combat' | 'clothing',
   action?: 'issue' | 'credit'
 ): Promise<Assignment | null> => {
+  console.warn('getCurrentAssignment is deprecated. Use getAssignmentsBySoldier instead.');
+
   try {
-    // Générer l'ID déterministe (même logique que createAssignment)
-    const actionSuffix = action ? `_${action}` : '';
-    const assignmentId = `${soldierId}_${type}${actionSuffix}`;
+    // Récupérer tous les assignments du soldat et retourner le plus récent
+    const assignments = await getAssignmentsBySoldier(soldierId, type);
 
-    const docRef = doc(db, COLLECTION_NAME, assignmentId);
-    const docSnap = await getDoc(docRef);
-
-    if (!docSnap.exists()) {
+    if (assignments.length === 0) {
       return null;
     }
 
-    return convertDocToAssignment(docSnap);
+    // Filtrer par action si spécifié
+    let filtered = assignments;
+    if (action) {
+      filtered = assignments.filter(a => a.action === action);
+    }
+
+    // Retourner le plus récent
+    if (filtered.length === 0) {
+      return null;
+    }
+
+    return filtered[0]; // Déjà trié par timestamp desc
   } catch (error) {
     console.error('Error getting current assignment:', error);
     return null;
@@ -67,6 +81,7 @@ export const getAssignmentsBySoldier = async (
   type?: 'combat' | 'clothing'
 ): Promise<Assignment[]> => {
   try {
+    console.log(`[getAssignmentsBySoldier] Fetching assignments for soldierId: ${soldierId}, type: ${type}`);
     let q;
     if (type) {
       q = query(
@@ -84,7 +99,19 @@ export const getAssignmentsBySoldier = async (
     }
 
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(convertDocToAssignment);
+    console.log(`[getAssignmentsBySoldier] Found ${snapshot.docs.length} documents`);
+    const assignments = snapshot.docs.map(convertDocToAssignment);
+    console.log('[getAssignmentsBySoldier] Converted assignments:',
+      assignments.map(a => ({
+        id: a.id,
+        type: a.type,
+        action: a.action,
+        status: a.status,
+        itemsCount: a.items.length,
+        timestamp: a.timestamp
+      }))
+    );
+    return assignments;
   } catch (error) {
     console.error('Error getting assignments:', error);
     throw error;
@@ -92,6 +119,7 @@ export const getAssignmentsBySoldier = async (
 };
 
 // Récupérer les attributions par type
+// Obtenir par type
 export const getAssignmentsByType = async (type: 'combat' | 'clothing'): Promise<Assignment[]> => {
   try {
     const q = query(
@@ -108,6 +136,22 @@ export const getAssignmentsByType = async (type: 'combat' | 'clothing'): Promise
   }
 };
 
+// Obtenir tous les assignments (sans filtre de type)
+export const getAll = async (): Promise<Assignment[]> => {
+  try {
+    const q = query(
+      collection(db, COLLECTION_NAME),
+      orderBy('timestamp', 'desc')
+    );
+
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(convertDocToAssignment);
+  } catch (error) {
+    console.error('Error getting all assignments:', error);
+    throw error;
+  }
+};
+
 // Calculer l'équipement actuellement détenu par un soldat
 // Scanne tous les assignments (issue/credit) et calcule le solde actuel
 export const calculateCurrentHoldings = async (
@@ -116,6 +160,10 @@ export const calculateCurrentHoldings = async (
 ): Promise<AssignmentItem[]> => {
   try {
     const assignments = await getAssignmentsBySoldier(soldierId, type);
+
+    console.log(`[calculateCurrentHoldings] soldierId: ${soldierId}, type: ${type}`);
+    console.log(`[calculateCurrentHoldings] Found ${assignments.length} assignments:`,
+      assignments.map(a => ({ id: a.id, action: a.action, items: a.items.length, timestamp: a.timestamp })));
 
     // Map pour accumuler les items: equipmentId -> item
     const itemsMap = new Map<string, AssignmentItem>();
@@ -129,11 +177,14 @@ export const calculateCurrentHoldings = async (
     sortedAssignments.forEach(assignment => {
       const action = assignment.action || 'issue'; // Par défaut 'issue' si pas d'action
 
+      console.log(`[calculateCurrentHoldings] Processing assignment ${assignment.id}, action: ${action}, items:`, assignment.items);
+
       assignment.items.forEach(item => {
         const existing = itemsMap.get(item.equipmentId);
 
         if (action === 'issue' || action === 'add') {
           // AJOUTER à l'inventaire
+          console.log(`[calculateCurrentHoldings] ADDING item ${item.equipmentId} (${item.equipmentName}), qty: ${item.quantity}`);
           if (existing) {
             existing.quantity += item.quantity;
             // Ajouter le serial s'il existe et n'est pas déjà présent
@@ -147,6 +198,7 @@ export const calculateCurrentHoldings = async (
           }
         } else if (action === 'credit' || action === 'return') {
           // RETIRER de l'inventaire
+          console.log(`[calculateCurrentHoldings] REMOVING item ${item.equipmentId} (${item.equipmentName}), qty: ${item.quantity}`);
           if (existing) {
             existing.quantity -= item.quantity;
 
@@ -167,45 +219,47 @@ export const calculateCurrentHoldings = async (
               itemsMap.delete(item.equipmentId);
             }
           }
+        } else if (action === 'storage') {
+          // אפסון - L'équipement reste au soldat, on ne fait rien
+          // Le statut est géré dans weapons_inventory, pas dans les holdings
+          console.log(`[calculateCurrentHoldings] STORAGE (no change) item ${item.equipmentId} (${item.equipmentName})`);
+          // Ne rien faire - l'équipement reste dans itemsMap tel quel
+        } else if (action === 'retrieve') {
+          // Reprendre du storage - Ne rien faire non plus
+          console.log(`[calculateCurrentHoldings] RETRIEVE (no change) item ${item.equipmentId} (${item.equipmentName})`);
+          // Ne rien faire - l'équipement reste dans itemsMap tel quel
         }
       });
     });
 
     // Retourner les items avec quantity > 0
-    return Array.from(itemsMap.values()).filter(item => item.quantity > 0);
+    const result = Array.from(itemsMap.values()).filter(item => item.quantity > 0);
+    console.log(`[calculateCurrentHoldings] Final result: ${result.length} items`, result);
+    return result;
   } catch (error) {
     console.error('Error calculating current holdings:', error);
     throw error;
   }
 };
 
-// Créer ou mettre à jour une attribution avec signature (UPSERT)
-// Utilise soldierId + type + action comme ID unique pour éviter les doublons
+// Créer une nouvelle attribution avec signature
+// Chaque attribution est un document unique pour conserver l'historique complet
 export const createAssignment = async (
   assignment: Omit<Assignment, 'id' | 'timestamp' | 'pdfUrl'>,
   signatureBase64?: string
 ): Promise<string> => {
   try {
-    // Générer un ID déterministe basé sur soldierId, type, et action
-    // Format: {soldierId}_{type}_{action} si action existe
-    // Format: {soldierId}_{type} si pas d'action (pour compatibilité)
-    const actionSuffix = assignment.action ? `_${assignment.action}` : '';
-    const assignmentId = `${assignment.soldierId}_${assignment.type}${actionSuffix}`;
-    const docRef = doc(db, COLLECTION_NAME, assignmentId);
-
-    let signatureUrl: string | undefined = undefined;
-
-    // Upload de la signature si fournie (remplace l'ancienne)
-    if (signatureBase64) {
-      const signatureRef = ref(
-        storage,
-        `signatures/${assignmentId}.png`
-      );
-      await uploadString(signatureRef, signatureBase64, 'data_url');
-      signatureUrl = await getDownloadURL(signatureRef);
-    }
+    console.log('[createAssignment] Creating assignment:', {
+      soldierId: assignment.soldierId,
+      type: assignment.type,
+      action: assignment.action,
+      itemsCount: assignment.items.length,
+      status: assignment.status
+    });
 
     // Construire les données
+    // Note: On stocke la signature directement en base64 dans Firestore
+    // Les signatures sont petites (~10-50KB), donc acceptable dans Firestore
     const data: any = {
       soldierId: assignment.soldierId,
       soldierName: assignment.soldierName,
@@ -234,17 +288,27 @@ export const createAssignment = async (
     if (assignment.assignedByEmail) {
       data.assignedByEmail = assignment.assignedByEmail;
     }
-    if (signatureUrl) {
-      data.signature = signatureUrl;
+    if (signatureBase64) {
+      // Stocker la signature directement en base64 (pas de Storage upload)
+      data.signature = signatureBase64;
     }
 
-    // UPSERT: créer ou mettre à jour le document existant
-    // merge:true pour METTRE À JOUR les champs sans tout effacer
-    await setDoc(docRef, data, { merge: true });
+    console.log('[createAssignment] Data to be saved:', {
+      ...data,
+      signature: signatureBase64 ? '(base64 string)' : undefined,
+      items: data.items.map((item: any) => ({
+        equipmentId: item.equipmentId,
+        equipmentName: item.equipmentName,
+        quantity: item.quantity
+      }))
+    });
 
-    console.log(`Assignment ${assignmentId} created/updated successfully (merged)`);
+    // Créer un nouveau document avec ID auto-généré (permet l'historique complet)
+    const docRef = await addDoc(collection(db, COLLECTION_NAME), data);
 
-    return assignmentId;
+    console.log(`[createAssignment] Assignment ${docRef.id} created successfully`);
+
+    return docRef.id;
   } catch (error) {
     console.error('Error creating assignment:', error);
     throw error;
@@ -253,7 +317,7 @@ export const createAssignment = async (
 
 // Mettre à jour le statut d'une attribution
 export const updateAssignmentStatus = async (
-  assignmentId: string, 
+  assignmentId: string,
   status: EquipmentStatus
 ): Promise<void> => {
   try {
@@ -270,7 +334,7 @@ export const updateAssignmentStatus = async (
 
 // Mettre à jour l'URL du PDF
 export const updateAssignmentPdfUrl = async (
-  assignmentId: string, 
+  assignmentId: string,
   pdfUrl: string
 ): Promise<void> => {
   try {
@@ -293,13 +357,13 @@ export const returnEquipment = async (
   try {
     const docRef = doc(db, COLLECTION_NAME, assignmentId);
     const docSnap = await getDoc(docRef);
-    
+
     if (!docSnap.exists()) {
       throw new Error('Attribution non trouvée');
     }
-    
+
     const currentAssignment = convertDocToAssignment(docSnap);
-    
+
     // Mettre à jour les items retournés
     const updatedItems = currentAssignment.items.map(item => {
       const returnedItem = returnedItems.find(ri => ri.equipmentId === item.equipmentId);
@@ -311,10 +375,10 @@ export const returnEquipment = async (
       }
       return item;
     }).filter(item => item.quantity > 0);
-    
+
     // Déterminer le nouveau statut
     const newStatus: EquipmentStatus = updatedItems.length === 0 ? 'זוכה' : 'נופק לחייל';
-    
+
     await updateDoc(docRef, {
       items: updatedItems,
       status: newStatus,
@@ -412,4 +476,22 @@ export const getAssignmentStats = async (type: 'combat' | 'clothing'): Promise<{
     console.error('Error getting assignment stats:', error);
     throw error;
   }
+};
+
+/**
+ * Service object for assignment management
+ */
+export const assignmentService = {
+  getCurrentAssignment,
+  getAssignmentsBySoldier,
+  getAssignmentsByType,
+  calculateCurrentHoldings,
+  create: createAssignment,  // Alias for createAssignment
+  createAssignment,
+  updateAssignmentStatus,
+  updateAssignmentPdfUrl,
+  returnEquipment,
+  getSoldiersWithCurrentHoldings,
+  getAssignmentStats,
+  getAll, // Get all assignments without type filter
 };

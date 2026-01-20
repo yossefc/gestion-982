@@ -1,7 +1,7 @@
 // Composant Empty State réutilisable
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ViewStyle } from 'react-native';
-import { Colors } from '../theme/colors';
+import { Colors } from '../theme/Colors';
 
 interface EmptyStateProps {
   icon?: string;
@@ -25,7 +25,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
       <Text style={styles.icon}>{icon}</Text>
       <Text style={styles.title}>{title}</Text>
       {message && <Text style={styles.message}>{message}</Text>}
-      
+
       {actionLabel && onAction && (
         <TouchableOpacity
           style={styles.button}

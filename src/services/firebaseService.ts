@@ -89,7 +89,7 @@ export const soldierService = {
       });
 
       const docRef = await addDoc(collection(db, COLLECTIONS.SOLDIERS), cleanData);
-      
+
       // Log d'audit
       await logService.logChange({
         entityType: 'soldier',
@@ -99,7 +99,7 @@ export const soldierService = {
         performedBy: auth.currentUser?.uid || 'unknown',
         performedByName: auth.currentUser?.displayName || auth.currentUser?.email || 'Unknown',
       });
-      
+
       return docRef.id;
     } catch (error) {
       logError('soldierService.create', error);
@@ -185,7 +185,7 @@ export const soldierService = {
   ): Promise<{ soldiers: Soldier[]; lastDoc: QueryDocumentSnapshot<DocumentData> | null }> {
     try {
       const limitCount = options?.limitCount || 50;
-      
+
       // Si pas de terme de recherche, retourner liste paginée
       if (!searchTerm || searchTerm.trim() === '') {
         let q = query(
@@ -210,7 +210,7 @@ export const soldierService = {
         }
 
         const querySnapshot = await getDocs(q);
-        
+
         return {
           soldiers: querySnapshot.docs.map(doc => ({
             id: doc.id,
@@ -223,7 +223,7 @@ export const soldierService = {
 
       // Recherche avec terme normalisé
       const normalizedTerm = normalizeText(searchTerm);
-      
+
       let q = query(
         collection(db, COLLECTIONS.SOLDIERS),
         orderBy('searchKey'),
@@ -234,13 +234,13 @@ export const soldierService = {
 
       // Note: impossible de combiner where avec filtre company ET orderBy/startAt sur searchKey
       // Il faudrait un index composite ou filtrer côté client
-      
+
       if (options?.lastDoc) {
         q = query(q, startAfter(options.lastDoc));
       }
 
       const querySnapshot = await getDocs(q);
-      
+
       let soldiers = querySnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data(),
@@ -266,13 +266,13 @@ export const soldierService = {
   async update(id: string, data: Partial<Soldier>): Promise<void> {
     try {
       const docRef = doc(db, COLLECTIONS.SOLDIERS, id);
-      
+
       // Récupérer les données avant modification (pour l'audit log)
       const before = await this.getById(id);
-      
+
       // Recalculer searchKey si nécessaire
       const updateData: any = { ...data, updatedAt: Timestamp.now() };
-      
+
       if (data.name || data.personalNumber || data.phone || data.company) {
         // Récupérer les données actuelles pour reconstruire searchKey
         const current = before;
@@ -289,7 +289,7 @@ export const soldierService = {
       const cleanUpdateData = removeUndefinedFields(updateData);
 
       await updateDoc(docRef, cleanUpdateData);
-      
+
       // Log d'audit
       await logService.logChange({
         entityType: 'soldier',
@@ -311,9 +311,9 @@ export const soldierService = {
     try {
       // Récupérer les données avant suppression (pour l'audit log)
       const before = await this.getById(id);
-      
+
       await deleteDoc(doc(db, COLLECTIONS.SOLDIERS, id));
-      
+
       // Log d'audit
       await logService.logChange({
         entityType: 'soldier',
@@ -338,9 +338,9 @@ export const soldierService = {
         orderBy('nameLower', 'asc'),
         firestoreLimit(limitCount)
       );
-      
+
       const querySnapshot = await getDocs(q);
-      
+
       return querySnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data(),
@@ -359,10 +359,29 @@ export const soldierService = {
 
 export const combatEquipmentService = {
   // Créer un équipement
-  async create(equipmentData: Omit<CombatEquipment, 'id'>): Promise<string> {
+  async create(equipmentData: Omit<CombatEquipment, 'id'>): Promise<CombatEquipment> {
     try {
-      const docRef = await addDoc(collection(db, COLLECTIONS.COMBAT_EQUIPMENT), equipmentData);
-      return docRef.id;
+      // Nettoyer les valeurs undefined (Firestore ne les accepte pas)
+      const cleanData: any = {
+        name: equipmentData.name,
+        category: equipmentData.category,
+        hasSubEquipment: equipmentData.hasSubEquipment || false,
+        requiresSerial: (equipmentData as any).requiresSerial || false,
+      };
+
+      // Les sous-équipements (sans serial au niveau du catalogue)
+      if (equipmentData.subEquipments && equipmentData.subEquipments.length > 0) {
+        cleanData.subEquipments = equipmentData.subEquipments.map(sub => ({
+          id: sub.id,
+          name: sub.name,
+        }));
+      }
+
+      const docRef = await addDoc(collection(db, COLLECTIONS.COMBAT_EQUIPMENT), cleanData);
+      return {
+        id: docRef.id,
+        ...cleanData,
+      };
     } catch (error) {
       console.error('Error creating combat equipment:', error);
       throw error;
@@ -424,7 +443,9 @@ export const combatEquipmentService = {
   async update(id: string, data: Partial<CombatEquipment>): Promise<void> {
     try {
       const docRef = doc(db, COLLECTIONS.COMBAT_EQUIPMENT, id);
-      await updateDoc(docRef, data);
+      // Nettoyer les valeurs undefined avant d'envoyer à Firestore
+      const cleanData = removeUndefinedFields(data);
+      await updateDoc(docRef, cleanData);
     } catch (error) {
       console.error('Error updating combat equipment:', error);
       throw error;
@@ -448,12 +469,45 @@ export const combatEquipmentService = {
 
 export const clothingEquipmentService = {
   // Créer un équipement
-  async create(equipmentData: Omit<ClothingEquipment, 'id'>): Promise<string> {
+  async create(equipmentData: Omit<ClothingEquipment, 'id'>): Promise<ClothingEquipment> {
     try {
-      const docRef = await addDoc(collection(db, COLLECTIONS.CLOTHING_EQUIPMENT), equipmentData);
-      return docRef.id;
+      // Nettoyer les valeurs undefined (Firestore ne les accepte pas)
+      const cleanData: any = {
+        name: equipmentData.name,
+      };
+
+      // Ajouter seulement les champs définis
+      if (equipmentData.yamach !== undefined && equipmentData.yamach !== null) {
+        cleanData.yamach = equipmentData.yamach;
+      }
+
+      const docRef = await addDoc(collection(db, COLLECTIONS.CLOTHING_EQUIPMENT), cleanData);
+      return {
+        id: docRef.id,
+        ...cleanData,
+      };
     } catch (error) {
       console.error('Error creating clothing equipment:', error);
+      throw error;
+    }
+  },
+
+  // Obtenir un équipement par ID
+  async getById(id: string): Promise<ClothingEquipment | null> {
+    try {
+      const docRef = doc(db, COLLECTIONS.CLOTHING_EQUIPMENT, id);
+      const docSnap = await getDoc(docRef);
+
+      if (docSnap.exists()) {
+        return {
+          id: docSnap.id,
+          ...docSnap.data(),
+        } as ClothingEquipment;
+      }
+
+      return null;
+    } catch (error) {
+      console.error('Error getting clothing equipment by id:', error);
       throw error;
     }
   },
@@ -476,7 +530,9 @@ export const clothingEquipmentService = {
   async update(id: string, data: Partial<ClothingEquipment>): Promise<void> {
     try {
       const docRef = doc(db, COLLECTIONS.CLOTHING_EQUIPMENT, id);
-      await updateDoc(docRef, data);
+      // Nettoyer les valeurs undefined avant d'envoyer à Firestore
+      const cleanData = removeUndefinedFields(data);
+      await updateDoc(docRef, cleanData);
     } catch (error) {
       console.error('Error updating clothing equipment:', error);
       throw error;
@@ -983,8 +1039,26 @@ export const dashboardService = {
       const assignments = await assignmentService.getByType('clothing');
       const soldiers = await soldierService.getAll();
 
-      const signedSoldiers = assignments.filter(a => a.status === 'נופק לחייל').length;
-      const pendingSoldiers = assignments.filter(a => a.status === 'לא חתום').length;
+      // Calculer les soldats uniques qui détiennent de l'équipement (Signed)
+      // On regroupe par soldat et on calcule le solde net (Issue/Add - Credit/Return)
+      const soldierHoldings = new Map<string, number>();
+      assignments.forEach(a => {
+        // Ignorer ce qui n'est pas signé (pending)
+        if (a.status === 'לא חתום') return;
+
+        const isCredit = a.action === 'credit' || a.action === 'return' || a.status === 'זוכה';
+        const qty = a.items.reduce((sum, item) => sum + (item.quantity || 0), 0);
+        const current = soldierHoldings.get(a.soldierId) || 0;
+        soldierHoldings.set(a.soldierId, current + (qty * (isCredit ? -1 : 1)));
+      });
+
+      const signedSoldiers = Array.from(soldierHoldings.values()).filter(q => q > 0).length;
+
+      // Calculer les soldats uniques en attente
+      const pendingSoldiers = new Set(
+        assignments.filter(a => a.status === 'לא חתום').map(a => a.soldierId)
+      ).size;
+
       const returnedEquipment = assignments.filter(a => a.status === 'זוכה').length;
 
       // Compter par type d'équipement
@@ -1028,8 +1102,26 @@ export const dashboardService = {
       const assignments = await assignmentService.getByType('combat');
       const soldiers = await soldierService.getAll();
 
-      const signedSoldiers = assignments.filter(a => a.status === 'נופק לחייל').length;
-      const pendingSoldiers = assignments.filter(a => a.status === 'לא חתום').length;
+      // Calculer les soldats uniques qui détiennent de l'équipement (Signed)
+      // On regroupe par soldat et on calcule le solde net (Issue/Add - Credit/Return)
+      const soldierHoldings = new Map<string, number>();
+      assignments.forEach(a => {
+        // Ignorer ce qui n'est pas signé (pending)
+        if (a.status === 'לא חתום') return;
+
+        const isCredit = a.action === 'credit' || a.action === 'return' || a.status === 'זוכה';
+        const qty = a.items.reduce((sum, item) => sum + (item.quantity || 0), 0);
+        const current = soldierHoldings.get(a.soldierId) || 0;
+        soldierHoldings.set(a.soldierId, current + (qty * (isCredit ? -1 : 1)));
+      });
+
+      const signedSoldiers = Array.from(soldierHoldings.values()).filter(q => q > 0).length;
+
+      // Calculer les soldats uniques en attente
+      const pendingSoldiers = new Set(
+        assignments.filter(a => a.status === 'לא חתום').map(a => a.soldierId)
+      ).size;
+
       const returnedEquipment = assignments.filter(a => a.status === 'זוכה').length;
 
       // Compter par type d'équipement

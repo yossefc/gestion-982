@@ -2,7 +2,7 @@
 import React, { ReactNode } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ViewStyle } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { Colors, Shadows } from '../theme/colors';
+import { Colors, Shadows } from '../theme/Colors';
 
 interface ScreenHeaderProps {
   title: string;
@@ -38,7 +38,7 @@ export const ScreenHeader: React.FC<ScreenHeaderProps> = ({
           <Text style={styles.backButtonText}>←</Text>
         </TouchableOpacity>
       )}
-      
+
       <View style={styles.titleContainer}>
         <Text style={styles.title}>{title}</Text>
         {subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}

@@ -11,8 +11,9 @@ import {
   RefreshControl,
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
-import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/colors';
-import { dashboardService, manaService, combatEquipmentService } from '../../services/firebaseService';
+import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
+import { dashboardService, manaService } from '../../services/firebaseService';
+import { getAllCombatEquipment } from '../../services/equipmentService';
 import { useAuth } from '../../contexts/AuthContext';
 
 interface MenuItemProps {
@@ -52,7 +53,7 @@ const ArmeHomeScreen: React.FC = () => {
       const [dashboardStats, manot, equipment] = await Promise.all([
         dashboardService.getCombatStats(),
         manaService.getAll(),
-        combatEquipmentService.getAll(),
+        getAllCombatEquipment(),
       ]);
 
       setStats({
@@ -94,12 +95,20 @@ const ArmeHomeScreen: React.FC = () => {
       action: () => navigation.navigate('CombatEquipmentList'),
     },
     {
+      id: 'inventory',
+      title: 'מלאי נשק',
+      subtitle: 'ניהול מסטבים והקצאות',
+      icon: '📋',
+      color: '#9C27B0',
+      action: () => navigation.navigate('WeaponInventoryList'),
+    },
+    {
       id: 'signature',
       title: 'החתמת חייל',
       subtitle: 'הנפקת ציוד לחימה',
       icon: '✍️',
       color: Colors.success,
-      action: () => navigation.navigate('SoldierSearch', { mode: 'combat' }),
+      action: () => navigation.navigate('SoldierSearch', { mode: 'signature', type: 'combat' }),
     },
     {
       id: 'return',
@@ -107,7 +116,23 @@ const ArmeHomeScreen: React.FC = () => {
       subtitle: 'החזרת ציוד לחימה',
       icon: '↩️',
       color: Colors.warning,
-      action: () => navigation.navigate('SoldierSearch', { mode: 'combat-return' }),
+      action: () => navigation.navigate('SoldierSearch', { mode: 'return', type: 'combat' }),
+    },
+    {
+      id: 'storage',
+      title: 'אפסון ציוד',
+      subtitle: 'שמירת ציוד בנשקייה',
+      icon: '🏦',
+      color: '#FF6F00',
+      action: () => navigation.navigate('SoldierSearch', { mode: 'storage', type: 'combat' }),
+    },
+    {
+      id: 'retrieve',
+      title: 'החזרת ציוד מאפסון',
+      subtitle: 'החזרה לחייל מהנשקייה',
+      icon: '📤',
+      color: '#00897B',
+      action: () => navigation.navigate('SoldierSearch', { mode: 'retrieve', type: 'combat' }),
     },
   ];
 
@@ -117,14 +142,14 @@ const ArmeHomeScreen: React.FC = () => {
       title: 'החתמה מהירה',
       icon: '⚡',
       color: Colors.info,
-      action: () => navigation.navigate('SoldierSearch', { mode: 'combat' }),
+      action: () => navigation.navigate('SoldierSearch', { mode: 'signature', type: 'combat' }),
     },
     {
       id: 'quick-pdf',
       title: 'טופס 982',
       icon: '📄',
       color: '#9C27B0',
-      action: () => navigation.navigate('SoldierSearch', { mode: 'pdf-combat' }),
+      action: () => Alert.alert('בקרוב', 'יצירת טופס 982 תהיה זמינה בקרוב'),
     },
     {
       id: 'quick-report',

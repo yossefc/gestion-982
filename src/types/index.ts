@@ -8,6 +8,7 @@ export interface User {
   id: string;
   email: string;
   name: string;
+  displayName?: string; // Display name (alias for name or from Firebase)
   phone?: string;
   role: UserRole;
   createdAt: Date;
@@ -29,7 +30,7 @@ export interface Soldier {
 }
 
 // Statut équipement
-export type EquipmentStatus = 'נופק לחייל' | 'לא חתום' | 'זוכה' | '';
+export type EquipmentStatus = 'נופק לחייל' | 'לא חתום' | 'זוכה' | 'הופקד' | 'אופסן' | '';
 
 // Équipement combat (מנות וציוד)
 export interface CombatEquipment {
@@ -56,7 +57,7 @@ export interface ClothingEquipment {
 }
 
 // Action d'attribution
-export type AssignmentAction = 'issue' | 'add' | 'return' | 'credit';
+export type AssignmentAction = 'issue' | 'add' | 'return' | 'credit' | 'storage' | 'retrieve';
 
 // Attribution d'équipement
 export interface Assignment {
@@ -125,10 +126,19 @@ export type RootStackParamList = {
   AddCombatEquipment: { equipmentId?: string };  // equipmentId optionnel pour mode édition
   CombatAssignment: { soldierId: string };
   CombatReturn: { soldierId: string };
+  CombatStorage: { soldierId: string };
+  CombatRetrieve: { soldierId: string };
+  // Inventaire d'armes
+  WeaponInventoryList: undefined;
+  AddWeaponToInventory: { weaponId?: string };
+  BulkImportWeapons: undefined;
+  AssignWeapon: { weaponId: string };
+  WeaponStorage: undefined;
   // Module Vêtement
   VetementHome: undefined;
   ClothingSignature: { soldierId: string };
   ClothingReturn: { soldierId: string };
+  ClothingStock: undefined;
   ClothingDashboard: undefined;
   ClothingEquipmentManagement: undefined;
   // Admin
@@ -137,8 +147,8 @@ export type RootStackParamList = {
   HoldingsRecalculate: undefined;
   DatabaseDebug: undefined;
   // Signature
-  SignatureScreen: { 
-    soldierId: string; 
+  SignatureScreen: {
+    soldierId: string;
     soldierName: string;
     type: 'combat' | 'clothing';
     items: AssignmentItem[];
@@ -184,4 +194,29 @@ export interface DashboardStats {
     returned: number;
     pending: number;
   }[];
+}
+
+// ============================================
+// INVENTAIRE D'ARMES (ניהול מלאי נשק)
+// ============================================
+
+// Statut d'une arme dans l'inventaire
+export type WeaponStatus = 'available' | 'assigned' | 'storage';
+
+// Item d'inventaire d'arme
+export interface WeaponInventoryItem {
+  id: string;
+  category: string;           // M16, M203, מאג, etc.
+  serialNumber: string;        // מסטב
+  status: WeaponStatus;        // disponible, assigné, ou en אפסון
+  assignedTo?: {
+    soldierId: string;
+    soldierName: string;
+    soldierPersonalNumber: string;
+    assignedDate: Date;
+  };
+  storageDate?: Date;          // Date de mise en אפסון
+  notes?: string;
+  createdAt: Date;
+  updatedAt?: Date;
 }

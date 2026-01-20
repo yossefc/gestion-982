@@ -1,23 +1,30 @@
-// Écran d'accueil du module Vêtement
-import React, { useEffect, useState } from 'react';
+/**
+ * VetementHomeScreen.tsx - Écran d'accueil module Vêtements
+ * Design militaire professionnel
+ */
+
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
-  TouchableOpacity,
   StyleSheet,
   ScrollView,
+  TouchableOpacity,
   ActivityIndicator,
+  Platform,
+  RefreshControl,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
-import { Colors, Shadows } from '../../theme/colors';
+import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
 import { dashboardService } from '../../services/firebaseService';
 
 const VetementHomeScreen: React.FC = () => {
-  const navigation = useNavigation<any>();
+  const navigation = useNavigation();
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [stats, setStats] = useState({
     signed: 0,
-    pending: 0,
     returned: 0,
   });
 
@@ -28,60 +35,129 @@ const VetementHomeScreen: React.FC = () => {
   const loadStats = async () => {
     try {
       const dashboardStats = await dashboardService.getClothingStats();
+
       setStats({
-        signed: dashboardStats.signedSoldiers,
-        pending: dashboardStats.pendingSoldiers,
-        returned: dashboardStats.returnedEquipment,
+        signed: dashboardStats.signedSoldiers || 0,
+        returned: dashboardStats.returnedEquipment || 0,
       });
     } catch (error) {
       console.error('Error loading stats:', error);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
   const menuItems = [
     {
-      id: 'signature',
       title: 'החתמת חייל',
-      subtitle: 'הנפקת ביגוד וציוד אישי',
-      icon: '✍️',
-      color: Colors.status.success,
-      action: () => navigation.navigate('SoldierSearch', { mode: 'clothing', action: 'signature' }),
+      subtitle: 'הנפקת ציוד ביגוד',
+      icon: 'create',
+      color: Colors.success,
+      lightColor: Colors.successLight,
+      onPress: () => navigation.navigate('SoldierSearch' as never, { mode: 'signature', type: 'clothing' } as never),
     },
     {
-      id: 'return',
       title: 'זיכוי חייל',
-      subtitle: 'החזרת ציוד',
-      icon: '↩️',
-      color: Colors.status.warning,
-      action: () => navigation.navigate('SoldierSearch', { mode: 'clothing', action: 'return' }),
+      subtitle: 'החזרת ציוד ביגוד',
+      icon: 'return-down-back',
+      color: Colors.warning,
+      lightColor: Colors.warningLight,
+      onPress: () => navigation.navigate('SoldierSearch' as never, { mode: 'return', type: 'clothing' } as never),
     },
     {
-      id: 'dashboard',
+      title: 'מלאי ביגוד',
+      subtitle: 'פילוח לפי פלוגות',
+      icon: 'cube',
+      color: Colors.vetement,
+      lightColor: Colors.vetementLight,
+      onPress: () => navigation.navigate('ClothingStock' as never),
+    },
+    {
       title: 'דאשבורד',
       subtitle: 'סטטיסטיקות ודוחות',
-      icon: '📊',
-      color: Colors.status.info,
-      action: () => navigation.navigate('ClothingDashboard'),
+      icon: 'stats-chart',
+      color: Colors.info,
+      lightColor: Colors.infoLight,
+      onPress: () => navigation.navigate('ClothingDashboard' as never),
     },
     {
-      id: 'equipmentManagement',
       title: 'ניהול ציוד',
-      subtitle: 'הוספה, עריכה ומחיקת ציוד',
-      icon: '⚙️',
-      color: Colors.military.olive,
-      action: () => navigation.navigate('ClothingEquipmentManagement'),
+      subtitle: 'עריכת רשימת הציוד',
+      icon: 'settings',
+      color: Colors.olive,
+      lightColor: Colors.olive + '20',
+      onPress: () => navigation.navigate('ClothingEquipmentManagement' as never),
     },
     {
-      id: 'addSoldier',
       title: 'הוספת חייל',
-      subtitle: 'רישום חייל חדש במערכת',
-      icon: '👤',
-      color: Colors.military.navyBlue,
-      action: () => navigation.navigate('AddSoldier'),
+      subtitle: 'רישום חייל חדש',
+      icon: 'person-add',
+      color: Colors.soldats,
+      lightColor: Colors.soldatsLight,
+      onPress: () => navigation.navigate('AddSoldier' as never),
     },
   ];
+
+  const StatCard = ({
+    title,
+    value,
+    icon,
+    color,
+    lightColor,
+  }: {
+    title: string;
+    value: number;
+    icon: string;
+    color: string;
+    lightColor: string;
+  }) => (
+    <View style={[styles.statCard, { backgroundColor: lightColor }]}>
+      <Ionicons name={icon as any} size={24} color={color} />
+      <Text style={[styles.statValue, { color }]}>{value}</Text>
+      <Text style={styles.statLabel}>{title}</Text>
+    </View>
+  );
+
+  const MenuItem = ({
+    title,
+    subtitle,
+    icon,
+    color,
+    lightColor,
+    onPress
+  }: {
+    title: string;
+    subtitle: string;
+    icon: string;
+    color: string;
+    lightColor: string;
+    onPress: () => void;
+  }) => (
+    <TouchableOpacity
+      style={styles.menuItem}
+      onPress={onPress}
+      activeOpacity={0.7}
+    >
+      <View style={[styles.menuIconContainer, { backgroundColor: lightColor }]}>
+        <Ionicons name={icon as any} size={28} color={color} />
+      </View>
+      <View style={styles.menuContent}>
+        <Text style={styles.menuTitle}>{title}</Text>
+        <Text style={styles.menuSubtitle}>{subtitle}</Text>
+      </View>
+      <Ionicons name="chevron-back" size={20} color={Colors.textLight} />
+    </TouchableOpacity>
+  );
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={Colors.vetement} />
+        <Text style={styles.loadingText}>טוען נתונים...</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -91,69 +167,68 @@ const VetementHomeScreen: React.FC = () => {
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <Text style={styles.backButtonText}>←</Text>
+          <Ionicons name="arrow-forward" size={24} color={Colors.textWhite} />
         </TouchableOpacity>
-        <View style={styles.headerContent}>
-          <Text style={styles.title}>ביגוד וציוד אישי</Text>
-          <Text style={styles.subtitle}>👕 מערכת ניהול גדוד 982</Text>
+
+        <View style={styles.headerTitleContainer}>
+          <Text style={styles.headerTitle}>ביגוד</Text>
+          <Text style={styles.headerSubtitle}>ניהול ציוד אישי</Text>
         </View>
+
+        <TouchableOpacity
+          style={styles.refreshButton}
+          onPress={loadStats}
+        >
+          <Ionicons name="refresh" size={24} color={Colors.textWhite} />
+        </TouchableOpacity>
       </View>
 
-      <ScrollView 
-        style={styles.content} 
-        showsVerticalScrollIndicator={false}
+      <ScrollView
+        style={styles.content}
         contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => {
+              setRefreshing(true);
+              loadStats();
+            }}
+            colors={[Colors.vetement]}
+          />
+        }
       >
-        {/* Quick Stats */}
-        {loading ? (
-          <View style={styles.loadingStats}>
-            <ActivityIndicator size="small" color={Colors.modules.vetement} />
-          </View>
-        ) : (
-          <View style={styles.statsRow}>
-            <View style={[styles.statCard, { backgroundColor: Colors.status.success }]}>
-              <Text style={styles.statNumber}>{stats.signed}</Text>
-              <Text style={styles.statLabel}>חתומים</Text>
-            </View>
-            <View style={[styles.statCard, { backgroundColor: Colors.status.warning }]}>
-              <Text style={styles.statNumber}>{stats.pending}</Text>
-              <Text style={styles.statLabel}>ממתינים</Text>
-            </View>
-            <View style={[styles.statCard, { backgroundColor: Colors.status.info }]}>
-              <Text style={styles.statNumber}>{stats.returned}</Text>
-              <Text style={styles.statLabel}>זוכו</Text>
-            </View>
-          </View>
-        )}
+        {/* Stats */}
+        <View style={styles.statsRow}>
+          <StatCard
+            title="הוחתמו"
+            value={stats.signed}
+            icon="checkmark-done"
+            color={Colors.success}
+            lightColor={Colors.successLight}
+          />
+          <StatCard
+            title="הוחזרו"
+            value={stats.returned}
+            icon="return-up-back"
+            color={Colors.info}
+            lightColor={Colors.infoLight}
+          />
+        </View>
 
         {/* Menu Items */}
         <Text style={styles.sectionTitle}>פעולות</Text>
-        <View style={styles.menuContainer}>
-          {menuItems.map((item) => (
-            <TouchableOpacity
-              key={item.id}
-              style={styles.menuCard}
-              onPress={item.action}
-              activeOpacity={0.7}
-            >
-              <View style={[styles.menuIcon, { backgroundColor: item.color }]}>
-                <Text style={styles.menuIconText}>{item.icon}</Text>
-              </View>
-              <View style={styles.menuInfo}>
-                <Text style={styles.menuTitle}>{item.title}</Text>
-                <Text style={styles.menuSubtitle}>{item.subtitle}</Text>
-              </View>
-              <Text style={styles.chevron}>›</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+        {menuItems.map((item, index) => (
+          <MenuItem key={index} {...item} />
+        ))}
 
         {/* Info Card */}
         <View style={styles.infoCard}>
-          <Text style={styles.infoTitle}>💡 טיפ</Text>
-          <Text style={styles.infoText}>
-            לחץ על "החתמת חייל" כדי להתחיל הנפקת ציוד חדש, או על "זיכוי חייל" להחזרת ציוד.
-          </Text>
+          <Ionicons name="shirt-outline" size={24} color={Colors.vetement} />
+          <View style={styles.infoContent}>
+            <Text style={styles.infoTitle}>מודול ביגוד</Text>
+            <Text style={styles.infoText}>ניהול ציוד אישי וביגוד לחיילים</Text>
+          </View>
         </View>
       </ScrollView>
     </View>
@@ -163,148 +238,181 @@ const VetementHomeScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background.primary,
+    backgroundColor: Colors.background,
   },
+
+  loadingContainer: {
+    flex: 1,
+    backgroundColor: Colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  loadingText: {
+    marginTop: Spacing.md,
+    fontSize: FontSize.base,
+    color: Colors.textSecondary,
+  },
+
+  // Header
   header: {
-    backgroundColor: Colors.background.header,
-    paddingTop: 60,
-    paddingHorizontal: 20,
-    paddingBottom: 20,
+    backgroundColor: Colors.vetement,
+    paddingTop: Platform.OS === 'ios' ? 50 : 20,
+    paddingBottom: Spacing.xl,
+    paddingHorizontal: Spacing.lg,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    borderBottomLeftRadius: BorderRadius.xl,
+    borderBottomRightRadius: BorderRadius.xl,
     ...Shadows.medium,
   },
+
   backButton: {
-    position: 'absolute',
-    left: 20,
-    bottom: 20,
-    padding: 5,
+    width: 44,
+    height: 44,
+    borderRadius: BorderRadius.full,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  backButtonText: {
-    fontSize: 28,
-    color: Colors.text.white,
+
+  headerTitleContainer: {
+    flex: 1,
+    alignItems: 'center',
   },
-  headerContent: {
-    alignItems: 'flex-end',
+
+  headerTitle: {
+    fontSize: FontSize.xxl,
+    fontWeight: '700',
+    color: Colors.textWhite,
   },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: Colors.text.white,
-    marginBottom: 5,
+
+  headerSubtitle: {
+    fontSize: FontSize.md,
+    color: 'rgba(255, 255, 255, 0.8)',
+    marginTop: Spacing.xs,
   },
-  subtitle: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.8)',
+
+  refreshButton: {
+    width: 44,
+    height: 44,
+    borderRadius: BorderRadius.full,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
+
+  // Content
   content: {
     flex: 1,
-    padding: 20,
   },
+
   scrollContent: {
+    padding: Spacing.lg,
     paddingBottom: 100,
   },
-  loadingStats: {
-    height: 100,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 25,
+
+  sectionTitle: {
+    fontSize: FontSize.lg,
+    fontWeight: '600',
+    color: Colors.text,
+    marginBottom: Spacing.md,
+    marginTop: Spacing.lg,
+    textAlign: 'right',
   },
+
+  // Stats Row
   statsRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 25,
-    gap: 10,
+    gap: Spacing.md,
+    marginTop: -Spacing.xl,
   },
+
   statCard: {
     flex: 1,
-    padding: 16,
-    borderRadius: 12,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.md,
     alignItems: 'center',
     ...Shadows.small,
   },
-  statNumber: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: Colors.text.white,
+
+  statValue: {
+    fontSize: FontSize.xxl,
+    fontWeight: '700',
+    marginTop: Spacing.xs,
   },
+
   statLabel: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.9)',
-    marginTop: 4,
+    fontSize: FontSize.xs,
+    color: Colors.textSecondary,
+    marginTop: Spacing.xs,
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: Colors.text.primary,
-    marginBottom: 15,
-    textAlign: 'right',
-  },
-  menuContainer: {
-    gap: 12,
-    marginBottom: 20,
-  },
-  menuCard: {
+
+  // Menu Items
+  menuItem: {
+    backgroundColor: Colors.backgroundCard,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.lg,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.background.card,
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: Colors.border.light,
-    ...Shadows.medium,
+    marginBottom: Spacing.md,
+    ...Shadows.small,
   },
-  menuIcon: {
-    width: 55,
-    height: 55,
-    borderRadius: 12,
-    justifyContent: 'center',
+
+  menuIconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: BorderRadius.md,
     alignItems: 'center',
-    marginLeft: 15,
+    justifyContent: 'center',
+    marginLeft: Spacing.md,
   },
-  menuIconText: {
-    fontSize: 26,
-  },
-  menuInfo: {
+
+  menuContent: {
     flex: 1,
     alignItems: 'flex-end',
   },
+
   menuTitle: {
-    fontSize: 17,
-    fontWeight: 'bold',
-    color: Colors.text.primary,
-    marginBottom: 4,
+    fontSize: FontSize.base,
+    fontWeight: '600',
+    color: Colors.text,
   },
+
   menuSubtitle: {
-    fontSize: 13,
-    color: Colors.text.secondary,
+    fontSize: FontSize.sm,
+    color: Colors.textSecondary,
+    marginTop: Spacing.xs,
   },
-  chevron: {
-    fontSize: 28,
-    color: Colors.military.navyBlue,
-    marginRight: 5,
-  },
+
+  // Info Card
   infoCard: {
-    backgroundColor: '#e8f4fd',
-    borderRadius: 12,
-    padding: 16,
+    backgroundColor: Colors.vetementLight,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: Spacing.lg,
     borderWidth: 1,
-    borderColor: '#b3d9f2',
-    marginBottom: 20,
+    borderColor: Colors.vetement + '30',
   },
+
+  infoContent: {
+    flex: 1,
+    alignItems: 'flex-end',
+    marginRight: Spacing.md,
+  },
+
   infoTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: Colors.text.primary,
-    marginBottom: 8,
-    textAlign: 'right',
+    fontSize: FontSize.md,
+    fontWeight: '600',
+    color: Colors.vetement,
   },
+
   infoText: {
-    fontSize: 14,
-    color: Colors.text.secondary,
-    lineHeight: 20,
-    textAlign: 'right',
+    fontSize: FontSize.sm,
+    color: Colors.vetement,
+    marginTop: Spacing.xs,
   },
 });
 

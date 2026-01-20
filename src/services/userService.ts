@@ -171,3 +171,21 @@ export const hasArmeAccess = (user: User): boolean => {
 export const hasVetementAccess = (user: User): boolean => {
   return user.role === 'admin' || user.role === 'both' || user.role === 'vetement';
 };
+
+/**
+ * Service object for user management
+ */
+export const userService = {
+  getAll: getAllUsers,
+  getById: getUserById,
+  getByEmail: getUserByEmail,
+  add: addUser,
+  update: updateUser,
+  updateRole: updateUserRole,
+  delete: deleteUser,
+  getByRole: getUsersByRole,
+  getCount: getUserCount,
+  isAdmin,
+  hasArmeAccess,
+  hasVetementAccess,
+};

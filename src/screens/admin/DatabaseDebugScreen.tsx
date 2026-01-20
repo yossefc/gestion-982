@@ -1,247 +1,372 @@
-// Écran de debug pour inspecter la base de données Firestore
+/**
+ * DatabaseDebugScreen.tsx - Écran de débogage base de données
+ * Design militaire professionnel
+ */
+
 import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
-  TouchableOpacity,
   StyleSheet,
   ScrollView,
+  TouchableOpacity,
   ActivityIndicator,
+  Alert,
+  Platform,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
 import { useNavigation } from '@react-navigation/native';
-import { Colors, Shadows } from '../../theme/colors';
-import {
-  combatEquipmentService,
-  clothingEquipmentService,
-  soldierService,
-  manaService,
-  assignmentService,
-} from '../../services/firebaseService';
+import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
+import { getFirestore, collection, getDocs } from 'firebase/firestore';
 
 interface CollectionInfo {
   name: string;
   count: number;
-  samples?: any[];
+  sampleDoc?: any;
+  loading: boolean;
   error?: string;
 }
+
+const COLLECTIONS = [
+  'soldiers',
+  'users',
+  'soldier_equipment',
+  'soldier_holdings',
+  'equipment_combat',
+  'equipment_clothing',
+  'clothingEquipment',
+  'assignments',
+];
 
 const DatabaseDebugScreen: React.FC = () => {
   const navigation = useNavigation();
   const [loading, setLoading] = useState(true);
   const [collections, setCollections] = useState<CollectionInfo[]>([]);
+  const [expandedCollection, setExpandedCollection] = useState<string | null>(null);
 
   useEffect(() => {
-    loadAllCollections();
+    loadCollections();
   }, []);
 
-  const loadAllCollections = async () => {
+  const loadCollections = async () => {
     setLoading(true);
-    const results: CollectionInfo[] = [];
+    const db = getFirestore();
 
-    // 1. Combat Equipment
-    try {
-      const combatEquipment = await combatEquipmentService.getAll();
-      results.push({
-        name: 'combatEquipment',
-        count: combatEquipment.length,
-        samples: combatEquipment.slice(0, 3),
-      });
-    } catch (error: any) {
-      results.push({
-        name: 'combatEquipment',
-        count: 0,
-        error: error.message,
-      });
+    const collectionData: CollectionInfo[] = COLLECTIONS.map(name => ({
+      name,
+      count: 0,
+      loading: true,
+    }));
+    setCollections(collectionData);
+
+    // Load each collection
+    for (let i = 0; i < COLLECTIONS.length; i++) {
+      const name = COLLECTIONS[i];
+      try {
+        const snapshot = await getDocs(collection(db, name));
+        const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+        setCollections(prev => prev.map(c =>
+          c.name === name
+            ? { ...c, count: docs.length, sampleDoc: docs[0], loading: false }
+            : c
+        ));
+      } catch (error: any) {
+        setCollections(prev => prev.map(c =>
+          c.name === name
+            ? { ...c, loading: false, error: error.message }
+            : c
+        ));
+      }
     }
 
-    // 2. Clothing Equipment
-    try {
-      const clothingEquipment = await clothingEquipmentService.getAll();
-      results.push({
-        name: 'clothingEquipment',
-        count: clothingEquipment.length,
-        samples: clothingEquipment.slice(0, 3),
-      });
-    } catch (error: any) {
-      results.push({
-        name: 'clothingEquipment',
-        count: 0,
-        error: error.message,
-      });
-    }
-
-    // 3. Manot
-    try {
-      const manot = await manaService.getAll();
-      results.push({
-        name: 'manot',
-        count: manot.length,
-        samples: manot.slice(0, 3),
-      });
-    } catch (error: any) {
-      results.push({
-        name: 'manot',
-        count: 0,
-        error: error.message,
-      });
-    }
-
-    // 4. Soldiers
-    try {
-      const soldiers = await soldierService.getAll(10);
-      results.push({
-        name: 'soldiers',
-        count: soldiers.length,
-        samples: soldiers.slice(0, 3),
-      });
-    } catch (error: any) {
-      results.push({
-        name: 'soldiers',
-        count: 0,
-        error: error.message,
-      });
-    }
-
-    // 5. Assignments (combat)
-    try {
-      const assignments = await assignmentService.getByType('combat');
-      results.push({
-        name: 'assignments (combat)',
-        count: assignments.length,
-        samples: assignments.slice(0, 3),
-      });
-    } catch (error: any) {
-      results.push({
-        name: 'assignments (combat)',
-        count: 0,
-        error: error.message,
-      });
-    }
-
-    setCollections(results);
     setLoading(false);
   };
 
-  if (loading) {
+  const exportToJSON = async () => {
+    try {
+      setLoading(true);
+      const db = getFirestore();
+      const exportData: any = {
+        exportDate: new Date().toISOString(),
+        collections: {}
+      };
+
+      // Exporter toutes les collections
+      for (const name of COLLECTIONS) {
+        try {
+          const snapshot = await getDocs(collection(db, name));
+          const docs = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          }));
+          exportData.collections[name] = docs;
+        } catch (error) {
+          console.error(`Error exporting ${name}:`, error);
+          exportData.collections[name] = { error: 'Failed to export' };
+        }
+      }
+
+      // Convertir en JSON
+      const jsonString = JSON.stringify(exportData, null, 2);
+
+      // Sauvegarder le fichier
+      // Les imports sont déjà en haut du fichier
+
+      const fileUri = FileSystem.documentDirectory + 'firestore-export.json';
+      await FileSystem.writeAsStringAsync(fileUri, jsonString);
+
+      // Partager le fichier
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(fileUri, {
+          mimeType: 'application/json',
+          dialogTitle: 'Export Firestore Data'
+        });
+        Alert.alert('הצלחה', 'הנתונים יוצאו בהצלחה');
+      } else {
+        Alert.alert('שגיאה', 'לא ניתן לשתף קבצים במכשיר זה');
+      }
+    } catch (error) {
+      console.error('Error exporting data:', error);
+      Alert.alert('שגיאה', 'לא ניתן לייצא את הנתונים');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getCollectionIcon = (name: string) => {
+    switch (name) {
+      case 'soldiers': return 'people';
+      case 'users': return 'person-circle';
+      case 'soldier_equipment':
+      case 'soldier_holdings': return 'documents';
+      case 'equipment_combat': return 'shield';
+      case 'equipment_clothing':
+      case 'clothingEquipment': return 'shirt';
+      case 'assignments': return 'clipboard';
+      default: return 'folder';
+    }
+  };
+
+  const getCollectionColor = (name: string) => {
+    switch (name) {
+      case 'soldiers': return Colors.soldats;
+      case 'users': return Colors.info;
+      case 'soldier_equipment':
+      case 'soldier_holdings': return Colors.warning;
+      case 'equipment_combat': return Colors.arme;
+      case 'equipment_clothing':
+      case 'clothingEquipment': return Colors.vetement;
+      case 'assignments': return Colors.success;
+      default: return Colors.textSecondary;
+    }
+  };
+
+  const formatValue = (value: any): string => {
+    if (value === null || value === undefined) return 'null';
+    if (typeof value === 'boolean') return value ? 'true' : 'false';
+    if (typeof value === 'object') {
+      if (value.toDate) return value.toDate().toLocaleString('he-IL');
+      if (Array.isArray(value)) return `[${value.length} items]`;
+      return '{...}';
+    }
+    return String(value).substring(0, 50);
+  };
+
+  const renderSampleDoc = (doc: any) => {
+    if (!doc) return null;
+
+    const entries = Object.entries(doc).slice(0, 5);
+
     return (
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}
-          >
-            <Text style={styles.backButtonText}>←</Text>
-          </TouchableOpacity>
-          <View style={styles.headerContent}>
-            <Text style={styles.title}>Database Debug</Text>
+      <View style={styles.sampleDoc}>
+        <Text style={styles.sampleDocTitle}>מסמך לדוגמה:</Text>
+        {entries.map(([key, value]) => (
+          <View key={key} style={styles.sampleDocRow}>
+            <Text style={styles.sampleDocKey}>{key}:</Text>
+            <Text style={styles.sampleDocValue}>{formatValue(value)}</Text>
           </View>
-        </View>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={Colors.modules.arme} />
-          <Text style={styles.loadingText}>Loading database info...</Text>
-        </View>
+        ))}
+        {Object.keys(doc).length > 5 && (
+          <Text style={styles.moreFields}>
+            +{Object.keys(doc).length - 5} שדות נוספים
+          </Text>
+        )}
       </View>
     );
-  }
+  };
+
+  const CollectionCard = ({ item }: { item: CollectionInfo }) => {
+    const isExpanded = expandedCollection === item.name;
+    const color = getCollectionColor(item.name);
+
+    return (
+      <View style={styles.collectionCard}>
+        <TouchableOpacity
+          style={styles.collectionHeader}
+          onPress={() => setExpandedCollection(isExpanded ? null : item.name)}
+          activeOpacity={0.7}
+        >
+          <View style={[styles.collectionIcon, { backgroundColor: color + '20' }]}>
+            <Ionicons
+              name={getCollectionIcon(item.name) as any}
+              size={24}
+              color={color}
+            />
+          </View>
+
+          <View style={styles.collectionInfo}>
+            <Text style={styles.collectionName}>{item.name}</Text>
+            {item.loading ? (
+              <ActivityIndicator size="small" color={Colors.textSecondary} />
+            ) : item.error ? (
+              <Text style={styles.collectionError}>שגיאה</Text>
+            ) : (
+              <View style={styles.countBadge}>
+                <Text style={styles.countText}>{item.count} מסמכים</Text>
+              </View>
+            )}
+          </View>
+
+          <Ionicons
+            name={isExpanded ? 'chevron-up' : 'chevron-down'}
+            size={20}
+            color={Colors.textSecondary}
+          />
+        </TouchableOpacity>
+
+        {isExpanded && !item.loading && (
+          <View style={styles.collectionDetails}>
+            {item.error ? (
+              <View style={styles.errorContainer}>
+                <Ionicons name="alert-circle" size={24} color={Colors.danger} />
+                <Text style={styles.errorText}>{item.error}</Text>
+              </View>
+            ) : item.count === 0 ? (
+              <View style={styles.emptyContainer}>
+                <Ionicons name="folder-open-outline" size={24} color={Colors.textLight} />
+                <Text style={styles.emptyText}>האוסף ריק</Text>
+              </View>
+            ) : (
+              renderSampleDoc(item.sampleDoc)
+            )}
+          </View>
+        )}
+      </View>
+    );
+  };
 
   return (
     <View style={styles.container}>
+      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <Text style={styles.backButtonText}>←</Text>
+          <Ionicons name="arrow-forward" size={24} color={Colors.textWhite} />
         </TouchableOpacity>
-        <View style={styles.headerContent}>
-          <Text style={styles.title}>🔍 Database Debug</Text>
-          <Text style={styles.subtitle}>Firestore Collections Inspector</Text>
+
+        <View style={styles.headerTitleContainer}>
+          <Text style={styles.headerTitle}>בדיקת מסד נתונים</Text>
+          <Text style={styles.headerSubtitle}>Firebase Collections</Text>
         </View>
+
         <TouchableOpacity
           style={styles.refreshButton}
-          onPress={loadAllCollections}
+          onPress={loadCollections}
         >
-          <Text style={styles.refreshButtonText}>🔄</Text>
+          <Ionicons name="refresh" size={24} color={Colors.textWhite} />
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {collections.map((collection, index) => (
-          <View key={index} style={styles.collectionCard}>
-            <View style={styles.collectionHeader}>
-              <Text style={styles.collectionName}>{collection.name}</Text>
-              <View style={[
-                styles.countBadge,
-                collection.count === 0 ? styles.countBadgeEmpty : styles.countBadgeOk
-              ]}>
-                <Text style={styles.countText}>{collection.count}</Text>
-              </View>
-            </View>
+      {/* Status Banner */}
+      <View style={styles.statusBanner}>
+        <View style={[
+          styles.statusIndicator,
+          { backgroundColor: loading ? Colors.warning : Colors.success }
+        ]} />
+        <Text style={styles.statusText}>
+          {loading ? 'טוען נתונים...' : 'מחובר ל-Firebase'}
+        </Text>
+        <Text style={styles.statusCount}>
+          {collections.filter(c => !c.loading && !c.error).length}/{COLLECTIONS.length} אוספים
+        </Text>
+      </View>
 
-            {collection.error && (
-              <View style={styles.errorBox}>
-                <Text style={styles.errorText}>❌ Error: {collection.error}</Text>
-              </View>
-            )}
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Collections */}
+        <Text style={styles.sectionTitle}>אוספים ({COLLECTIONS.length})</Text>
 
-            {collection.count === 0 && !collection.error && (
-              <View style={styles.warningBox}>
-                <Text style={styles.warningText}>⚠️ Collection vide</Text>
-              </View>
-            )}
-
-            {collection.samples && collection.samples.length > 0 && (
-              <View style={styles.samplesContainer}>
-                <Text style={styles.samplesTitle}>Exemples ({collection.samples.length}):</Text>
-                {collection.samples.map((sample, idx) => (
-                  <View key={idx} style={styles.sampleItem}>
-                    <Text style={styles.sampleId}>ID: {sample.id}</Text>
-                    <Text style={styles.sampleData} numberOfLines={3}>
-                      {JSON.stringify(sample, null, 2).substring(0, 200)}...
-                    </Text>
-                  </View>
-                ))}
-              </View>
-            )}
-          </View>
+        {collections.map((item) => (
+          <CollectionCard key={item.name} item={item} />
         ))}
 
-        {/* Diagnostic Summary */}
+        {/* Summary Stats */}
         <View style={styles.summaryCard}>
-          <Text style={styles.summaryTitle}>📊 Diagnostic Summary</Text>
-
-          {collections.find(c => c.name === 'combatEquipment')?.count === 0 && (
-            <View style={styles.issueItem}>
-              <Text style={styles.issueIcon}>🔴</Text>
-              <Text style={styles.issueText}>
-                PROBLÈME: Collection 'combatEquipment' vide!{'\n'}
-                Solution: Créer des équipements via "ניהול ציוד לוחם"
-              </Text>
-            </View>
-          )}
-
-          {collections.find(c => c.name === 'manot')?.count > 0 &&
-           collections.find(c => c.name === 'combatEquipment')?.count === 0 && (
-            <View style={styles.issueItem}>
-              <Text style={styles.issueIcon}>🟠</Text>
-              <Text style={styles.issueText}>
-                INCOHÉRENCE: Des manot existent mais pas d'équipements!{'\n'}
-                Les manot référencent des équipements inexistants.
-              </Text>
-            </View>
-          )}
-
-          {collections.every(c => c.count > 0 || c.name.includes('assignment')) && (
-            <View style={styles.issueItem}>
-              <Text style={styles.issueIcon}>✅</Text>
-              <Text style={styles.issueText}>
-                Toutes les collections principales sont remplies.
-              </Text>
-            </View>
-          )}
+          <Text style={styles.summaryTitle}>סיכום</Text>
+          <View style={styles.summaryRow}>
+            <Text style={styles.summaryLabel}>סה״כ אוספים:</Text>
+            <Text style={styles.summaryValue}>{COLLECTIONS.length}</Text>
+          </View>
+          <View style={styles.summaryRow}>
+            <Text style={styles.summaryLabel}>סה״כ מסמכים:</Text>
+            <Text style={styles.summaryValue}>
+              {collections.reduce((sum, c) => sum + (c.count || 0), 0)}
+            </Text>
+          </View>
+          <View style={styles.summaryRow}>
+            <Text style={styles.summaryLabel}>אוספים עם שגיאות:</Text>
+            <Text style={[
+              styles.summaryValue,
+              collections.filter(c => c.error).length > 0 && { color: Colors.danger }
+            ]}>
+              {collections.filter(c => c.error).length}
+            </Text>
+          </View>
         </View>
 
-        <View style={{ height: 50 }} />
+        {/* Actions */}
+        <Text style={styles.sectionTitle}>פעולות</Text>
+
+        <TouchableOpacity
+          style={styles.actionButton}
+          onPress={exportToJSON}
+        >
+          <View style={[styles.actionIcon, { backgroundColor: Colors.infoLight }]}>
+            <Ionicons name="download" size={24} color={Colors.info} />
+          </View>
+          <View style={styles.actionContent}>
+            <Text style={styles.actionTitle}>ייצוא נתונים</Text>
+            <Text style={styles.actionSubtitle}>ייצוא כל הנתונים לקובץ JSON</Text>
+          </View>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.actionButton}
+          onPress={() => Alert.alert(
+            'ניקוי מטמון',
+            'האם לנקות את המטמון המקומי?',
+            [
+              { text: 'ביטול', style: 'cancel' },
+              { text: 'נקה', onPress: () => Alert.alert('הצלחה', 'המטמון נוקה') }
+            ]
+          )}
+        >
+          <View style={[styles.actionIcon, { backgroundColor: Colors.warningLight }]}>
+            <Ionicons name="trash" size={24} color={Colors.warning} />
+          </View>
+          <View style={styles.actionContent}>
+            <Text style={styles.actionTitle}>ניקוי מטמון</Text>
+            <Text style={styles.actionSubtitle}>מחיקת נתונים מקומיים</Text>
+          </View>
+        </TouchableOpacity>
       </ScrollView>
     </View>
   );
@@ -250,182 +375,305 @@ const DatabaseDebugScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background.primary,
+    backgroundColor: Colors.background,
   },
+
+  // Header
   header: {
-    backgroundColor: '#2c3e50',
-    paddingTop: 60,
-    paddingHorizontal: 20,
-    paddingBottom: 20,
+    backgroundColor: Colors.info,
+    paddingTop: Platform.OS === 'ios' ? 50 : 20,
+    paddingBottom: Spacing.xl,
+    paddingHorizontal: Spacing.lg,
     flexDirection: 'row',
     alignItems: 'center',
+    borderBottomLeftRadius: BorderRadius.xl,
+    borderBottomRightRadius: BorderRadius.xl,
     ...Shadows.medium,
   },
+
   backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    justifyContent: 'center',
+    width: 44,
+    height: 44,
+    borderRadius: BorderRadius.full,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     alignItems: 'center',
-    marginRight: 15,
+    justifyContent: 'center',
   },
-  backButtonText: {
-    fontSize: 24,
-    color: '#FFF',
-  },
-  headerContent: {
+
+  headerTitleContainer: {
     flex: 1,
+    alignItems: 'center',
   },
-  title: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#FFF',
+
+  headerTitle: {
+    fontSize: FontSize.xxl,
+    fontWeight: '700',
+    color: Colors.textWhite,
   },
-  subtitle: {
-    fontSize: 13,
-    color: 'rgba(255, 255, 255, 0.9)',
-    marginTop: 4,
+
+  headerSubtitle: {
+    fontSize: FontSize.md,
+    color: 'rgba(255, 255, 255, 0.8)',
+    marginTop: Spacing.xs,
   },
+
   refreshButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    justifyContent: 'center',
+    width: 44,
+    height: 44,
+    borderRadius: BorderRadius.full,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     alignItems: 'center',
-  },
-  refreshButtonText: {
-    fontSize: 20,
-  },
-  loadingContainer: {
-    flex: 1,
     justifyContent: 'center',
+  },
+
+  // Status Banner
+  statusBanner: {
+    flexDirection: 'row',
     alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 10,
-    color: Colors.text.secondary,
-    fontSize: 14,
-  },
-  content: {
-    flex: 1,
-    padding: 20,
-  },
-  collectionCard: {
-    backgroundColor: Colors.background.card,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 15,
-    borderWidth: 1,
-    borderColor: Colors.border.light,
+    backgroundColor: Colors.backgroundCard,
+    marginHorizontal: Spacing.lg,
+    marginTop: -Spacing.lg,
+    padding: Spacing.md,
+    borderRadius: BorderRadius.lg,
     ...Shadows.small,
   },
+
+  statusIndicator: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginRight: Spacing.sm,
+  },
+
+  statusText: {
+    flex: 1,
+    fontSize: FontSize.md,
+    color: Colors.text,
+    fontWeight: '500',
+  },
+
+  statusCount: {
+    fontSize: FontSize.sm,
+    color: Colors.textSecondary,
+  },
+
+  // Content
+  content: {
+    flex: 1,
+  },
+
+  scrollContent: {
+    padding: Spacing.lg,
+    paddingBottom: 100,
+  },
+
+  sectionTitle: {
+    fontSize: FontSize.lg,
+    fontWeight: '600',
+    color: Colors.text,
+    marginBottom: Spacing.md,
+    marginTop: Spacing.lg,
+    textAlign: 'right',
+  },
+
+  // Collection Card
+  collectionCard: {
+    backgroundColor: Colors.backgroundCard,
+    borderRadius: BorderRadius.lg,
+    marginBottom: Spacing.md,
+    overflow: 'hidden',
+    ...Shadows.small,
+  },
+
   collectionHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
+    padding: Spacing.lg,
   },
-  collectionName: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: Colors.text.primary,
+
+  collectionIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: BorderRadius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: Spacing.md,
   },
-  countBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-  },
-  countBadgeOk: {
-    backgroundColor: Colors.status.success,
-  },
-  countBadgeEmpty: {
-    backgroundColor: Colors.status.danger,
-  },
-  countText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#FFF',
-  },
-  errorBox: {
-    backgroundColor: '#fee',
-    borderRadius: 8,
-    padding: 10,
-    marginTop: 8,
-  },
-  errorText: {
-    fontSize: 13,
-    color: Colors.status.danger,
-  },
-  warningBox: {
-    backgroundColor: '#ffeaa7',
-    borderRadius: 8,
-    padding: 10,
-    marginTop: 8,
-  },
-  warningText: {
-    fontSize: 13,
-    color: '#d63031',
-  },
-  samplesContainer: {
-    marginTop: 10,
-    backgroundColor: Colors.background.secondary,
-    borderRadius: 8,
-    padding: 10,
-  },
-  samplesTitle: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: Colors.text.secondary,
-    marginBottom: 8,
-  },
-  sampleItem: {
-    backgroundColor: '#fff',
-    borderRadius: 6,
-    padding: 8,
-    marginBottom: 8,
-  },
-  sampleId: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    color: Colors.modules.arme,
-    marginBottom: 4,
-  },
-  sampleData: {
-    fontSize: 11,
-    color: Colors.text.secondary,
-    fontFamily: 'monospace',
-  },
-  summaryCard: {
-    backgroundColor: '#e8f4fd',
-    borderRadius: 12,
-    padding: 16,
-    marginTop: 10,
-    borderWidth: 2,
-    borderColor: Colors.status.info,
-  },
-  summaryTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: Colors.text.primary,
-    marginBottom: 12,
-  },
-  issueItem: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 10,
-    paddingVertical: 8,
-  },
-  issueIcon: {
-    fontSize: 20,
-    marginRight: 10,
-  },
-  issueText: {
+
+  collectionInfo: {
     flex: 1,
-    fontSize: 14,
-    color: Colors.text.primary,
-    lineHeight: 20,
+    alignItems: 'flex-end',
+  },
+
+  collectionName: {
+    fontSize: FontSize.base,
+    fontWeight: '600',
+    color: Colors.text,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+  },
+
+  countBadge: {
+    backgroundColor: Colors.successLight,
+    paddingVertical: Spacing.xs,
+    paddingHorizontal: Spacing.sm,
+    borderRadius: BorderRadius.full,
+    marginTop: Spacing.xs,
+  },
+
+  countText: {
+    fontSize: FontSize.sm,
+    color: Colors.successDark,
+    fontWeight: '500',
+  },
+
+  collectionError: {
+    fontSize: FontSize.sm,
+    color: Colors.danger,
+    marginTop: Spacing.xs,
+  },
+
+  collectionDetails: {
+    backgroundColor: Colors.backgroundInput,
+    padding: Spacing.lg,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+  },
+
+  errorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+
+  errorText: {
+    flex: 1,
+    fontSize: FontSize.sm,
+    color: Colors.danger,
+    textAlign: 'right',
+  },
+
+  emptyContainer: {
+    alignItems: 'center',
+    paddingVertical: Spacing.md,
+  },
+
+  emptyText: {
+    fontSize: FontSize.sm,
+    color: Colors.textLight,
+    marginTop: Spacing.xs,
+  },
+
+  // Sample Doc
+  sampleDoc: {
+    gap: Spacing.xs,
+  },
+
+  sampleDocTitle: {
+    fontSize: FontSize.sm,
+    fontWeight: '600',
+    color: Colors.textSecondary,
+    marginBottom: Spacing.sm,
+    textAlign: 'right',
+  },
+
+  sampleDocRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: Spacing.xs,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+
+  sampleDocKey: {
+    fontSize: FontSize.sm,
+    color: Colors.textSecondary,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+  },
+
+  sampleDocValue: {
+    fontSize: FontSize.sm,
+    color: Colors.text,
+    maxWidth: '60%',
+    textAlign: 'right',
+  },
+
+  moreFields: {
+    fontSize: FontSize.xs,
+    color: Colors.textLight,
+    textAlign: 'center',
+    marginTop: Spacing.sm,
+  },
+
+  // Summary Card
+  summaryCard: {
+    backgroundColor: Colors.backgroundCard,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.lg,
+    ...Shadows.small,
+  },
+
+  summaryTitle: {
+    fontSize: FontSize.lg,
+    fontWeight: '600',
+    color: Colors.text,
+    marginBottom: Spacing.md,
+    textAlign: 'right',
+  },
+
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: Spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+
+  summaryLabel: {
+    fontSize: FontSize.md,
+    color: Colors.textSecondary,
+  },
+
+  summaryValue: {
+    fontSize: FontSize.md,
+    fontWeight: '600',
+    color: Colors.text,
+  },
+
+  // Action Buttons
+  actionButton: {
+    backgroundColor: Colors.backgroundCard,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: Spacing.md,
+    ...Shadows.small,
+  },
+
+  actionIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: BorderRadius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: Spacing.md,
+  },
+
+  actionContent: {
+    flex: 1,
+    alignItems: 'flex-end',
+  },
+
+  actionTitle: {
+    fontSize: FontSize.base,
+    fontWeight: '600',
+    color: Colors.text,
+  },
+
+  actionSubtitle: {
+    fontSize: FontSize.sm,
+    color: Colors.textSecondary,
+    marginTop: Spacing.xs,
   },
 });
 

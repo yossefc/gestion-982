@@ -14,7 +14,7 @@ import {
   Platform,
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
-import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/colors';
+import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
 import { PackageType, CombatEquipment, RootStackParamList } from '../../types';
 import { addMana, updateMana, getManaById, getAllCombatEquipment } from '../../services/equipmentService';
 

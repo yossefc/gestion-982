@@ -1,442 +1,282 @@
-// Écran de signature pour le module Vêtement - Système החתמה
-import React, { useRef, useState, useEffect } from 'react';
+/**
+ * ClothingSignatureScreen.tsx - Signature de vêtements
+ * Design militaire professionnel
+ */
+
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
-  TouchableOpacity,
   StyleSheet,
-  Alert,
-  ActivityIndicator,
   ScrollView,
+  TouchableOpacity,
+  ActivityIndicator,
+  Alert,
+  Platform,
   TextInput,
 } from 'react-native';
-import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import SignatureCanvas from 'react-native-signature-canvas';
-import { RootStackParamList } from '../../types';
-import { assignmentService, soldierService, clothingEquipmentService, pdfStorageService } from '../../services/firebaseService';
+import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
+import { clothingEquipmentService } from '../../services/clothingEquipmentService';
+import { assignmentService } from '../../services/assignmentService';
+import { clothingStockService } from '../../services/clothingStockService';
 import { useAuth } from '../../contexts/AuthContext';
-import { Colors, Shadows } from '../../theme/colors';
-import { generateAssignmentPDF } from '../../services/pdfService';
-import { downloadAndSharePdf } from '../../services/whatsappService';
 
-type ClothingSignatureRouteProp = RouteProp<RootStackParamList, 'ClothingSignature'>;
-
-interface EquipmentItem {
+interface Equipment {
   id: string;
   name: string;
-  quantity: number;
-  selected: boolean;
-  serial?: string;
-  needsSerial?: boolean;
+  yamach?: number;
+  requiresSerial?: boolean;
 }
+
+interface SelectedItem {
+  equipment: Equipment;
+  quantity: number;
+  serial?: string;
+  availableStock?: number; // Stock disponible pour cet équipement
+}
+
+const SERIAL_REQUIRED_ITEMS = ['קסדה', 'וסט לוחם', 'וסט קרמי'];
 
 const ClothingSignatureScreen: React.FC = () => {
   const navigation = useNavigation();
-  const route = useRoute<ClothingSignatureRouteProp>();
-  const { soldierId } = route.params;
-  const { user, loading: authLoading } = useAuth();
-
+  const route = useRoute();
+  const { soldier } = route.params as { soldier: any };
+  const { user, authLoading } = useAuth();
   const signatureRef = useRef<any>(null);
-  const [signature, setSignature] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
+
   const [loading, setLoading] = useState(true);
-  const [soldier, setSoldier] = useState<any>(null);
-  const [equipment, setEquipment] = useState<EquipmentItem[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [equipment, setEquipment] = useState<Equipment[]>([]);
+  const [selectedItems, setSelectedItems] = useState<Map<string, SelectedItem>>(new Map());
+  const [signatureData, setSignatureData] = useState<string | null>(null);
   const [scrollEnabled, setScrollEnabled] = useState(true);
-  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
-  const [generatingPdf, setGeneratingPdf] = useState(false);
+  const [showSignature, setShowSignature] = useState(false);
 
   useEffect(() => {
-    // Attendre que l'authentification soit prête avant de charger les données
-    if (!authLoading && user) {
+    if (!authLoading) {
       loadData();
-    } else if (!authLoading && !user) {
-      // Utilisateur non connecté
-      setLoading(false);
-      Alert.alert('שגיאה', 'יש להתחבר כדי להמשיך');
-      navigation.goBack();
     }
-  }, [authLoading, user]);
+  }, [authLoading]);
 
   const loadData = async () => {
     try {
-      // Charger soldat, équipements, et ASSIGNMENT ACTUEL en parallèle
-      const [soldierData, equipmentData, currentAssignment] = await Promise.all([
-        soldierService.getById(soldierId),
-        clothingEquipmentService.getAll(),
-        assignmentService.getCurrentAssignment(soldierId, 'clothing', 'issue'),
-      ]);
+      setLoading(true);
+      const equipmentData = await clothingEquipmentService.getAll();
+      setEquipment(equipmentData);
 
-      setSoldier(soldierData);
+      // Charger ce que le soldat a actuellement pour pré-remplir
+      const currentHoldings = await assignmentService.calculateCurrentHoldings(soldier.id, 'clothing');
 
-      // Convertir les équipements Firebase en EquipmentItem
-      const equipmentItems: EquipmentItem[] = equipmentData.map(eq => {
-        // Chercher si cet équipement est dans l'assignment actuel
-        const currentItem = currentAssignment?.items?.find(
-          item => item.equipmentId === eq.id
-        );
-
-        return {
-          id: eq.id,
-          name: eq.name,
-          quantity: currentItem?.quantity || 1,
-          selected: !!currentItem, // Pré-cocher SEULEMENT si dans l'assignment
-          serial: currentItem?.serial || undefined,
-          needsSerial: ['קסדה', 'וסט לוחם', 'וסט קרמי'].includes(eq.name),
-        };
-      });
-
-      setEquipment(equipmentItems);
-
-      // Afficher un message si des items existent déjà
-      if (currentAssignment?.items && currentAssignment.items.length > 0) {
-        console.log(`Found ${currentAssignment.items.length} items in current assignment for soldier ${soldierId}`);
+      if (currentHoldings && currentHoldings.length > 0) {
+        const preSelected = new Map<string, SelectedItem>();
+        currentHoldings.forEach((item: any) => {
+          const eq = equipmentData.find((e: any) => e.id === item.equipmentId);
+          if (eq) {
+            preSelected.set(eq.id, {
+              equipment: eq,
+              quantity: item.quantity,
+              serial: item.serial,
+            });
+          }
+        });
+        setSelectedItems(preSelected);
       }
     } catch (error) {
-      Alert.alert('שגיאה', 'נכשל בטעינת הנתונים');
       console.error('Error loading data:', error);
+      Alert.alert('שגיאה', 'לא ניתן לטעון את הנתונים');
     } finally {
       setLoading(false);
     }
   };
 
-  // Style amélioré du canvas de signature
-  const webStyle = `
-    .m-signature-pad {
-      position: fixed;
-      margin: auto;
-      top: 0;
-      left: 0;
-      right: 0;
-      width: 100%;
-      height: 100%;
-      box-shadow: none;
-      border: 2px solid #2c5f7c;
-      border-radius: 8px;
-      background-color: #ffffff;
-    }
-    .m-signature-pad--body {
-      position: absolute;
-      left: 0;
-      right: 0;
-      top: 0;
-      bottom: 0;
-      border: none;
-    }
-    .m-signature-pad--body canvas {
-      position: absolute;
-      left: 0;
-      top: 0;
-      width: 100%;
-      height: 100%;
-    }
-    .m-signature-pad--footer {
-      display: none;
-    }
-    body, html {
-      position: relative;
-      width: 100%;
-      height: 100%;
-      margin: 0;
-      padding: 0;
-    }
-  `;
+  const toggleItem = async (eq: Equipment) => {
+    if (selectedItems.has(eq.id)) {
+      // Désélectionner
+      setSelectedItems(prev => {
+        const newMap = new Map(prev);
+        newMap.delete(eq.id);
+        return newMap;
+      });
+    } else {
+      // Sélectionner et vérifier le stock
+      if (eq.yamach !== undefined && eq.yamach !== null) {
+        const { available, stock } = await clothingStockService.isQuantityAvailable(eq.id, 1);
 
-  const handleBegin = () => {
-    // Désactiver le scroll pendant le dessin
-    setScrollEnabled(false);
-  };
-
-  const handleEnd = () => {
-    // Déclencher la capture de la signature
-    signatureRef.current?.readSignature();
-    // Réactiver le scroll
-    setScrollEnabled(true);
-  };
-
-  const handleOK = (sig: string) => {
-    console.log('Signature captured:', sig ? 'Yes' : 'No');
-    setSignature(sig);
-  };
-
-  const handleClear = () => {
-    signatureRef.current?.clearSignature();
-    setSignature(null);
-  };
-
-  const handleEmpty = () => {
-    console.log('Signature pad is empty');
-  };
-
-  const toggleEquipment = (id: string) => {
-    setEquipment(prev =>
-      prev.map(item =>
-        item.id === id ? { ...item, selected: !item.selected } : item
-      )
-    );
-  };
-
-  const updateQuantity = (id: string, delta: number) => {
-    setEquipment(prev =>
-      prev.map(item => {
-        if (item.id === id) {
-          const newQuantity = Math.max(0, item.quantity + delta);
-          return { ...item, quantity: newQuantity };
+        if (!available && stock) {
+          Alert.alert(
+            'אין מלאי זמין',
+            `הציוד "${eq.name}" אזל מהמלאי.\nזמין: ${stock.available} יחידות`
+          );
+          return;
         }
-        return item;
-      })
-    );
+
+        setSelectedItems(prev => {
+          const newMap = new Map(prev);
+          newMap.set(eq.id, {
+            equipment: eq,
+            quantity: 1,
+            availableStock: stock?.available || 0,
+          });
+          return newMap;
+        });
+      } else {
+        // Pas de ימח défini, permettre la sélection
+        setSelectedItems(prev => {
+          const newMap = new Map(prev);
+          newMap.set(eq.id, { equipment: eq, quantity: 1 });
+          return newMap;
+        });
+      }
+    }
+  };
+
+  const updateQuantity = async (id: string, delta: number) => {
+    const item = selectedItems.get(id);
+    if (!item) return;
+
+    const newQty = Math.max(1, item.quantity + delta);
+
+    // Vérifier le stock disponible si ימח est défini
+    if (item.equipment.yamach !== undefined && item.equipment.yamach !== null) {
+      const { available, stock } = await clothingStockService.isQuantityAvailable(id, newQty);
+
+      if (!available && stock) {
+        Alert.alert(
+          'מלאי לא מספיק',
+          `זמין: ${stock.available} יחידות\nמבוקש: ${newQty} יחידות\n\nאי אפשר להקצות יותר מהמלאי הזמין.`
+        );
+        return;
+      }
+    }
+
+    setSelectedItems(prev => {
+      const newMap = new Map(prev);
+      newMap.set(id, { ...item, quantity: newQty });
+      return newMap;
+    });
   };
 
   const updateSerial = (id: string, serial: string) => {
-    setEquipment(prev =>
-      prev.map(item =>
-        item.id === id ? { ...item, serial } : item
-      )
-    );
-  };
-
-  const generateAndUploadPdf = async (assignmentId: string, assignmentData: any) => {
-    try {
-      setGeneratingPdf(true);
-      console.log('Generating PDF for assignment:', assignmentId);
-
-      // 1. Générer le PDF
-      const pdfBytes = await generateAssignmentPDF({
-        ...assignmentData,
-        id: assignmentId,
-        timestamp: new Date(),
-      });
-
-      console.log('PDF generated successfully, size:', pdfBytes.length, 'bytes');
-
-      // 2. Upload vers Storage avec chemin structuré
-      // Chemin: pdf/{type}/signature/{soldierId}.pdf
-      const url = await pdfStorageService.uploadPdf(
-        pdfBytes,
-        assignmentData.soldierId,
-        assignmentData.type,
-        'issue' // Action pour signature
-      );
-      console.log('PDF uploaded to:', url);
-
-      // 3. Mettre à jour l'assignment avec le pdfUrl
-      await assignmentService.update(assignmentId, { pdfUrl: url });
-
-      setPdfUrl(url);
-      return url;
-    } catch (error) {
-      console.error('Error generating/uploading PDF:', error);
-      Alert.alert('שגיאה', 'נכשל ביצירת המסמך PDF');
-      return null;
-    } finally {
-      setGeneratingPdf(false);
-    }
-  };
-
-  const handleShareWhatsApp = async (url: string) => {
-    try {
-      const fileName = `assignment_${soldier.personalNumber}_${Date.now()}.pdf`;
-      const success = await downloadAndSharePdf(url, fileName);
-
-      if (success) {
-        console.log('PDF shared successfully via WhatsApp');
+    setSelectedItems(prev => {
+      const newMap = new Map(prev);
+      const item = newMap.get(id);
+      if (item) {
+        newMap.set(id, { ...item, serial });
       }
-    } catch (error) {
-      console.error('Error sharing PDF via WhatsApp:', error);
-      Alert.alert('שגיאה', 'נכשל בשיתוף הקובץ');
-    }
+      return newMap;
+    });
   };
 
-  const handleSaveAndSign = async () => {
-    // Validation
-    const selectedItems = equipment.filter(item => item.selected);
-    if (selectedItems.length === 0) {
-      Alert.alert('שגיאה', 'אנא בחר לפחות פריט אחד');
+  const requiresSerial = (name: string) => {
+    return SERIAL_REQUIRED_ITEMS.some(item => name.includes(item));
+  };
+
+  const handleSignatureEnd = () => {
+    signatureRef.current?.readSignature();
+  };
+
+  const handleSignatureChange = (signature: string) => {
+    setSignatureData(signature);
+  };
+
+  const handleClearSignature = () => {
+    signatureRef.current?.clearSignature();
+    setSignatureData(null);
+  };
+
+  const validateAndSubmit = async () => {
+    if (selectedItems.size === 0) {
+      Alert.alert('שגיאה', 'יש לבחור לפחות פריט אחד');
       return;
     }
 
-    // Vérifier que les items qui nécessitent un serial l'ont
-    const missingSerials = selectedItems.filter(
-      item => item.needsSerial && !item.serial
-    );
-    if (missingSerials.length > 0) {
-      Alert.alert(
-        'שגיאה',
-        `אנא הזן מסטב עבור: ${missingSerials.map(i => i.name).join(', ')}`
-      );
-      return;
+    // Check serial numbers
+    for (const [id, item] of selectedItems) {
+      if (requiresSerial(item.equipment.name) && !item.serial?.trim()) {
+        Alert.alert('שגיאה', `יש להזין מספר סידורי עבור ${item.equipment.name}`);
+        return;
+      }
     }
 
-    if (!signature) {
-      Alert.alert('שגיאה', 'אנא חתום לפני שמירה. לחץ על "סיים חתימה" לשמור את החתימה.');
-      return;
-    }
+    // Vérification finale du stock pour tous les items sélectionnés
+    for (const [id, item] of selectedItems) {
+      if (item.equipment.yamach !== undefined && item.equipment.yamach !== null) {
+        const { available, stock } = await clothingStockService.isQuantityAvailable(id, item.quantity);
 
-    setSaving(true);
-    try {
-      // Préparer les items pour l'attribution
-      const assignmentItems = selectedItems.map(item => {
-        const itemData: any = {
-          equipmentId: item.id,
-          equipmentName: item.name,
-          quantity: item.quantity,
-        };
-
-        // N'ajouter serial que s'il existe
-        if (item.serial) {
-          itemData.serial = item.serial;
+        if (!available && stock) {
+          Alert.alert(
+            'מלאי לא מספיק',
+            `הציוד "${item.equipment.name}"\nזמין: ${stock.available} יחידות\nמבוקש: ${item.quantity} יחידות\n\nאנא הפחת את הכמות.`
+          );
+          return;
         }
+      }
+    }
 
-        return itemData;
-      });
+    setShowSignature(true);
+  };
 
-      // Préparer les données complètes pour PDF
-      const assignmentData: any = {
-        soldierId,
+  const handleSubmit = async () => {
+    if (!signatureData) {
+      Alert.alert('שגיאה', 'יש לחתום על הטופס');
+      return;
+    }
+
+    console.log('[ClothingSignature] Starting submit...');
+    console.log('[ClothingSignature] User:', user);
+    console.log('[ClothingSignature] Soldier:', soldier);
+    console.log('[ClothingSignature] Selected items count:', selectedItems.size);
+
+    try {
+      setSaving(true);
+
+      const items = Array.from(selectedItems.values()).map(item => ({
+        equipmentId: item.equipment.id,
+        equipmentName: item.equipment.name,
+        quantity: item.quantity,
+        serial: item.serial || '',
+      }));
+
+      console.log('[ClothingSignature] Items to save:', items);
+
+      // Create assignment with correct field names
+      // La signature est automatiquement uploadée par createAssignment
+      const assignmentId = await assignmentService.create({
+        soldierId: soldier.id,
         soldierName: soldier.name,
         soldierPersonalNumber: soldier.personalNumber,
-        type: 'clothing' as const,
-        action: 'issue' as const,
-        items: assignmentItems,
-        signature,
-        status: 'נופק לחייל' as const,
-        assignedBy: user?.id || '',
-      };
+        soldierPhone: soldier.phone,
+        soldierCompany: soldier.company,
+        type: 'clothing',
+        action: 'issue',
+        items,
+        status: 'נופק לחייל',
+        assignedBy: user?.uid || '',
+        assignedByName: user?.displayName || user?.email || '',
+        assignedByEmail: user?.email || '',
+      }, signatureData);
 
-      // Ajouter les champs optionnels seulement s'ils existent
-      if (soldier.phone) assignmentData.soldierPhone = soldier.phone;
-      if (soldier.company) assignmentData.soldierCompany = soldier.company;
-      if (user?.name) assignmentData.assignedByName = user.name;
-      if (user?.email) assignmentData.assignedByEmail = user.email;
+      console.log('[ClothingSignature] Assignment created successfully with ID:', assignmentId);
 
-      // Créer l'attribution avec signature
-      const assignmentId = await assignmentService.create(assignmentData);
-      console.log('Assignment created/updated:', assignmentId);
-
-      // Générer et uploader le PDF
-      const pdfUrl = await generateAndUploadPdf(assignmentId, assignmentData);
-
-      // Afficher succès avec option WhatsApp
-      if (pdfUrl) {
-        Alert.alert(
-          'הצלחה',
-          'החתימה נשמרה והמסמך נוצר בהצלחה',
-          [
-            {
-              text: 'שלח ב-WhatsApp',
-              onPress: () => {
-                handleShareWhatsApp(pdfUrl);
-                // Naviguer après le partage
-                setTimeout(() => {
-                  (navigation as any).reset({
-                    index: 0,
-                    routes: [{ name: 'Home' }],
-                  });
-                }, 500);
-              },
-            },
-            {
-              text: 'סגור',
-              style: 'cancel',
-              onPress: () => (navigation as any).reset({
-                index: 0,
-                routes: [{ name: 'Home' }],
-              }),
-            },
-          ]
-        );
-      } else {
-        // PDF failed mais assignment créé
-        Alert.alert(
-          'הצלחה חלקית',
-          'החתימה נשמרה אך יצירת המסמך נכשלה',
-          [
-            {
-              text: 'אישור',
-              onPress: () => (navigation as any).reset({
-                index: 0,
-                routes: [{ name: 'Home' }],
-              }),
-            },
-          ]
-        );
-      }
+      Alert.alert('הצלחה', 'ההחתמה בוצעה בהצלחה', [
+        { text: 'אישור', onPress: () => navigation.goBack() }
+      ]);
     } catch (error) {
-      Alert.alert('שגיאה', 'נכשל בשמירת החתימה');
-      console.error('Error saving signature:', error);
+      console.error('[ClothingSignature] Error saving:', error);
+      Alert.alert('שגיאה', 'לא ניתן לשמור את ההחתמה: ' + (error as Error).message);
     } finally {
       setSaving(false);
     }
   };
 
-  if (loading) {
+  if (loading || authLoading) {
     return (
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}
-          >
-            <Text style={styles.backButtonText}>←</Text>
-          </TouchableOpacity>
-          <View style={styles.headerContent}>
-            <Text style={styles.title}>החתמת חייל</Text>
-            <Text style={styles.subtitle}>ביגוד וציוד אישי</Text>
-          </View>
-        </View>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={Colors.modules.vetement} />
-        </View>
-      </View>
-    );
-  }
-
-  if (!soldier) {
-    return (
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}
-          >
-            <Text style={styles.backButtonText}>←</Text>
-          </TouchableOpacity>
-          <View style={styles.headerContent}>
-            <Text style={styles.title}>שגיאה</Text>
-          </View>
-        </View>
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>החייל לא נמצא</Text>
-        </View>
-      </View>
-    );
-  }
-
-  if (equipment.length === 0) {
-    return (
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}
-          >
-            <Text style={styles.backButtonText}>←</Text>
-          </TouchableOpacity>
-          <View style={styles.headerContent}>
-            <Text style={styles.title}>החתמת חייל</Text>
-          </View>
-        </View>
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>אין ציוד במערכת</Text>
-          <Text style={styles.emptySubtext}>אנא הוסף ציוד דרך ניהול ציוד</Text>
-          <TouchableOpacity
-            style={styles.manageEquipmentButton}
-            onPress={() => navigation.navigate('ClothingEquipmentManagement' as never)}
-          >
-            <Text style={styles.manageEquipmentText}>⚙️ ניהול ציוד</Text>
-          </TouchableOpacity>
-        </View>
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={Colors.vetement} />
+        <Text style={styles.loadingText}>טוען נתונים...</Text>
       </View>
     );
   }
@@ -448,152 +288,204 @@ const ClothingSignatureScreen: React.FC = () => {
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => navigation.goBack()}
-          disabled={saving}
         >
-          <Text style={styles.backButtonText}>←</Text>
+          <Ionicons name="arrow-forward" size={24} color={Colors.textWhite} />
         </TouchableOpacity>
-        <View style={styles.headerContent}>
-          <Text style={styles.title}>החתמת חייל</Text>
-          <Text style={styles.subtitle}>ביגוד וציוד אישי</Text>
+
+        <View style={styles.headerTitleContainer}>
+          <Text style={styles.headerTitle}>החתמת ביגוד</Text>
+          <Text style={styles.headerSubtitle}>{soldier.name}</Text>
         </View>
+
+        <View style={styles.headerSpacer} />
       </View>
 
       <ScrollView
         style={styles.content}
-        showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
         scrollEnabled={scrollEnabled}
       >
-        {/* 1. Infos Soldat */}
+        {/* Soldier Info Card */}
         <View style={styles.soldierCard}>
-          <View style={styles.soldierRow}>
-            <Text style={styles.soldierValue}>{soldier.name}</Text>
-            <Text style={styles.soldierLabel}>שם:</Text>
+          <View style={styles.soldierAvatar}>
+            <Ionicons name="person" size={32} color={Colors.vetement} />
           </View>
-          <View style={styles.soldierRow}>
-            <Text style={styles.soldierValue}>{soldier.personalNumber}</Text>
-            <Text style={styles.soldierLabel}>מספר אישי:</Text>
+          <View style={styles.soldierInfo}>
+            <Text style={styles.soldierName}>{soldier.name}</Text>
+            <Text style={styles.soldierNumber}>מ.א: {soldier.personalNumber}</Text>
           </View>
-          <View style={styles.soldierRow}>
-            <Text style={styles.soldierValue}>{soldier.company}</Text>
-            <Text style={styles.soldierLabel}>פלוגה:</Text>
-          </View>
-          {soldier.phone && (
-            <View style={styles.soldierRow}>
-              <Text style={styles.soldierValue}>{soldier.phone}</Text>
-              <Text style={styles.soldierLabel}>טלפון:</Text>
-            </View>
-          )}
         </View>
 
-        {/* 2. Liste des équipements */}
-        <Text style={styles.sectionTitle}>בחירת ציוד</Text>
+        {!showSignature ? (
+          <>
+            {/* Equipment Selection */}
+            <Text style={styles.sectionTitle}>בחירת ציוד</Text>
+            <View style={styles.equipmentList}>
+              {equipment.map((eq) => {
+                const isSelected = selectedItems.has(eq.id);
+                const item = selectedItems.get(eq.id);
 
-        {equipment.map((item) => (
-          <View key={item.id} style={styles.equipmentItem}>
-            {/* Checkbox */}
+                return (
+                  <View key={eq.id} style={styles.equipmentCard}>
+                    <TouchableOpacity
+                      style={styles.equipmentRow}
+                      onPress={() => toggleItem(eq)}
+                      activeOpacity={0.7}
+                    >
+                      <View style={[
+                        styles.checkbox,
+                        isSelected && styles.checkboxSelected,
+                      ]}>
+                        {isSelected && (
+                          <Ionicons name="checkmark" size={16} color={Colors.textWhite} />
+                        )}
+                      </View>
+                      <View style={styles.equipmentInfo}>
+                        <Text style={styles.equipmentName}>{eq.name}</Text>
+                        <View style={styles.equipmentMetaRow}>
+                          {eq.yamach !== undefined && eq.yamach !== null && (
+                            <Text style={styles.equipmentYamach}>ימ״ח: {eq.yamach}</Text>
+                          )}
+                          {isSelected && item?.availableStock !== undefined && (
+                            <Text style={styles.equipmentAvailable}>
+                              זמין: {item.availableStock}
+                            </Text>
+                          )}
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+
+                    {isSelected && (
+                      <View style={styles.itemDetails}>
+                        {/* Quantity Controls */}
+                        <View style={styles.quantityRow}>
+                          <Text style={styles.quantityLabel}>כמות:</Text>
+                          <View style={styles.quantityControls}>
+                            <TouchableOpacity
+                              style={styles.quantityButton}
+                              onPress={() => updateQuantity(eq.id, -1)}
+                            >
+                              <Ionicons name="remove" size={20} color={Colors.danger} />
+                            </TouchableOpacity>
+                            <Text style={styles.quantityValue}>{item?.quantity}</Text>
+                            <TouchableOpacity
+                              style={styles.quantityButton}
+                              onPress={() => updateQuantity(eq.id, 1)}
+                            >
+                              <Ionicons name="add" size={20} color={Colors.success} />
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+
+                        {/* Serial Input */}
+                        {requiresSerial(eq.name) && (
+                          <View style={styles.serialRow}>
+                            <Text style={styles.serialLabel}>מספר סידורי: *</Text>
+                            <TextInput
+                              style={styles.serialInput}
+                              placeholder="הזן מספר סידורי"
+                              placeholderTextColor={Colors.placeholder}
+                              value={item?.serial || ''}
+                              onChangeText={(text) => updateSerial(eq.id, text)}
+                            />
+                          </View>
+                        )}
+                      </View>
+                    )}
+                  </View>
+                );
+              })}
+            </View>
+
+            {/* Summary */}
+            {selectedItems.size > 0 && (
+              <View style={styles.summaryCard}>
+                <Text style={styles.summaryTitle}>סיכום</Text>
+                <Text style={styles.summaryText}>
+                  {selectedItems.size} פריטים נבחרו
+                </Text>
+              </View>
+            )}
+
+            {/* Continue Button */}
             <TouchableOpacity
-              style={styles.checkbox}
-              onPress={() => toggleEquipment(item.id)}
+              style={[
+                styles.continueButton,
+                selectedItems.size === 0 && styles.buttonDisabled,
+              ]}
+              onPress={validateAndSubmit}
+              disabled={selectedItems.size === 0}
             >
-              {item.selected && <Text style={styles.checkmark}>✓</Text>}
+              <Text style={styles.continueButtonText}>המשך לחתימה</Text>
+              <Ionicons name="arrow-back" size={20} color={Colors.textWhite} />
             </TouchableOpacity>
+          </>
+        ) : (
+          <>
+            {/* Signature Section */}
+            <Text style={styles.sectionTitle}>חתימת החייל</Text>
 
-            {/* Info + Quantité */}
-            <View style={styles.equipmentMain}>
-              <View style={styles.equipmentInfo}>
-                <Text style={styles.equipmentName}>{item.name}</Text>
+            <View style={styles.signatureContainer}>
+              <View style={styles.signatureWrapper}>
+                <SignatureCanvas
+                  ref={signatureRef}
+                  onEnd={handleSignatureEnd}
+                  onOK={handleSignatureChange}
+                  onBegin={() => setScrollEnabled(false)}
+                  onEmpty={() => setSignatureData(null)}
+                  descriptionText=""
+                  clearText="נקה"
+                  confirmText="אישור"
+                  webStyle={`
+                    .m-signature-pad { box-shadow: none; border: none; }
+                    .m-signature-pad--body { border: none; }
+                    .m-signature-pad--footer { display: none; }
+                  `}
+                  backgroundColor={Colors.backgroundCard}
+                  penColor={Colors.text}
+                  style={styles.signatureCanvas}
+                />
               </View>
 
-              {/* Contrôles de quantité */}
-              {item.selected && (
-                <View style={styles.quantityControls}>
-                  <TouchableOpacity
-                    style={styles.quantityButton}
-                    onPress={() => updateQuantity(item.id, 1)}
-                  >
-                    <Text style={styles.quantityButtonText}>+</Text>
-                  </TouchableOpacity>
-                  <Text style={styles.quantityText}>{item.quantity}</Text>
-                  <TouchableOpacity
-                    style={styles.quantityButton}
-                    onPress={() => updateQuantity(item.id, -1)}
-                  >
-                    <Text style={styles.quantityButtonText}>-</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
+              <TouchableOpacity
+                style={styles.clearSignatureButton}
+                onPress={handleClearSignature}
+              >
+                <Ionicons name="trash-outline" size={20} color={Colors.danger} />
+                <Text style={styles.clearSignatureText}>נקה חתימה</Text>
+              </TouchableOpacity>
             </View>
 
-            {/* Champ מסטב si nécessaire */}
-            {item.selected && item.needsSerial && (
-              <TextInput
-                style={styles.serialInput}
-                placeholder="מסטב"
-                placeholderTextColor={Colors.text.light}
-                value={item.serial || ''}
-                onChangeText={(text) => updateSerial(item.id, text)}
-                textAlign="right"
-              />
-            )}
-          </View>
-        ))}
+            {/* Action Buttons */}
+            <View style={styles.actionButtons}>
+              <TouchableOpacity
+                style={styles.backToEquipmentButton}
+                onPress={() => setShowSignature(false)}
+              >
+                <Text style={styles.backToEquipmentText}>חזור לבחירת ציוד</Text>
+              </TouchableOpacity>
 
-        {/* 3. Section Signature */}
-        <Text style={styles.sectionTitle}>חתימה</Text>
-
-        {signature && (
-          <View style={styles.signatureStatus}>
-            <Text style={styles.signatureStatusText}>✓ החתימה נקלטה</Text>
-          </View>
+              <TouchableOpacity
+                style={[
+                  styles.submitButton,
+                  (!signatureData || saving) && styles.buttonDisabled,
+                ]}
+                onPress={handleSubmit}
+                disabled={!signatureData || saving}
+              >
+                {saving ? (
+                  <ActivityIndicator size="small" color={Colors.textWhite} />
+                ) : (
+                  <>
+                    <Ionicons name="checkmark-circle" size={24} color={Colors.textWhite} />
+                    <Text style={styles.submitButtonText}>שמור החתמה</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </>
         )}
-
-        <View style={styles.signatureContainer}>
-          <SignatureCanvas
-            ref={signatureRef}
-            onOK={handleOK}
-            onEmpty={handleEmpty}
-            onBegin={handleBegin}
-            onEnd={handleEnd}
-            descriptionText="חתום כאן"
-            clearText="נקה"
-            confirmText="אשר"
-            webStyle={webStyle}
-            backgroundColor="#ffffff"
-            penColor="#000000"
-          />
-        </View>
-
-        <View style={styles.signatureButtons}>
-          <TouchableOpacity
-            style={styles.endSignatureButton}
-            onPress={handleEnd}
-            disabled={saving}
-          >
-            <Text style={styles.endSignatureText}>✓ סיים חתימה</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.clearSignatureButton}
-            onPress={handleClear}
-            disabled={saving}
-          >
-            <Text style={styles.clearSignatureText}>🗑️ נקה</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* 4. Bouton Sauvegarder */}
-        <TouchableOpacity
-          style={[styles.saveButton, saving && styles.saveButtonDisabled]}
-          onPress={handleSaveAndSign}
-          disabled={saving}
-        >
-          {saving ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.saveButtonText}>💾 שמור והחתם</Text>
-          )}
-        </TouchableOpacity>
       </ScrollView>
     </View>
   );
@@ -602,266 +494,361 @@ const ClothingSignatureScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background.primary,
+    backgroundColor: Colors.background,
   },
-  header: {
-    backgroundColor: Colors.background.header,
-    paddingTop: 60,
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    ...Shadows.medium,
-  },
-  backButton: {
-    position: 'absolute',
-    left: 20,
-    bottom: 20,
-    padding: 5,
-  },
-  backButtonText: {
-    fontSize: 28,
-    color: Colors.text.white,
-  },
-  headerContent: {
-    alignItems: 'flex-end',
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: Colors.text.white,
-    marginBottom: 5,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.8)',
-  },
-  content: {
-    flex: 1,
-    padding: 20,
-  },
-  scrollContent: {
-    paddingBottom: 100,
-  },
+
   loadingContainer: {
     flex: 1,
-    justifyContent: 'center',
+    backgroundColor: Colors.background,
     alignItems: 'center',
-  },
-  emptyContainer: {
-    flex: 1,
     justifyContent: 'center',
-    alignItems: 'center',
-    padding: 40,
   },
-  emptyText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: Colors.text.primary,
-    marginBottom: 10,
+
+  loadingText: {
+    marginTop: Spacing.md,
+    fontSize: FontSize.base,
+    color: Colors.textSecondary,
   },
-  emptySubtext: {
-    fontSize: 14,
-    color: Colors.text.secondary,
-    marginBottom: 20,
-    textAlign: 'center',
-  },
-  manageEquipmentButton: {
-    backgroundColor: Colors.status.info,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 10,
-    ...Shadows.small,
-  },
-  manageEquipmentText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: Colors.text.white,
-  },
-  soldierCard: {
-    backgroundColor: Colors.background.card,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: Colors.border.light,
-    ...Shadows.small,
-  },
-  soldierRow: {
+
+  // Header
+  header: {
+    backgroundColor: Colors.vetement,
+    paddingTop: Platform.OS === 'ios' ? 50 : 20,
+    paddingBottom: Spacing.xl,
+    paddingHorizontal: Spacing.lg,
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border.light,
+    borderBottomLeftRadius: BorderRadius.xl,
+    borderBottomRightRadius: BorderRadius.xl,
+    ...Shadows.medium,
   },
-  soldierLabel: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: Colors.text.secondary,
+
+  backButton: {
+    width: 44,
+    height: 44,
+    borderRadius: BorderRadius.full,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  soldierValue: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: Colors.text.primary,
+
+  headerTitleContainer: {
+    flex: 1,
+    alignItems: 'center',
   },
+
+  headerTitle: {
+    fontSize: FontSize.xxl,
+    fontWeight: '700',
+    color: Colors.textWhite,
+  },
+
+  headerSubtitle: {
+    fontSize: FontSize.md,
+    color: 'rgba(255, 255, 255, 0.8)',
+    marginTop: Spacing.xs,
+  },
+
+  headerSpacer: {
+    width: 44,
+  },
+
+  // Content
+  content: {
+    flex: 1,
+  },
+
+  scrollContent: {
+    padding: Spacing.lg,
+    paddingBottom: 100,
+  },
+
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: Colors.text.primary,
-    marginBottom: 15,
-    marginTop: 10,
+    fontSize: FontSize.lg,
+    fontWeight: '600',
+    color: Colors.text,
+    marginBottom: Spacing.md,
+    marginTop: Spacing.lg,
     textAlign: 'right',
   },
-  equipmentItem: {
-    backgroundColor: Colors.background.card,
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 10,
+
+  // Soldier Card
+  soldierCard: {
+    backgroundColor: Colors.backgroundCard,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.lg,
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: Colors.border.light,
     ...Shadows.small,
   },
-  checkbox: {
-    width: 28,
-    height: 28,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: Colors.border.dark,
+
+  soldierAvatar: {
+    width: 64,
+    height: 64,
+    borderRadius: BorderRadius.full,
+    backgroundColor: Colors.vetementLight,
+    alignItems: 'center',
     justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 12,
+    marginLeft: Spacing.md,
   },
-  checkmark: {
-    fontSize: 18,
-    color: Colors.status.success,
-    fontWeight: 'bold',
-  },
-  equipmentMain: {
+
+  soldierInfo: {
     flex: 1,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-end',
   },
+
+  soldierName: {
+    fontSize: FontSize.lg,
+    fontWeight: '600',
+    color: Colors.text,
+  },
+
+  soldierNumber: {
+    fontSize: FontSize.md,
+    color: Colors.textSecondary,
+    marginTop: Spacing.xs,
+  },
+
+  // Equipment List
+  equipmentList: {
+    gap: Spacing.md,
+  },
+
+  equipmentCard: {
+    backgroundColor: Colors.backgroundCard,
+    borderRadius: BorderRadius.lg,
+    overflow: 'hidden',
+    ...Shadows.small,
+  },
+
+  equipmentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: Spacing.lg,
+  },
+
+  checkbox: {
+    width: 24,
+    height: 24,
+    borderRadius: BorderRadius.sm,
+    borderWidth: 2,
+    borderColor: Colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: Spacing.md,
+  },
+
+  checkboxSelected: {
+    backgroundColor: Colors.vetement,
+    borderColor: Colors.vetement,
+  },
+
   equipmentInfo: {
     flex: 1,
     alignItems: 'flex-end',
   },
+
   equipmentName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: Colors.text.primary,
+    fontSize: FontSize.base,
+    fontWeight: '500',
+    color: Colors.text,
   },
+
+  equipmentMetaRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    marginTop: Spacing.xs,
+  },
+
+  equipmentYamach: {
+    fontSize: FontSize.sm,
+    color: Colors.textSecondary,
+  },
+
+  equipmentAvailable: {
+    fontSize: FontSize.sm,
+    color: Colors.success,
+    fontWeight: '500',
+  },
+
+  itemDetails: {
+    backgroundColor: Colors.backgroundInput,
+    padding: Spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+  },
+
+  quantityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+
+  quantityLabel: {
+    fontSize: FontSize.md,
+    color: Colors.textSecondary,
+  },
+
   quantityControls: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: Spacing.md,
   },
+
   quantityButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    backgroundColor: Colors.modules.vetement,
-    justifyContent: 'center',
+    width: 36,
+    height: 36,
+    borderRadius: BorderRadius.full,
+    backgroundColor: Colors.backgroundCard,
     alignItems: 'center',
+    justifyContent: 'center',
+    ...Shadows.xs,
   },
-  quantityButtonText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: Colors.text.white,
-  },
-  quantityText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: Colors.text.primary,
+
+  quantityValue: {
+    fontSize: FontSize.lg,
+    fontWeight: '600',
+    color: Colors.text,
     minWidth: 30,
     textAlign: 'center',
   },
+
+  serialRow: {
+    marginTop: Spacing.md,
+  },
+
+  serialLabel: {
+    fontSize: FontSize.sm,
+    color: Colors.textSecondary,
+    marginBottom: Spacing.xs,
+    textAlign: 'right',
+  },
+
   serialInput: {
+    backgroundColor: Colors.backgroundCard,
+    borderRadius: BorderRadius.md,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    fontSize: FontSize.base,
+    color: Colors.text,
+    textAlign: 'right',
     borderWidth: 1,
-    borderColor: Colors.border.medium,
-    borderRadius: 8,
-    padding: 8,
-    fontSize: 14,
-    color: Colors.text.primary,
-    backgroundColor: Colors.background.secondary,
-    minWidth: 100,
-    marginRight: 10,
+    borderColor: Colors.border,
   },
-  signatureStatus: {
-    backgroundColor: '#d4edda',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 10,
+
+  // Summary Card
+  summaryCard: {
+    backgroundColor: Colors.successLight,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.lg,
+    marginTop: Spacing.lg,
     borderWidth: 1,
-    borderColor: '#c3e6cb',
+    borderColor: Colors.success + '30',
   },
-  signatureStatusText: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#155724',
-    textAlign: 'center',
+
+  summaryTitle: {
+    fontSize: FontSize.md,
+    fontWeight: '600',
+    color: Colors.successDark,
+    textAlign: 'right',
   },
-  signatureContainer: {
-    height: 300,
-    width: '100%',
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    overflow: 'hidden',
-    borderWidth: 2,
-    borderColor: Colors.military.navyBlue,
-    marginBottom: 15,
-    ...Shadows.medium,
+
+  summaryText: {
+    fontSize: FontSize.base,
+    color: Colors.successDark,
+    marginTop: Spacing.xs,
+    textAlign: 'right',
   },
-  signatureButtons: {
+
+  // Buttons
+  continueButton: {
+    backgroundColor: Colors.vetement,
+    borderRadius: BorderRadius.md,
+    paddingVertical: Spacing.lg,
     flexDirection: 'row',
-    gap: 12,
-    marginBottom: 15,
-  },
-  endSignatureButton: {
-    flex: 1,
-    backgroundColor: Colors.status.info,
-    borderRadius: 10,
-    padding: 14,
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.sm,
+    marginTop: Spacing.xl,
+    ...Shadows.small,
   },
-  endSignatureText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: Colors.text.white,
+
+  continueButtonText: {
+    fontSize: FontSize.lg,
+    fontWeight: '600',
+    color: Colors.textWhite,
   },
+
+  buttonDisabled: {
+    backgroundColor: Colors.disabled,
+  },
+
+  // Signature
+  signatureContainer: {
+    backgroundColor: Colors.backgroundCard,
+    borderRadius: BorderRadius.lg,
+    overflow: 'hidden',
+    ...Shadows.small,
+  },
+
+  signatureWrapper: {
+    height: 250,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+
+  signatureCanvas: {
+    flex: 1,
+  },
+
   clearSignatureButton: {
-    flex: 1,
-    backgroundColor: Colors.background.card,
-    borderRadius: 10,
-    padding: 14,
+    flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: Colors.status.danger,
+    justifyContent: 'center',
+    padding: Spacing.md,
+    gap: Spacing.xs,
   },
+
   clearSignatureText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: Colors.status.danger,
+    fontSize: FontSize.md,
+    color: Colors.danger,
   },
-  saveButton: {
-    backgroundColor: Colors.status.success,
-    borderRadius: 12,
-    padding: 18,
+
+  // Action Buttons
+  actionButtons: {
+    marginTop: Spacing.xl,
+    gap: Spacing.md,
+  },
+
+  backToEquipmentButton: {
+    backgroundColor: Colors.backgroundCard,
+    borderRadius: BorderRadius.md,
+    paddingVertical: Spacing.md,
     alignItems: 'center',
-    marginBottom: 30,
-    ...Shadows.medium,
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
-  saveButtonDisabled: {
-    opacity: 0.5,
+
+  backToEquipmentText: {
+    fontSize: FontSize.base,
+    color: Colors.textSecondary,
   },
-  saveButtonText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: Colors.text.white,
+
+  submitButton: {
+    backgroundColor: Colors.success,
+    borderRadius: BorderRadius.md,
+    paddingVertical: Spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.sm,
+    ...Shadows.small,
+  },
+
+  submitButtonText: {
+    fontSize: FontSize.lg,
+    fontWeight: '600',
+    color: Colors.textWhite,
   },
 });
 

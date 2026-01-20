@@ -50,6 +50,51 @@ export const addCombatEquipment = async (
   }
 };
 
+export const getCombatEquipmentById = async (id: string): Promise<CombatEquipment | null> => {
+  try {
+    const docRef = doc(db, COMBAT_COLLECTION, id);
+    const docSnap = await getDoc(docRef);
+
+    if (!docSnap.exists()) {
+      return null;
+    }
+
+    return {
+      id: docSnap.id,
+      ...docSnap.data(),
+    } as CombatEquipment;
+  } catch (error) {
+    console.error('Error getting combat equipment:', error);
+    throw error;
+  }
+};
+
+export const updateCombatEquipment = async (
+  id: string,
+  updates: Partial<CombatEquipment>
+): Promise<void> => {
+  try {
+    const docRef = doc(db, COMBAT_COLLECTION, id);
+    await updateDoc(docRef, {
+      ...updates,
+      updatedAt: Timestamp.now(),
+    });
+  } catch (error) {
+    console.error('Error updating combat equipment:', error);
+    throw error;
+  }
+};
+
+export const deleteCombatEquipment = async (id: string): Promise<void> => {
+  try {
+    const docRef = doc(db, COMBAT_COLLECTION, id);
+    await deleteDoc(docRef);
+  } catch (error) {
+    console.error('Error deleting combat equipment:', error);
+    throw error;
+  }
+};
+
 // =============== ÉQUIPEMENTS VÊTEMENT ===============
 
 const CLOTHING_COLLECTION = 'equipment_clothing';

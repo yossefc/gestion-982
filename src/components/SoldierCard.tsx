@@ -1,7 +1,7 @@
 // Composant Card de soldat réutilisable
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ViewStyle } from 'react-native';
-import { Colors, Shadows } from '../theme/colors';
+import { Colors, Shadows } from '../theme/Colors';
 import { Soldier } from '../types';
 
 interface SoldierCardProps {

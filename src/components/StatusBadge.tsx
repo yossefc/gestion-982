@@ -1,7 +1,7 @@
 // Composant Badge de statut réutilisable
 import React from 'react';
 import { View, Text, StyleSheet, ViewStyle } from 'react-native';
-import { Colors } from '../theme/colors';
+import { Colors } from '../theme/Colors';
 import { EquipmentStatus } from '../types';
 
 interface StatusBadgeProps {

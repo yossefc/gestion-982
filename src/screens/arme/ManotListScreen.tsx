@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { Mana } from '../../types';
-import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/colors';
+import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
 import { getAllManot, addMana, DEFAULT_MANOT } from '../../services/equipmentService';
 
 const ManotListScreen: React.FC = () => {

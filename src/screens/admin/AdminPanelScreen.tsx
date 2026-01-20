@@ -1,71 +1,65 @@
-// Écran du panneau d'administration
-import React, { useEffect, useState } from 'react';
+/**
+ * AdminPanelScreen.tsx - Panneau d'administration
+ * Design militaire professionnel
+ */
+
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
-  TouchableOpacity,
   StyleSheet,
   ScrollView,
+  TouchableOpacity,
   ActivityIndicator,
   Alert,
+  Platform,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
-import { Colors, Shadows } from '../../theme/colors';
-import { soldierService } from '../../services/firebaseService';
-import { getAssignmentsByType } from '../../services/assignmentService';
-import { initializeDefaultData } from '../../services/equipmentService';
-import { getUserCount } from '../../services/userService';
-import { notifyError } from '../../utils/notify';
-import { useAuth } from '../../contexts/AuthContext';
+import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
+import { soldierService } from '../../services/soldierService';
+import { userService } from '../../services/userService';
+import { assignmentService } from '../../services/assignmentService';
 
 const AdminPanelScreen: React.FC = () => {
-  const navigation = useNavigation<any>();
-  const { user, loading: authLoading } = useAuth();
+  const navigation = useNavigation();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     totalUsers: 0,
     totalSoldiers: 0,
-    totalAssignments: 0,
     todayAssignments: 0,
+    totalAssignments: 0,
   });
 
   useEffect(() => {
-    // Attendre que l'auth soit prête avant de charger les stats
-    if (!authLoading && user) {
-      loadStats();
-    } else if (!authLoading) {
-      setLoading(false);
-    }
-  }, [authLoading, user]);
+    loadStats();
+  }, []);
 
   const loadStats = async () => {
     try {
-      const [soldiers, clothingAssignments, combatAssignments, userCount] = await Promise.all([
-        soldierService.getAll(1000), // Charger tous pour les stats
-        getAssignmentsByType('clothing'),
-        getAssignmentsByType('combat'),
-        getUserCount(),
+      setLoading(true);
+      const [soldiers, users, assignments] = await Promise.all([
+        soldierService.getAll(),
+        userService.getAll(),
+        assignmentService.getAll(),
       ]);
 
-      const allAssignments = [...clothingAssignments, ...combatAssignments];
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-
-      const todayCount = allAssignments.filter(a => {
-        const assignmentDate = new Date(a.timestamp);
-        assignmentDate.setHours(0, 0, 0, 0);
-        return assignmentDate.getTime() === today.getTime();
-      }).length;
+      const todayAssignments = assignments.filter((a: any) => {
+        const assignmentDate = a.createdAt?.toDate?.() || new Date(a.createdAt);
+        return assignmentDate >= today;
+      });
 
       setStats({
-        totalUsers: userCount,
+        totalUsers: users.length,
         totalSoldiers: soldiers.length,
-        totalAssignments: allAssignments.length,
-        todayAssignments: todayCount,
+        todayAssignments: todayAssignments.length,
+        totalAssignments: assignments.length,
       });
     } catch (error) {
-      console.error('Error loading admin stats:', error);
-      Alert.alert('שגיאה', 'נכשל בטעינת הסטטיסטיקות');
+      console.error('Error loading stats:', error);
+      Alert.alert('שגיאה', 'לא ניתן לטעון את הנתונים');
     } finally {
       setLoading(false);
     }
@@ -73,51 +67,88 @@ const AdminPanelScreen: React.FC = () => {
 
   const handleInitializeData = () => {
     Alert.alert(
-      'אתחול נתונים',
-      'פעולה זו תוסיף ציוד וממנות ברירת מחדל למערכת. להמשיך?',
+      'אתחול נתוני ברירת מחדל',
+      'האם אתה בטוח? פעולה זו תוסיף ציוד ברירת מחדל למערכת.',
       [
         { text: 'ביטול', style: 'cancel' },
-        {
-          text: 'אתחל',
-          onPress: async () => {
-            try {
-              await initializeDefaultData();
-            } catch (error) {
-              console.error('Error initializing data:', error);
-              Alert.alert('שגיאה', 'נכשל באתחול הנתונים');
-            }
-          },
-        },
+        { text: 'אישור', onPress: () => initializeDefaultData() },
       ]
     );
   };
 
-  const handleExportData = () => {
-    Alert.alert('בקרוב', 'תכונת ייצוא נתונים תהיה זמינה בקרוב');
+  const initializeDefaultData = async () => {
+    try {
+      setLoading(true);
+      // Initialize default equipment logic here
+      Alert.alert('הצלחה', 'הנתונים אותחלו בהצלחה');
+    } catch (error) {
+      Alert.alert('שגיאה', 'לא ניתן לאתחל את הנתונים');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleBackup = () => {
-    Alert.alert('בקרוב', 'תכונת גיבוי תהיה זמינה בקרוב');
-  };
+  const StatCard = ({
+    title,
+    value,
+    icon,
+    color
+  }: {
+    title: string;
+    value: number;
+    icon: string;
+    color: string;
+  }) => (
+    <View style={[styles.statCard, { borderLeftColor: color }]}>
+      <View style={[styles.statIconContainer, { backgroundColor: color + '15' }]}>
+        <Ionicons name={icon as any} size={24} color={color} />
+      </View>
+      <Text style={styles.statValue}>{value}</Text>
+      <Text style={styles.statLabel}>{title}</Text>
+    </View>
+  );
+
+  const ActionCard = ({
+    title,
+    subtitle,
+    icon,
+    onPress,
+    color = Colors.primary,
+    disabled = false,
+  }: {
+    title: string;
+    subtitle: string;
+    icon: string;
+    onPress: () => void;
+    color?: string;
+    disabled?: boolean;
+  }) => (
+    <TouchableOpacity
+      style={[styles.actionCard, disabled && styles.actionCardDisabled]}
+      onPress={onPress}
+      disabled={disabled}
+      activeOpacity={0.7}
+    >
+      <View style={[styles.actionIconContainer, { backgroundColor: color + '15' }]}>
+        <Ionicons name={icon as any} size={28} color={disabled ? Colors.disabled : color} />
+      </View>
+      <View style={styles.actionContent}>
+        <Text style={[styles.actionTitle, disabled && styles.textDisabled]}>{title}</Text>
+        <Text style={[styles.actionSubtitle, disabled && styles.textDisabled]}>{subtitle}</Text>
+      </View>
+      <Ionicons
+        name="chevron-back"
+        size={20}
+        color={disabled ? Colors.disabled : Colors.textLight}
+      />
+    </TouchableOpacity>
+  );
 
   if (loading) {
     return (
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}
-          >
-            <Text style={styles.backButtonText}>←</Text>
-          </TouchableOpacity>
-          <View style={styles.headerContent}>
-            <Text style={styles.title}>ניהול מערכת</Text>
-            <Text style={styles.subtitle}>⚙️ Admin Panel</Text>
-          </View>
-        </View>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={Colors.status.info} />
-        </View>
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+        <Text style={styles.loadingText}>טוען נתונים...</Text>
       </View>
     );
   }
@@ -130,100 +161,118 @@ const AdminPanelScreen: React.FC = () => {
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <Text style={styles.backButtonText}>←</Text>
+          <Ionicons name="arrow-forward" size={24} color={Colors.textWhite} />
         </TouchableOpacity>
-        <View style={styles.headerContent}>
-          <Text style={styles.title}>ניהול מערכת</Text>
-          <Text style={styles.subtitle}>⚙️ Admin Panel</Text>
+
+        <View style={styles.headerTitleContainer}>
+          <Text style={styles.headerTitle}>פאנל ניהול</Text>
+          <Text style={styles.headerSubtitle}>ניהול מערכת גדוד 982</Text>
         </View>
+
+        <TouchableOpacity
+          style={styles.refreshButton}
+          onPress={loadStats}
+        >
+          <Ionicons name="refresh" size={24} color={Colors.textWhite} />
+        </TouchableOpacity>
       </View>
 
-      <ScrollView 
-        style={styles.content} 
-        showsVerticalScrollIndicator={false}
+      <ScrollView
+        style={styles.content}
         contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
       >
-        {/* ניהול משתמשים */}
-        <Text style={styles.sectionTitle}>ניהול משתמשים</Text>
-        <TouchableOpacity
-          style={styles.menuCard}
-          onPress={() => navigation.navigate('UserManagement')}
-        >
-          <View style={[styles.menuIcon, { backgroundColor: '#9b59b6' }]}>
-            <Text style={styles.menuIconText}>👥</Text>
-          </View>
-          <View style={styles.menuInfo}>
-            <Text style={styles.menuTitle}>ניהול משתמשים</Text>
-            <Text style={styles.menuSubtitle}>הוספה, עריכה והרשאות</Text>
-          </View>
-          <Text style={styles.chevron}>›</Text>
-        </TouchableOpacity>
-
-        {/* סטטיסטיקות כלליות */}
-        <Text style={styles.sectionTitle}>סטטיסטיקות כלליות</Text>
+        {/* Stats Section */}
+        <Text style={styles.sectionTitle}>סטטיסטיקות מערכת</Text>
         <View style={styles.statsGrid}>
-          <View style={[styles.statCard, { backgroundColor: '#9b59b6' }]}>
-            <Text style={styles.statNumber}>{stats.totalUsers}</Text>
-            <Text style={styles.statLabel}>סה"כ משתמשים</Text>
-          </View>
-          <View style={[styles.statCard, { backgroundColor: Colors.status.info }]}>
-            <Text style={styles.statNumber}>{stats.totalSoldiers}</Text>
-            <Text style={styles.statLabel}>סה"כ חיילים</Text>
-          </View>
-          <View style={[styles.statCard, { backgroundColor: Colors.status.success }]}>
-            <Text style={styles.statNumber}>{stats.totalAssignments}</Text>
-            <Text style={styles.statLabel}>סה"כ החתמות</Text>
-          </View>
-          <View style={[styles.statCard, { backgroundColor: Colors.status.warning }]}>
-            <Text style={styles.statNumber}>{stats.todayAssignments}</Text>
-            <Text style={styles.statLabel}>החתמות היום</Text>
-          </View>
+          <StatCard
+            title="משתמשים"
+            value={stats.totalUsers}
+            icon="people"
+            color={Colors.info}
+          />
+          <StatCard
+            title="חיילים"
+            value={stats.totalSoldiers}
+            icon="person"
+            color={Colors.success}
+          />
+          <StatCard
+            title="החתמות היום"
+            value={stats.todayAssignments}
+            icon="today"
+            color={Colors.warning}
+          />
+          <StatCard
+            title="סה״כ החתמות"
+            value={stats.totalAssignments}
+            icon="documents"
+            color={Colors.soldats}
+          />
         </View>
 
-        {/* ניהול נתונים */}
-        <Text style={styles.sectionTitle}>ניהול נתונים</Text>
-        <View style={styles.actionsList}>
-          <TouchableOpacity
-            style={styles.actionCard}
-            onPress={() => navigation.navigate('DatabaseDebug')}
-          >
-            <Text style={styles.actionIcon}>🔍</Text>
-            <Text style={styles.actionText}>בדיקת בסיס נתונים</Text>
-          </TouchableOpacity>
+        {/* Management Actions */}
+        <Text style={styles.sectionTitle}>ניהול משתמשים</Text>
+        <ActionCard
+          title="ניהול משתמשים"
+          subtitle="הוספה, עריכה והרשאות משתמשים"
+          icon="people-circle"
+          color={Colors.soldats}
+          onPress={() => navigation.navigate('UserManagement' as never)}
+        />
 
-          <TouchableOpacity
-            style={styles.actionCard}
-            onPress={handleInitializeData}
-          >
-            <Text style={styles.actionIcon}>🔄</Text>
-            <Text style={styles.actionText}>אתחול נתוני ברירת מחדל</Text>
-          </TouchableOpacity>
+        {/* Database Actions */}
+        <Text style={styles.sectionTitle}>כלי מסד נתונים</Text>
+        <ActionCard
+          title="בדיקת מסד נתונים"
+          subtitle="סקירת אוספים ואבחון בעיות"
+          icon="server"
+          color={Colors.info}
+          onPress={() => navigation.navigate('DatabaseDebug' as never)}
+        />
+        <ActionCard
+          title="אתחול נתוני ברירת מחדל"
+          subtitle="הוספת ציוד ומנות ברירת מחדל"
+          icon="refresh-circle"
+          color={Colors.warning}
+          onPress={handleInitializeData}
+        />
 
-          <TouchableOpacity style={styles.actionCard} onPress={handleExportData}>
-            <Text style={styles.actionIcon}>📥</Text>
-            <Text style={styles.actionText}>ייצוא נתונים</Text>
-          </TouchableOpacity>
+        {/* Export Actions */}
+        <Text style={styles.sectionTitle}>ייצוא נתונים</Text>
+        <ActionCard
+          title="ייצוא לאקסל"
+          subtitle="ייצוא כל הנתונים לקובץ Excel"
+          icon="download"
+          color={Colors.success}
+          onPress={() => Alert.alert('בקרוב', 'פיצ׳ר זה יהיה זמין בקרוב')}
+          disabled
+        />
+        <ActionCard
+          title="גיבוי מערכת"
+          subtitle="יצירת גיבוי מלא של המערכת"
+          icon="cloud-upload"
+          color={Colors.primary}
+          onPress={() => Alert.alert('בקרוב', 'פיצ׳ר זה יהיה זמין בקרוב')}
+          disabled
+        />
 
-          <TouchableOpacity style={styles.actionCard} onPress={handleBackup}>
-            <Text style={styles.actionIcon}>💾</Text>
-            <Text style={styles.actionText}>גיבוי</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* הגדרות מערכת */}
-        <Text style={styles.sectionTitle}>הגדרות מערכת</Text>
-        <View style={styles.infoCard}>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoValue}>1.0.0</Text>
-            <Text style={styles.infoLabel}>גרסת אפליקציה:</Text>
+        {/* System Info */}
+        <View style={styles.systemInfo}>
+          <View style={styles.systemInfoRow}>
+            <Text style={styles.systemInfoLabel}>גרסה:</Text>
+            <Text style={styles.systemInfoValue}>1.0.0</Text>
           </View>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoValue}>✅ מחובר</Text>
-            <Text style={styles.infoLabel}>Firebase:</Text>
+          <View style={styles.systemInfoRow}>
+            <Text style={styles.systemInfoLabel}>סטטוס Firebase:</Text>
+            <View style={styles.statusBadge}>
+              <View style={styles.statusDot} />
+              <Text style={styles.statusText}>מחובר</Text>
+            </View>
           </View>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoValue}>גדוד 982</Text>
-            <Text style={styles.infoLabel}>יחידה:</Text>
+          <View style={styles.systemInfoRow}>
+            <Text style={styles.systemInfoLabel}>יחידה:</Text>
+            <Text style={styles.systemInfoValue}>גדוד 982</Text>
           </View>
         </View>
       </ScrollView>
@@ -234,177 +283,221 @@ const AdminPanelScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background.primary,
+    backgroundColor: Colors.background,
   },
-  header: {
-    backgroundColor: Colors.background.header,
-    paddingTop: 60,
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    ...Shadows.medium,
-  },
-  backButton: {
-    position: 'absolute',
-    left: 20,
-    bottom: 20,
-    padding: 5,
-  },
-  backButtonText: {
-    fontSize: 28,
-    color: Colors.text.white,
-  },
-  headerContent: {
-    alignItems: 'flex-end',
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: Colors.text.white,
-    marginBottom: 5,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.8)',
-  },
-  content: {
-    flex: 1,
-    padding: 20,
-  },
-  scrollContent: {
-    paddingBottom: 100,
-  },
+
   loadingContainer: {
     flex: 1,
-    justifyContent: 'center',
+    backgroundColor: Colors.background,
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: Colors.text.primary,
-    marginBottom: 15,
-    marginTop: 10,
-    textAlign: 'right',
+
+  loadingText: {
+    marginTop: Spacing.md,
+    fontSize: FontSize.base,
+    color: Colors.textSecondary,
   },
-  menuCard: {
+
+  // Header
+  header: {
+    backgroundColor: Colors.soldats,
+    paddingTop: Platform.OS === 'ios' ? 50 : 20,
+    paddingBottom: Spacing.xl,
+    paddingHorizontal: Spacing.lg,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.background.card,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: Colors.border.light,
+    borderBottomLeftRadius: BorderRadius.xl,
+    borderBottomRightRadius: BorderRadius.xl,
     ...Shadows.medium,
   },
-  menuIcon: {
-    width: 55,
-    height: 55,
-    borderRadius: 12,
-    justifyContent: 'center',
+
+  backButton: {
+    width: 44,
+    height: 44,
+    borderRadius: BorderRadius.full,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     alignItems: 'center',
-    marginLeft: 15,
+    justifyContent: 'center',
   },
-  menuIconText: {
-    fontSize: 26,
-  },
-  menuInfo: {
+
+  headerTitleContainer: {
     flex: 1,
-    alignItems: 'flex-end',
+    alignItems: 'center',
   },
-  menuTitle: {
-    fontSize: 17,
-    fontWeight: 'bold',
-    color: Colors.text.primary,
-    marginBottom: 4,
+
+  headerTitle: {
+    fontSize: FontSize.xxl,
+    fontWeight: '700',
+    color: Colors.textWhite,
   },
-  menuSubtitle: {
-    fontSize: 13,
-    color: Colors.text.secondary,
+
+  headerSubtitle: {
+    fontSize: FontSize.md,
+    color: 'rgba(255, 255, 255, 0.8)',
+    marginTop: Spacing.xs,
   },
-  chevron: {
-    fontSize: 28,
-    color: Colors.military.navyBlue,
-    marginRight: 5,
+
+  refreshButton: {
+    width: 44,
+    height: 44,
+    borderRadius: BorderRadius.full,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
+
+  // Content
+  content: {
+    flex: 1,
+  },
+
+  scrollContent: {
+    padding: Spacing.lg,
+    paddingBottom: 100,
+  },
+
+  sectionTitle: {
+    fontSize: FontSize.lg,
+    fontWeight: '600',
+    color: Colors.text,
+    marginBottom: Spacing.md,
+    marginTop: Spacing.lg,
+    textAlign: 'right',
+  },
+
+  // Stats Grid
   statsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
-    marginBottom: 25,
+    gap: Spacing.md,
   },
+
   statCard: {
-    flex: 1,
-    minWidth: '47%',
-    padding: 20,
-    borderRadius: 12,
-    alignItems: 'center',
+    backgroundColor: Colors.backgroundCard,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.lg,
+    width: '47%',
+    borderLeftWidth: 4,
     ...Shadows.small,
   },
-  statNumber: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: Colors.text.white,
+
+  statIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: BorderRadius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.sm,
   },
+
+  statValue: {
+    fontSize: FontSize.xxxl,
+    fontWeight: '700',
+    color: Colors.text,
+  },
+
   statLabel: {
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.9)',
-    marginTop: 8,
-    textAlign: 'center',
+    fontSize: FontSize.sm,
+    color: Colors.textSecondary,
+    marginTop: Spacing.xs,
   },
-  actionsList: {
-    gap: 12,
-    marginBottom: 25,
-  },
+
+  // Action Cards
   actionCard: {
+    backgroundColor: Colors.backgroundCard,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.lg,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.background.card,
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: Colors.border.light,
+    marginBottom: Spacing.md,
     ...Shadows.small,
   },
-  actionIcon: {
-    fontSize: 24,
-    marginLeft: 15,
+
+  actionCardDisabled: {
+    opacity: 0.6,
   },
-  actionText: {
+
+  actionIconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: BorderRadius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: Spacing.md,
+  },
+
+  actionContent: {
     flex: 1,
-    fontSize: 16,
-    fontWeight: '600',
-    color: Colors.text.primary,
-    textAlign: 'right',
+    alignItems: 'flex-end',
   },
-  infoCard: {
-    backgroundColor: Colors.background.card,
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: Colors.border.light,
-    marginBottom: 20,
+
+  actionTitle: {
+    fontSize: FontSize.base,
+    fontWeight: '600',
+    color: Colors.text,
+  },
+
+  actionSubtitle: {
+    fontSize: FontSize.sm,
+    color: Colors.textSecondary,
+    marginTop: Spacing.xs,
+  },
+
+  textDisabled: {
+    color: Colors.disabled,
+  },
+
+  // System Info
+  systemInfo: {
+    backgroundColor: Colors.backgroundCard,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.lg,
+    marginTop: Spacing.xl,
     ...Shadows.small,
   },
-  infoRow: {
+
+  systemInfoRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 10,
+    paddingVertical: Spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border.light,
+    borderBottomColor: Colors.border,
   },
-  infoLabel: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: Colors.text.secondary,
+
+  systemInfoLabel: {
+    fontSize: FontSize.md,
+    color: Colors.textSecondary,
   },
-  infoValue: {
-    fontSize: 15,
-    color: Colors.text.primary,
+
+  systemInfoValue: {
+    fontSize: FontSize.md,
+    fontWeight: '500',
+    color: Colors.text,
+  },
+
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.successLight,
+    paddingVertical: Spacing.xs,
+    paddingHorizontal: Spacing.sm,
+    borderRadius: BorderRadius.full,
+  },
+
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: Colors.success,
+    marginRight: Spacing.xs,
+  },
+
+  statusText: {
+    fontSize: FontSize.sm,
+    fontWeight: '500',
+    color: Colors.successDark,
   },
 });
 

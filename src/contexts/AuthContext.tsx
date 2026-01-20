@@ -1,12 +1,12 @@
 // Contexte d'authentification pour gérer l'état de connexion
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { 
-  onAuthStateChanged, 
-  signInWithEmailAndPassword, 
+import {
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
   signOut as firebaseSignOut,
-  User as FirebaseUser 
+  User as FirebaseUser
 } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, Timestamp } from 'firebase/firestore';
 import { auth, db } from '../config/firebase';
 import { User, UserRole } from '../types';
 
@@ -14,6 +14,8 @@ interface AuthContextType {
   user: User | null;
   firebaseUser: FirebaseUser | null;
   loading: boolean;
+  authLoading: boolean; // Alias for loading
+  userRole: string | null; // User's role
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   hasPermission: (module: 'arme' | 'vetement' | 'admin') => boolean;
@@ -41,7 +43,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
       setFirebaseUser(fbUser);
-      
+
       if (fbUser) {
         // Récupérer les données utilisateur depuis Firestore
         try {
@@ -58,14 +60,26 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             });
           } else {
             // Utilisateur Firebase sans données Firestore
-            // Créer un profil par défaut (pour le premier admin)
-            setUser({
-              id: fbUser.uid,
+            // Créer un profil par défaut ET le sauvegarder dans Firestore
+            console.log(`Creating Firestore profile for user: ${fbUser.email}`);
+
+            const defaultUserData = {
               email: fbUser.email || '',
               name: fbUser.email?.split('@')[0] || 'User',
-              role: 'both', // Rôle par défaut
+              role: 'both' as UserRole, // Rôle par défaut
+              createdAt: Timestamp.now(),
+            };
+
+            // Sauvegarder dans Firestore
+            await setDoc(doc(db, 'users', fbUser.uid), defaultUserData);
+
+            setUser({
+              id: fbUser.uid,
+              ...defaultUserData,
               createdAt: new Date(),
             });
+
+            console.log(`Firestore profile created for: ${fbUser.email}`);
           }
         } catch (error) {
           console.error('Error fetching user data:', error);
@@ -73,7 +87,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       } else {
         setUser(null);
       }
-      
+
       setLoading(false);
     });
 
@@ -108,7 +122,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   // Vérifier les permissions selon le rôle
   const hasPermission = (module: 'arme' | 'vetement' | 'admin'): boolean => {
     if (!user) return false;
-    
+
     switch (user.role) {
       case 'admin':
         return true; // Admin a accès à tout
@@ -127,6 +141,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     user,
     firebaseUser,
     loading,
+    authLoading: loading, // Alias for compatibility
+    userRole: user?.role || null,
     signIn,
     signOut,
     hasPermission,

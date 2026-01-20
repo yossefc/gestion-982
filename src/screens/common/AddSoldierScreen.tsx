@@ -1,72 +1,140 @@
-// Écran d'ajout de nouveau soldat
+/**
+ * AddSoldierScreen.tsx - Ajout d'un nouveau soldat
+ * Design militaire professionnel
+ */
+
 import React, { useState } from 'react';
 import {
   View,
   Text,
-  TextInput,
-  TouchableOpacity,
   StyleSheet,
   ScrollView,
-  Alert,
+  TextInput,
+  TouchableOpacity,
   ActivityIndicator,
+  Alert,
+  Platform,
+  KeyboardAvoidingView,
+  KeyboardTypeOptions,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
-import { soldierService } from '../../services/firebaseService';
-import { Company } from '../../types';
-import { Colors, Shadows } from '../../theme/colors';
-import { notifyError, notifySuccess } from '../../utils/notify';
+import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
+import { soldierService } from '../../services/soldierService';
 
-const COMPANIES: Company[] = ['פלוגה א', 'פלוגה ב', 'פלוגה ג', 'פלוגה ד', 'מפקדה', 'ניוד'];
+const COMPANIES = ['פלוגה א', 'פלוגה ב', 'פלוגה ג', 'פלוגה ד', 'מפקדה', 'ניוד'];
+
+// Composant InputField défini HORS du composant principal pour éviter les re-renders
+interface InputFieldProps {
+  label: string;
+  field: string;
+  placeholder: string;
+  keyboardType?: KeyboardTypeOptions;
+  required?: boolean;
+  value: string;
+  error?: string;
+  focused: boolean;
+  onChangeText: (text: string) => void;
+  onFocus: () => void;
+  onBlur: () => void;
+}
+
+const InputField: React.FC<InputFieldProps> = React.memo(({
+  label,
+  field,
+  placeholder,
+  keyboardType = 'default',
+  required = false,
+  value,
+  error,
+  focused,
+  onChangeText,
+  onFocus,
+  onBlur,
+}) => (
+  <View style={styles.inputContainer}>
+    <Text style={styles.inputLabel}>
+      {label}
+      {required && <Text style={styles.requiredMark}> *</Text>}
+    </Text>
+    <View style={[
+      styles.inputWrapper,
+      focused && styles.inputWrapperFocused,
+      error && styles.inputWrapperError,
+    ]}>
+      <TextInput
+        style={styles.input}
+        placeholder={placeholder}
+        placeholderTextColor={Colors.placeholder}
+        value={value}
+        onChangeText={onChangeText}
+        keyboardType={keyboardType}
+        onFocus={onFocus}
+        onBlur={onBlur}
+      />
+    </View>
+    {error && (
+      <Text style={styles.errorText}>{error}</Text>
+    )}
+  </View>
+));
 
 const AddSoldierScreen: React.FC = () => {
   const navigation = useNavigation();
   const [loading, setLoading] = useState(false);
+  const [focusedInput, setFocusedInput] = useState<string | null>(null);
+
   const [formData, setFormData] = useState({
     personalNumber: '',
     name: '',
     phone: '',
-    company: '' as Company | '',
+    company: '',
     department: '',
   });
 
-  const handleInputChange = (field: string, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-  };
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const validateForm = (): boolean => {
+  const validateForm = () => {
+    const newErrors: Record<string, string> = {};
+
     if (!formData.personalNumber.trim()) {
-      Alert.alert('שגיאה', 'נא להזין מספר אישי');
-      return false;
+      newErrors.personalNumber = 'מספר אישי הוא שדה חובה';
+    } else if (formData.personalNumber.length < 5) {
+      newErrors.personalNumber = 'מספר אישי חייב להכיל לפחות 5 ספרות';
     }
+
     if (!formData.name.trim()) {
-      Alert.alert('שגיאה', 'נא להזין שם');
-      return false;
+      newErrors.name = 'שם הוא שדה חובה';
     }
-    if (!formData.company) {
-      Alert.alert('שגיאה', 'נא לבחור פלוגה');
-      return false;
-    }
-    return true;
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
   };
 
   const handleSubmit = async () => {
     if (!validateForm()) return;
 
-    setLoading(true);
     try {
+      setLoading(true);
       await soldierService.create({
-        personalNumber: formData.personalNumber.trim(),
-        name: formData.name.trim(),
-        phone: formData.phone.trim() || undefined,
-        company: formData.company as Company,
-        department: formData.department.trim() || undefined,
+        ...formData,
+        createdAt: new Date(),
       });
-      
-      navigation.goBack();
-    } catch (error) {
-      notifyError(error, 'הוספת חייל');
+
+      Alert.alert('הצלחה', 'החייל נוסף בהצלחה', [
+        { text: 'אישור', onPress: () => navigation.goBack() }
+      ]);
+    } catch (error: any) {
+      Alert.alert('שגיאה', error.message || 'לא ניתן להוסיף את החייל');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleFieldChange = (field: keyof typeof formData, text: string) => {
+    setFormData(prev => ({ ...prev, [field]: text }));
+    if (errors[field]) {
+      setErrors(prev => ({ ...prev, [field]: '' }));
     }
   };
 
@@ -74,111 +142,141 @@ const AddSoldierScreen: React.FC = () => {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <Text style={styles.backButtonText}>←</Text>
+          <Ionicons name="arrow-forward" size={24} color={Colors.textWhite} />
         </TouchableOpacity>
-        <Text style={styles.title}>הוספת חייל חדש</Text>
+
+        <View style={styles.headerTitleContainer}>
+          <Text style={styles.headerTitle}>הוספת חייל</Text>
+          <Text style={styles.headerSubtitle}>רישום חייל חדש למערכת</Text>
+        </View>
+
+        <View style={styles.headerSpacer} />
       </View>
 
-      <ScrollView 
-        style={styles.content} 
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
+      <KeyboardAvoidingView
+        style={styles.keyboardView}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        {/* Personal Number */}
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>מספר אישי *</Text>
-          <TextInput
-            style={styles.input}
-            value={formData.personalNumber}
-            onChangeText={(value) => handleInputChange('personalNumber', value)}
-            placeholder="הזן מספר אישי"
-            placeholderTextColor="#666"
-            keyboardType="numeric"
-            textAlign="right"
-          />
-        </View>
-
-        {/* Name */}
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>שם מלא *</Text>
-          <TextInput
-            style={styles.input}
-            value={formData.name}
-            onChangeText={(value) => handleInputChange('name', value)}
-            placeholder="הזן שם מלא"
-            placeholderTextColor="#666"
-            textAlign="right"
-          />
-        </View>
-
-        {/* Phone */}
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>טלפון</Text>
-          <TextInput
-            style={styles.input}
-            value={formData.phone}
-            onChangeText={(value) => handleInputChange('phone', value)}
-            placeholder="050-0000000"
-            placeholderTextColor="#666"
-            keyboardType="phone-pad"
-            textAlign="right"
-          />
-        </View>
-
-        {/* Company Selection */}
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>פלוגה *</Text>
-          <View style={styles.companyContainer}>
-            {COMPANIES.map((company) => (
-              <TouchableOpacity
-                key={company}
-                style={[
-                  styles.companyButton,
-                  formData.company === company && styles.companyButtonSelected,
-                ]}
-                onPress={() => handleInputChange('company', company)}
-              >
-                <Text style={[
-                  styles.companyButtonText,
-                  formData.company === company && styles.companyButtonTextSelected,
-                ]}>
-                  {company}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        {/* Department */}
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>מחלקה</Text>
-          <TextInput
-            style={styles.input}
-            value={formData.department}
-            onChangeText={(value) => handleInputChange('department', value)}
-            placeholder="הזן מחלקה (אופציונלי)"
-            placeholderTextColor="#666"
-            textAlign="right"
-          />
-        </View>
-
-        {/* Submit Button */}
-        <TouchableOpacity
-          style={[styles.submitButton, loading && styles.submitButtonDisabled]}
-          onPress={handleSubmit}
-          disabled={loading}
+        <ScrollView
+          style={styles.content}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
         >
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.submitButtonText}>הוסף חייל</Text>
-          )}
-        </TouchableOpacity>
-      </ScrollView>
+          {/* Form Card */}
+          <View style={styles.formCard}>
+            <View style={styles.formHeader}>
+              <Ionicons name="person-add" size={24} color={Colors.primary} />
+              <Text style={styles.formTitle}>פרטי החייל</Text>
+            </View>
+
+            <InputField
+              label="מספר אישי"
+              field="personalNumber"
+              placeholder="הזן מספר אישי"
+              keyboardType="numeric"
+              required
+              value={formData.personalNumber}
+              error={errors.personalNumber}
+              focused={focusedInput === 'personalNumber'}
+              onChangeText={(text) => handleFieldChange('personalNumber', text)}
+              onFocus={() => setFocusedInput('personalNumber')}
+              onBlur={() => setFocusedInput(null)}
+            />
+
+            <InputField
+              label="שם מלא"
+              field="name"
+              placeholder="הזן שם מלא"
+              required
+              value={formData.name}
+              error={errors.name}
+              focused={focusedInput === 'name'}
+              onChangeText={(text) => handleFieldChange('name', text)}
+              onFocus={() => setFocusedInput('name')}
+              onBlur={() => setFocusedInput(null)}
+            />
+
+            <InputField
+              label="טלפון"
+              field="phone"
+              placeholder="הזן מספר טלפון"
+              keyboardType="phone-pad"
+              value={formData.phone}
+              error={errors.phone}
+              focused={focusedInput === 'phone'}
+              onChangeText={(text) => handleFieldChange('phone', text)}
+              onFocus={() => setFocusedInput('phone')}
+              onBlur={() => setFocusedInput(null)}
+            />
+
+            {/* Company Selector */}
+            <View style={styles.inputContainer}>
+              <Text style={styles.inputLabel}>פלוגה</Text>
+              <View style={styles.companyGrid}>
+                {COMPANIES.map((company) => (
+                  <TouchableOpacity
+                    key={company}
+                    style={[
+                      styles.companyButton,
+                      formData.company === company && styles.companyButtonSelected,
+                    ]}
+                    onPress={() => setFormData(prev => ({ ...prev, company }))}
+                  >
+                    <Text style={[
+                      styles.companyButtonText,
+                      formData.company === company && styles.companyButtonTextSelected,
+                    ]}>
+                      {company}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            <InputField
+              label="מחלקה/תפקיד"
+              field="department"
+              placeholder="הזן מחלקה או תפקיד"
+              value={formData.department}
+              error={errors.department}
+              focused={focusedInput === 'department'}
+              onChangeText={(text) => handleFieldChange('department', text)}
+              onFocus={() => setFocusedInput('department')}
+              onBlur={() => setFocusedInput(null)}
+            />
+          </View>
+
+          {/* Submit Button */}
+          <TouchableOpacity
+            style={[styles.submitButton, loading && styles.submitButtonDisabled]}
+            onPress={handleSubmit}
+            disabled={loading}
+            activeOpacity={0.8}
+          >
+            {loading ? (
+              <ActivityIndicator size="small" color={Colors.textWhite} />
+            ) : (
+              <>
+                <Ionicons name="checkmark-circle" size={24} color={Colors.textWhite} />
+                <Text style={styles.submitButtonText}>שמור חייל</Text>
+              </>
+            )}
+          </TouchableOpacity>
+
+          {/* Info Note */}
+          <View style={styles.infoNote}>
+            <Ionicons name="information-circle-outline" size={20} color={Colors.info} />
+            <Text style={styles.infoNoteText}>
+              שדות המסומנים ב-* הם שדות חובה
+            </Text>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </View>
   );
 };
@@ -186,100 +284,205 @@ const AddSoldierScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background.primary,
+    backgroundColor: Colors.background,
   },
+
+  // Header
   header: {
-    backgroundColor: Colors.background.header,
-    paddingTop: 60,
-    paddingHorizontal: 20,
-    paddingBottom: 20,
+    backgroundColor: Colors.primary,
+    paddingTop: Platform.OS === 'ios' ? 50 : 20,
+    paddingBottom: Spacing.xl,
+    paddingHorizontal: Spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderBottomLeftRadius: BorderRadius.xl,
+    borderBottomRightRadius: BorderRadius.xl,
+    ...Shadows.medium,
+  },
+
+  backButton: {
+    width: 44,
+    height: 44,
+    borderRadius: BorderRadius.full,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  headerTitleContainer: {
+    flex: 1,
+    alignItems: 'center',
+  },
+
+  headerTitle: {
+    fontSize: FontSize.xxl,
+    fontWeight: '700',
+    color: Colors.textWhite,
+  },
+
+  headerSubtitle: {
+    fontSize: FontSize.md,
+    color: 'rgba(255, 255, 255, 0.8)',
+    marginTop: Spacing.xs,
+  },
+
+  headerSpacer: {
+    width: 44,
+  },
+
+  // Content
+  keyboardView: {
+    flex: 1,
+  },
+
+  content: {
+    flex: 1,
+  },
+
+  scrollContent: {
+    padding: Spacing.lg,
+    paddingBottom: 100,
+  },
+
+  // Form Card
+  formCard: {
+    backgroundColor: Colors.backgroundCard,
+    borderRadius: BorderRadius.xl,
+    padding: Spacing.xl,
+    ...Shadows.small,
+  },
+
+  formHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-end',
-    ...Shadows.medium,
+    marginBottom: Spacing.xl,
+    paddingBottom: Spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
   },
-  backButton: {
-    position: 'absolute',
-    left: 20,
-    bottom: 20,
-    padding: 5,
+
+  formTitle: {
+    fontSize: FontSize.lg,
+    fontWeight: '600',
+    color: Colors.text,
+    marginRight: Spacing.sm,
   },
-  backButtonText: {
-    fontSize: 28,
-    color: Colors.text.white,
+
+  // Input
+  inputContainer: {
+    marginBottom: Spacing.lg,
   },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: Colors.text.white,
-  },
-  content: {
-    flex: 1,
-    padding: 20,
-  },
-  scrollContent: {
-    paddingBottom: 100,
-  },
-  inputGroup: {
-    marginBottom: 20,
-  },
-  label: {
-    fontSize: 14,
-    color: Colors.text.secondary,
-    marginBottom: 8,
+
+  inputLabel: {
+    fontSize: FontSize.md,
+    fontWeight: '500',
+    color: Colors.text,
+    marginBottom: Spacing.sm,
     textAlign: 'right',
   },
-  input: {
-    backgroundColor: Colors.background.card,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 16,
-    color: Colors.text.primary,
-    borderWidth: 1,
-    borderColor: Colors.border.medium,
+
+  requiredMark: {
+    color: Colors.danger,
   },
-  companyContainer: {
+
+  inputWrapper: {
+    backgroundColor: Colors.backgroundInput,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+  },
+
+  inputWrapperFocused: {
+    borderColor: Colors.primary,
+    backgroundColor: Colors.backgroundCard,
+  },
+
+  inputWrapperError: {
+    borderColor: Colors.danger,
+  },
+
+  input: {
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.md,
+    fontSize: FontSize.base,
+    color: Colors.text,
+    textAlign: 'right',
+  },
+
+  errorText: {
+    fontSize: FontSize.sm,
+    color: Colors.danger,
+    marginTop: Spacing.xs,
+    textAlign: 'right',
+  },
+
+  // Company Grid
+  companyGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
+    gap: Spacing.sm,
   },
+
   companyButton: {
-    backgroundColor: Colors.background.card,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 10,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    borderRadius: BorderRadius.md,
+    backgroundColor: Colors.backgroundInput,
     borderWidth: 1,
-    borderColor: Colors.border.light,
+    borderColor: Colors.border,
   },
+
   companyButtonSelected: {
-    backgroundColor: Colors.status.info,
-    borderColor: Colors.status.info,
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
   },
+
   companyButtonText: {
-    color: Colors.text.secondary,
-    fontSize: 14,
+    fontSize: FontSize.md,
+    color: Colors.textSecondary,
+    fontWeight: '500',
   },
+
   companyButtonTextSelected: {
-    color: Colors.text.white,
-    fontWeight: '600',
+    color: Colors.textWhite,
   },
+
+  // Submit Button
   submitButton: {
-    backgroundColor: Colors.status.success,
-    borderRadius: 12,
-    paddingVertical: 16,
+    backgroundColor: Colors.success,
+    borderRadius: BorderRadius.md,
+    paddingVertical: Spacing.lg,
+    flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 20,
-    marginBottom: 40,
-    ...Shadows.medium,
+    justifyContent: 'center',
+    gap: Spacing.sm,
+    marginTop: Spacing.xl,
+    ...Shadows.small,
   },
+
   submitButtonDisabled: {
-    opacity: 0.7,
+    backgroundColor: Colors.disabled,
   },
+
   submitButtonText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: Colors.text.white,
+    fontSize: FontSize.lg,
+    fontWeight: '600',
+    color: Colors.textWhite,
+  },
+
+  // Info Note
+  infoNote: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: Spacing.lg,
+    gap: Spacing.xs,
+  },
+
+  infoNoteText: {
+    fontSize: FontSize.sm,
+    color: Colors.textSecondary,
   },
 });
 
