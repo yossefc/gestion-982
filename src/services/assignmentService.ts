@@ -257,7 +257,40 @@ export const createAssignment = async (
       status: assignment.status
     });
 
-    // Construire les données
+    // LOGIQUE SPÉCIALE: Si c'est une החתמה (issue) et que le soldat a déjà des équipements,
+    // on crée d'abord un זיכוי automatique pour "rendre" tout ce qu'il a
+    if (assignment.action === 'issue') {
+      const currentHoldings = await calculateCurrentHoldings(assignment.soldierId, assignment.type);
+
+      if (currentHoldings.length > 0) {
+        console.log('[createAssignment] Soldat a déjà des équipements, création d\'un credit automatique pour remplacer');
+
+        // Créer un assignment 'credit' automatique pour tout rendre
+        const creditData: any = {
+          soldierId: assignment.soldierId,
+          soldierName: assignment.soldierName,
+          soldierPersonalNumber: assignment.soldierPersonalNumber,
+          type: assignment.type,
+          action: 'credit',
+          items: currentHoldings, // Tout ce qu'il a actuellement
+          status: 'זוכה',
+          assignedBy: assignment.assignedBy,
+          assignedByName: assignment.assignedByName,
+          assignedByEmail: assignment.assignedByEmail,
+          timestamp: Timestamp.now(),
+          updatedAt: Timestamp.now(),
+        };
+
+        if (assignment.soldierPhone) creditData.soldierPhone = assignment.soldierPhone;
+        if (assignment.soldierCompany) creditData.soldierCompany = assignment.soldierCompany;
+
+        // Créer le credit automatique
+        await addDoc(collection(db, COLLECTION_NAME), creditData);
+        console.log('[createAssignment] Credit automatique créé pour remplacer les équipements existants');
+      }
+    }
+
+    // Construire les données pour la nouvelle assignment
     // Note: On stocke la signature directement en base64 dans Firestore
     // Les signatures sont petites (~10-50KB), donc acceptable dans Firestore
     const data: any = {
@@ -485,6 +518,7 @@ export const assignmentService = {
   getCurrentAssignment,
   getAssignmentsBySoldier,
   getAssignmentsByType,
+  getByType: getAssignmentsByType, // Alias for backward compatibility
   calculateCurrentHoldings,
   create: createAssignment,  // Alias for createAssignment
   createAssignment,

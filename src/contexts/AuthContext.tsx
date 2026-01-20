@@ -17,6 +17,7 @@ interface AuthContextType {
   authLoading: boolean; // Alias for loading
   userRole: string | null; // User's role
   signIn: (email: string, password: string) => Promise<void>;
+  signUp: (email: string, password: string, name: string) => Promise<void>;
   signOut: () => Promise<void>;
   hasPermission: (module: 'arme' | 'vetement' | 'admin') => boolean;
 }
@@ -59,8 +60,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               createdAt: userData.createdAt?.toDate() || new Date(),
             });
           } else {
-            // Utilisateur Firebase sans données Firestore
-            // Créer un profil par défaut ET le sauvegarder dans Firestore
+            // Utilisateur Firebase sans données Firestore - plus nécessaire si on utilise signUp correctement
+            // mais on le garde par sécurité pour les comptes existants
             console.log(`Creating Firestore profile for user: ${fbUser.email}`);
 
             const defaultUserData = {
@@ -78,8 +79,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               ...defaultUserData,
               createdAt: new Date(),
             });
-
-            console.log(`Firestore profile created for: ${fbUser.email}`);
           }
         } catch (error) {
           console.error('Error fetching user data:', error);
@@ -99,10 +98,44 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       await signInWithEmailAndPassword(auth, email, password);
     } catch (error: any) {
       let message = 'שגיאה בהתחברות';
-      if (error.code === 'auth/user-not-found') {
-        message = 'משתמש לא קיים';
+      if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
+        message = 'אימייל או סיסמה שגויים';
       } else if (error.code === 'auth/wrong-password') {
         message = 'סיסמה שגויה';
+      } else if (error.code === 'auth/invalid-email') {
+        message = 'אימייל לא תקין';
+      }
+      throw new Error(message);
+    }
+  };
+
+  const signUp = async (email: string, password: string, name: string) => {
+    try {
+      const { createUserWithEmailAndPassword } = await import('firebase/auth');
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const fbUser = userCredential.user;
+
+      // Créer le profil Firestore immédiatement
+      const userData = {
+        email,
+        name,
+        role: 'both' as UserRole, // Accès complet par défaut
+        createdAt: Timestamp.now(),
+      };
+
+      await setDoc(doc(db, 'users', fbUser.uid), userData);
+
+      setUser({
+        id: fbUser.uid,
+        ...userData,
+        createdAt: new Date(),
+      });
+    } catch (error: any) {
+      let message = 'שגיאה בהרשמה';
+      if (error.code === 'auth/email-already-in-use') {
+        message = 'כתובת האימייל כבר בשימוש';
+      } else if (error.code === 'auth/weak-password') {
+        message = 'הסיסמה חלשה מדי (לפחות 6 תווים)';
       } else if (error.code === 'auth/invalid-email') {
         message = 'אימייל לא תקין';
       }
@@ -144,6 +177,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     authLoading: loading, // Alias for compatibility
     userRole: user?.role || null,
     signIn,
+    signUp,
     signOut,
     hasPermission,
   };

@@ -29,6 +29,7 @@ import CombatAssignmentScreen from '../screens/arme/CombatAssignmentScreen';
 import CombatReturnScreen from '../screens/arme/CombatReturnScreen';
 import CombatStorageScreen from '../screens/arme/CombatStorageScreen';
 import CombatRetrieveScreen from '../screens/arme/CombatRetrieveScreen';
+import CombatStockScreen from '../screens/arme/CombatStockScreen';
 import WeaponInventoryListScreen from '../screens/arme/WeaponInventoryListScreen';
 import AddWeaponToInventoryScreen from '../screens/arme/AddWeaponToInventoryScreen';
 import BulkImportWeaponsScreen from '../screens/arme/BulkImportWeaponsScreen';
@@ -93,6 +94,7 @@ const AppNavigator: React.FC = () => {
             <Stack.Screen name="CombatReturn" component={CombatReturnScreen} />
             <Stack.Screen name="CombatStorage" component={CombatStorageScreen} />
             <Stack.Screen name="CombatRetrieve" component={CombatRetrieveScreen} />
+            <Stack.Screen name="CombatStock" component={CombatStockScreen} />
             <Stack.Screen name="WeaponInventoryList" component={WeaponInventoryListScreen} />
             <Stack.Screen name="AddWeaponToInventory" component={AddWeaponToInventoryScreen} />
             <Stack.Screen name="BulkImportWeapons" component={BulkImportWeaponsScreen} />

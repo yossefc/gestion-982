@@ -92,7 +92,7 @@ const ClothingSignatureScreen: React.FC = () => {
     }
   };
 
-  const toggleItem = async (eq: Equipment) => {
+  const toggleItem = (eq: Equipment) => {
     if (selectedItems.has(eq.id)) {
       // Désélectionner
       setSelectedItems(prev => {
@@ -101,55 +101,31 @@ const ClothingSignatureScreen: React.FC = () => {
         return newMap;
       });
     } else {
-      // Sélectionner et vérifier le stock
-      if (eq.yamach !== undefined && eq.yamach !== null) {
-        const { available, stock } = await clothingStockService.isQuantityAvailable(eq.id, 1);
-
-        if (!available && stock) {
-          Alert.alert(
-            'אין מלאי זמין',
-            `הציוד "${eq.name}" אזל מהמלאי.\nזמין: ${stock.available} יחידות`
-          );
-          return;
-        }
-
-        setSelectedItems(prev => {
-          const newMap = new Map(prev);
-          newMap.set(eq.id, {
-            equipment: eq,
-            quantity: 1,
-            availableStock: stock?.available || 0,
-          });
-          return newMap;
+      // Sélectionner directement sans vérifier le stock
+      setSelectedItems(prev => {
+        const newMap = new Map(prev);
+        newMap.set(eq.id, {
+          equipment: eq,
+          quantity: 1,
         });
-      } else {
-        // Pas de ימח défini, permettre la sélection
-        setSelectedItems(prev => {
-          const newMap = new Map(prev);
-          newMap.set(eq.id, { equipment: eq, quantity: 1 });
-          return newMap;
-        });
-      }
+        return newMap;
+      });
     }
   };
 
-  const updateQuantity = async (id: string, delta: number) => {
+  const updateQuantity = (id: string, delta: number) => {
     const item = selectedItems.get(id);
     if (!item) return;
 
     const newQty = Math.max(1, item.quantity + delta);
 
-    // Vérifier le stock disponible si ימח est défini
-    if (item.equipment.yamach !== undefined && item.equipment.yamach !== null) {
-      const { available, stock } = await clothingStockService.isQuantityAvailable(id, newQty);
-
-      if (!available && stock) {
-        Alert.alert(
-          'מלאי לא מספיק',
-          `זמין: ${stock.available} יחידות\nמבוקש: ${newQty} יחידות\n\nאי אפשר להקצות יותר מהמלאי הזמין.`
-        );
-        return;
-      }
+    // Vérification locale du stock (rapide, pas de requête réseau)
+    if (item.availableStock !== undefined && newQty > item.availableStock) {
+      Alert.alert(
+        'מלאי לא מספיק',
+        `זמין: ${item.availableStock} יחידות\nמבוקש: ${newQty} יחידות\n\nאי אפשר להקצות יותר מהמלאי הזמין.`
+      );
+      return;
     }
 
     setSelectedItems(prev => {

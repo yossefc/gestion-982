@@ -240,11 +240,6 @@ const HomeScreen: React.FC = () => {
             icon="person-add"
             onPress={() => navigation.navigate('AddSoldier' as never)}
           />
-          <QuickActionButton
-            title="החתמה מהירה"
-            icon="create"
-            onPress={() => navigation.navigate('SoldierSearch' as never, { mode: 'signature' })}
-          />
         </View>
 
         {/* Info Card */}

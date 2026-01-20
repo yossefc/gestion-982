@@ -138,11 +138,11 @@ const ArmeHomeScreen: React.FC = () => {
 
   const quickActions = [
     {
-      id: 'quick-sign',
-      title: 'החתמה מהירה',
-      icon: '⚡',
+      id: 'stock-table',
+      title: 'טבלה',
+      icon: '📊',
       color: Colors.info,
-      action: () => navigation.navigate('SoldierSearch', { mode: 'signature', type: 'combat' }),
+      action: () => navigation.navigate('CombatStock'),
     },
     {
       id: 'quick-pdf',

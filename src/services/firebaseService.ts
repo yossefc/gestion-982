@@ -685,11 +685,20 @@ export const assignmentService = {
         cleanData.pdfUrl = assignmentData.pdfUrl;
       }
 
-      // UPSERT: créer ou mettre à jour (merge:true)
+      // UPSERT: créer ou mettre à jour
+      // IMPORTANT: Pour 'issue' (החתמה), on REMPLACE complètement (pas de merge)
+      // Seul 'add' utilise merge car il additionne
       const docRef = doc(db, COLLECTIONS.ASSIGNMENTS, assignmentId);
-      await setDoc(docRef, cleanData, { merge: true });
 
-      console.log(`Assignment ${assignmentId} created/updated successfully (merged)`);
+      if (useAdditiveMode) {
+        // MODE ADDITIF: merge pour conserver et additionner
+        await setDoc(docRef, cleanData, { merge: true });
+        console.log(`Assignment ${assignmentId} updated additively (merged)`);
+      } else {
+        // MODE REMPLACEMENT: remplace complètement le document
+        await setDoc(docRef, cleanData);
+        console.log(`Assignment ${assignmentId} replaced completely`);
+      }
 
       return assignmentId;
     } catch (error) {

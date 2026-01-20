@@ -128,6 +128,7 @@ export type RootStackParamList = {
   CombatReturn: { soldierId: string };
   CombatStorage: { soldierId: string };
   CombatRetrieve: { soldierId: string };
+  CombatStock: undefined;
   // Inventaire d'armes
   WeaponInventoryList: undefined;
   AddWeaponToInventory: { weaponId?: string };

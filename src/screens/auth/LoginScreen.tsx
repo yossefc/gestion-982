@@ -21,32 +21,30 @@ import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Co
 import { useAuth } from '../../contexts/AuthContext';
 
 const LoginScreen: React.FC = () => {
-  const { signIn } = useAuth();
+  const { signIn, signUp } = useAuth();
+  const [isRegister, setIsRegister] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [focusedInput, setFocusedInput] = useState<string | null>(null);
 
-  const handleLogin = async () => {
-    if (!email.trim() || !password.trim()) {
+  const handleAction = async () => {
+    if (!email.trim() || !password.trim() || (isRegister && !name.trim())) {
       Alert.alert('שגיאה', 'נא למלא את כל השדות');
       return;
     }
 
     try {
       setLoading(true);
-      await signIn(email.trim(), password);
-    } catch (error: any) {
-      let message = 'שגיאה בהתחברות';
-      if (error.code === 'auth/user-not-found') {
-        message = 'משתמש לא קיים במערכת';
-      } else if (error.code === 'auth/wrong-password') {
-        message = 'סיסמה שגויה';
-      } else if (error.code === 'auth/invalid-email') {
-        message = 'כתובת אימייל לא תקינה';
+      if (isRegister) {
+        await signUp(email.trim(), password, name.trim());
+      } else {
+        await signIn(email.trim(), password);
       }
-      Alert.alert('שגיאה', message);
+    } catch (error: any) {
+      Alert.alert('שגיאה', error.message || 'פעולה נכשלה');
     } finally {
       setLoading(false);
     }
@@ -74,9 +72,52 @@ const LoginScreen: React.FC = () => {
           <Text style={styles.subtitle}>גדוד 982</Text>
         </View>
 
-        {/* Login Form */}
+        {/* Form Container */}
         <View style={styles.formContainer}>
           <View style={styles.formCard}>
+            {/* Toggle Header */}
+            <View style={styles.toggleHeader}>
+              <TouchableOpacity
+                style={[styles.toggleBtn, !isRegister && styles.toggleBtnActive]}
+                onPress={() => setIsRegister(false)}
+              >
+                <Text style={[styles.toggleText, !isRegister && styles.toggleTextActive]}>התחברות</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.toggleBtn, isRegister && styles.toggleBtnActive]}
+                onPress={() => setIsRegister(true)}
+              >
+                <Text style={[styles.toggleText, isRegister && styles.toggleTextActive]}>הרשמה</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Name Input (Register Only) */}
+            {isRegister && (
+              <View style={styles.inputContainer}>
+                <Text style={styles.inputLabel}>שם מלא</Text>
+                <View style={[
+                  styles.inputWrapper,
+                  focusedInput === 'name' && styles.inputWrapperFocused,
+                ]}>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="הזן שם מלא"
+                    placeholderTextColor={Colors.placeholder}
+                    value={name}
+                    onChangeText={setName}
+                    autoCorrect={false}
+                    onFocus={() => setFocusedInput('name')}
+                    onBlur={() => setFocusedInput(null)}
+                  />
+                  <Ionicons
+                    name="person-outline"
+                    size={20}
+                    color={focusedInput === 'name' ? Colors.primary : Colors.textLight}
+                  />
+                </View>
+              </View>
+            )}
+
             {/* Email Input */}
             <View style={styles.inputContainer}>
               <Text style={styles.inputLabel}>אימייל</Text>
@@ -139,10 +180,10 @@ const LoginScreen: React.FC = () => {
               </View>
             </View>
 
-            {/* Login Button */}
+            {/* Action Button */}
             <TouchableOpacity
               style={[styles.loginButton, loading && styles.loginButtonDisabled]}
-              onPress={handleLogin}
+              onPress={handleAction}
               disabled={loading}
               activeOpacity={0.8}
             >
@@ -150,15 +191,20 @@ const LoginScreen: React.FC = () => {
                 <ActivityIndicator size="small" color={Colors.textWhite} />
               ) : (
                 <>
-                  <Text style={styles.loginButtonText}>התחבר</Text>
-                  <Ionicons name="arrow-back" size={20} color={Colors.textWhite} />
+                  <Text style={styles.loginButtonText}>{isRegister ? 'הרשם עכשיו' : 'התחבר'}</Text>
+                  <Ionicons name={isRegister ? 'person-add-outline' : 'arrow-back'} size={20} color={Colors.textWhite} />
                 </>
               )}
             </TouchableOpacity>
 
-            {/* Forgot Password */}
-            <TouchableOpacity style={styles.forgotPassword}>
-              <Text style={styles.forgotPasswordText}>שכחת סיסמה?</Text>
+            {/* Switch Mode Link */}
+            <TouchableOpacity
+              style={styles.forgotPassword}
+              onPress={() => setIsRegister(!isRegister)}
+            >
+              <Text style={styles.forgotPasswordText}>
+                {isRegister ? 'כבר יש לך חשבון? התחבר' : 'אין לך חשבון? צור חשבון חדש'}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -166,7 +212,7 @@ const LoginScreen: React.FC = () => {
         {/* Footer */}
         <View style={styles.footer}>
           <Text style={styles.footerText}>מערכת ניהול ציוד צה״ל</Text>
-          <Text style={styles.versionText}>גרסה 1.0.0</Text>
+          <Text style={styles.versionText}>גרסה 1.0.1</Text>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -247,6 +293,36 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.xl,
     padding: Spacing.xl,
     ...Shadows.large,
+  },
+
+  toggleHeader: {
+    flexDirection: 'row',
+    marginBottom: Spacing.xl,
+    backgroundColor: Colors.backgroundInput,
+    borderRadius: BorderRadius.md,
+    padding: 4,
+  },
+
+  toggleBtn: {
+    flex: 1,
+    paddingVertical: Spacing.sm,
+    alignItems: 'center',
+    borderRadius: BorderRadius.sm,
+  },
+
+  toggleBtnActive: {
+    backgroundColor: Colors.backgroundCard,
+    ...Shadows.xs,
+  },
+
+  toggleText: {
+    fontSize: FontSize.md,
+    fontWeight: '600',
+    color: Colors.textSecondary,
+  },
+
+  toggleTextActive: {
+    color: Colors.primary,
   },
 
   inputContainer: {

@@ -11,6 +11,7 @@ import {
   Platform,
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { deleteField } from 'firebase/firestore';
 import { RootStackParamList, Soldier } from '../../types';
 import { soldierService } from '../../services/firebaseService';
 import { weaponInventoryService } from '../../services/weaponInventoryService';
@@ -99,10 +100,10 @@ const CombatRetrieveScreen: React.FC = () => {
             setProcessing(true);
             try {
               for (const weapon of selectedWeapons) {
-                // Changer le statut de storage à assigned
+                // Changer le statut de storage à assigned et supprimer storageDate
                 await weaponInventoryService.updateWeapon(weapon.id, {
                   status: 'assigned',
-                  storageDate: undefined,
+                  storageDate: deleteField() as any,
                 });
               }
 
