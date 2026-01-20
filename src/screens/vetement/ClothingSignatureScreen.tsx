@@ -21,7 +21,6 @@ import SignatureCanvas from 'react-native-signature-canvas';
 import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
 import { clothingEquipmentService } from '../../services/clothingEquipmentService';
 import { assignmentService } from '../../services/assignmentService';
-import { clothingStockService } from '../../services/clothingStockService';
 import { useAuth } from '../../contexts/AuthContext';
 
 interface Equipment {
@@ -35,7 +34,6 @@ interface SelectedItem {
   equipment: Equipment;
   quantity: number;
   serial?: string;
-  availableStock?: number; // Stock disponible pour cet équipement
 }
 
 const SERIAL_REQUIRED_ITEMS = ['קסדה', 'וסט לוחם', 'וסט קרמי'];
@@ -119,15 +117,7 @@ const ClothingSignatureScreen: React.FC = () => {
 
     const newQty = Math.max(1, item.quantity + delta);
 
-    // Vérification locale du stock (rapide, pas de requête réseau)
-    if (item.availableStock !== undefined && newQty > item.availableStock) {
-      Alert.alert(
-        'מלאי לא מספיק',
-        `זמין: ${item.availableStock} יחידות\nמבוקש: ${newQty} יחידות\n\nאי אפשר להקצות יותר מהמלאי הזמין.`
-      );
-      return;
-    }
-
+    // Pas de vérification de stock - permet d'aller en négatif
     setSelectedItems(prev => {
       const newMap = new Map(prev);
       newMap.set(id, { ...item, quantity: newQty });
@@ -163,7 +153,7 @@ const ClothingSignatureScreen: React.FC = () => {
     setSignatureData(null);
   };
 
-  const validateAndSubmit = async () => {
+  const validateAndSubmit = () => {
     if (selectedItems.size === 0) {
       Alert.alert('שגיאה', 'יש לבחור לפחות פריט אחד');
       return;
@@ -177,21 +167,7 @@ const ClothingSignatureScreen: React.FC = () => {
       }
     }
 
-    // Vérification finale du stock pour tous les items sélectionnés
-    for (const [id, item] of selectedItems) {
-      if (item.equipment.yamach !== undefined && item.equipment.yamach !== null) {
-        const { available, stock } = await clothingStockService.isQuantityAvailable(id, item.quantity);
-
-        if (!available && stock) {
-          Alert.alert(
-            'מלאי לא מספיק',
-            `הציוד "${item.equipment.name}"\nזמין: ${stock.available} יחידות\nמבוקש: ${item.quantity} יחידות\n\nאנא הפחת את הכמות.`
-          );
-          return;
-        }
-      }
-    }
-
+    // Pas de vérification de stock - on permet d'aller en négatif
     setShowSignature(true);
   };
 
@@ -319,16 +295,9 @@ const ClothingSignatureScreen: React.FC = () => {
                       </View>
                       <View style={styles.equipmentInfo}>
                         <Text style={styles.equipmentName}>{eq.name}</Text>
-                        <View style={styles.equipmentMetaRow}>
-                          {eq.yamach !== undefined && eq.yamach !== null && (
-                            <Text style={styles.equipmentYamach}>ימ״ח: {eq.yamach}</Text>
-                          )}
-                          {isSelected && item?.availableStock !== undefined && (
-                            <Text style={styles.equipmentAvailable}>
-                              זמין: {item.availableStock}
-                            </Text>
-                          )}
-                        </View>
+                        {eq.yamach !== undefined && eq.yamach !== null && (
+                          <Text style={styles.equipmentYamach}>ימ״ח: {eq.yamach}</Text>
+                        )}
                       </View>
                     </TouchableOpacity>
 
