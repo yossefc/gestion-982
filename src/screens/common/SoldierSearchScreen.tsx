@@ -17,8 +17,9 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
-import { soldierService } from '../../services/soldierService';
+import { useSoldiers } from '../../contexts/SoldiersContext';
 import { assignmentService } from '../../services/assignmentService';
+import { transactionalAssignmentService } from '../../services/transactionalAssignmentService';
 import { weaponInventoryService } from '../../services/weaponInventoryService';
 
 interface Soldier {
@@ -28,12 +29,19 @@ interface Soldier {
   phone?: string;
   company?: string;
   outstandingCount?: number;
+  isRsp?: boolean;
 }
 
 const SoldierSearchScreen: React.FC = () => {
   const navigation = useNavigation();
   const route = useRoute();
-  const { mode, type } = (route.params as { mode: 'signature' | 'return' | 'storage' | 'retrieve'; type?: 'combat' | 'clothing' }) || { mode: 'signature' };
+  const { mode, type } = (route.params as {
+    mode: 'signature' | 'return' | 'storage' | 'retrieve' | 'rsp_issue' | 'rsp_credit';
+    type?: 'combat' | 'clothing'
+  }) || { mode: 'signature' };
+
+  // Utiliser le cache des soldats depuis le contexte
+  const { soldiers: cachedSoldiers, loading: cachLoading, refreshSoldiers } = useSoldiers();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [soldiers, setSoldiers] = useState<Soldier[]>([]);
@@ -43,12 +51,20 @@ const SoldierSearchScreen: React.FC = () => {
 
   useEffect(() => {
     loadSoldiers();
-  }, [mode]);
+  }, [mode, cachedSoldiers]);
+
+  // Gérer le rafraîchissement manuel (pull-to-refresh)
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await refreshSoldiers(); // Rafraîchir le cache
+    await loadSoldiers(); // Recharger avec les nouveaux soldats
+  };
 
   const loadSoldiers = async () => {
     try {
       setLoading(true);
-      let data = await soldierService.getAll();
+      // Utiliser les soldats du cache au lieu de charger depuis le service
+      let data = [...cachedSoldiers];
 
       if (mode === 'retrieve' && type === 'combat') {
         // Pour le mode retrieve, afficher uniquement les soldats avec des armes en storage
@@ -68,11 +84,15 @@ const SoldierSearchScreen: React.FC = () => {
         // Trier: soldats avec plus d'armes en premier
         data.sort((a: any, b: any) => (b.outstandingCount || 0) - (a.outstandingCount || 0));
       } else if ((mode === 'return' || mode === 'storage') && type) {
-        // Pour le mode retour/storage, charger le compte des items pour TOUS les soldats
-        const holdings = await assignmentService.getSoldiersWithCurrentHoldings(type);
+        // Obtenir tous les holdings directement depuis soldier_holdings (plus précis et rapide)
+        const allHoldings = await transactionalAssignmentService.getAllHoldings(type as 'combat' | 'clothing');
 
-        // Créer une map pour lookup rapide
-        const holdingsMap = new Map(holdings.map(h => [h.soldierId, h.totalQuantity]));
+        // Créer une map pour lookup rapide: [soldierId, totalQuantity]
+        const holdingsMap = new Map<string, number>();
+        allHoldings.forEach(holding => {
+          const totalQty = (holding.items || []).reduce((sum: number, item: any) => sum + item.quantity, 0);
+          holdingsMap.set(holding.soldierId, totalQty);
+        });
 
         // Ajouter le compte des items pour tous les soldats (0 si aucun)
         data = data.map((s: any) => ({
@@ -82,6 +102,11 @@ const SoldierSearchScreen: React.FC = () => {
 
         // Trier: soldats avec équipement en premier
         data.sort((a: any, b: any) => (b.outstandingCount || 0) - (a.outstandingCount || 0));
+      }
+
+      // Filtrer par RSP si nécessaire
+      if (mode === 'rsp_issue' || mode === 'rsp_credit') {
+        data = data.filter((s: any) => s.isRsp === true);
       }
 
       setSoldiers(data);
@@ -124,67 +149,87 @@ const SoldierSearchScreen: React.FC = () => {
 
     if (mode === 'signature') {
       if (type === 'combat') {
-        navigation.navigate('CombatAssignment' as never, { soldier: serializableSoldier } as never);
+        (navigation.navigate as any)('CombatAssignment', { soldier: serializableSoldier });
       } else {
-        navigation.navigate('ClothingSignature' as never, { soldier: serializableSoldier } as never);
+        (navigation.navigate as any)('ClothingSignature', { soldier: serializableSoldier });
       }
     } else if (mode === 'return') {
       if (type === 'combat') {
-        navigation.navigate('CombatReturn' as never, { soldierId: serializableSoldier.id } as never);
+        (navigation.navigate as any)('CombatReturn', { soldierId: serializableSoldier.id });
       } else {
-        navigation.navigate('ClothingReturn' as never, { soldier: serializableSoldier } as never);
+        (navigation.navigate as any)('ClothingReturn', { soldier: serializableSoldier });
       }
     } else if (mode === 'storage') {
       if (type === 'combat') {
-        navigation.navigate('CombatStorage' as never, { soldierId: serializableSoldier.id } as never);
+        (navigation.navigate as any)('CombatStorage', { soldierId: serializableSoldier.id });
       } else {
-        navigation.navigate('ClothingStorage' as never, { soldier: serializableSoldier } as never);
+        (navigation.navigate as any)('ClothingStorage', { soldier: serializableSoldier });
       }
     } else if (mode === 'retrieve') {
       if (type === 'combat') {
-        navigation.navigate('CombatRetrieve' as never, { soldierId: serializableSoldier.id } as never);
+        (navigation.navigate as any)('CombatRetrieve', { soldierId: serializableSoldier.id });
       } else {
-        navigation.navigate('ClothingRetrieve' as never, { soldier: serializableSoldier } as never);
+        (navigation.navigate as any)('ClothingRetrieve', { soldier: serializableSoldier });
       }
+    } else if (mode === 'rsp_issue') {
+      (navigation.navigate as any)('RspAssignment', { soldier: serializableSoldier, action: 'issue' });
+    } else if (mode === 'rsp_credit') {
+      (navigation.navigate as any)('RspAssignment', { soldier: serializableSoldier, action: 'credit' });
     }
   };
 
+  const handleEditSoldier = (soldier: Soldier) => {
+    (navigation.navigate as any)('EditSoldier', { soldierId: soldier.id });
+  };
+
   const renderSoldierItem = ({ item }: { item: Soldier }) => (
-    <TouchableOpacity
-      style={styles.soldierCard}
-      onPress={() => handleSelectSoldier(item)}
-      activeOpacity={0.7}
-    >
-      <View style={styles.soldierAvatar}>
-        <Text style={styles.avatarText}>
-          {item.name?.charAt(0) || '?'}
-        </Text>
-      </View>
-
-      <View style={styles.soldierInfo}>
-        <Text style={styles.soldierName}>{item.name}</Text>
-        <Text style={styles.soldierNumber}>מ.א: {item.personalNumber}</Text>
-        {item.company && (
-          <Text style={styles.soldierCompany}>{item.company}</Text>
-        )}
-      </View>
-
-      {mode === 'return' ? (
-        <View style={[
-          styles.outstandingBadge,
-          (item.outstandingCount || 0) === 0 && styles.outstandingBadgeZero
-        ]}>
-          <Text style={[
-            styles.outstandingText,
-            (item.outstandingCount || 0) === 0 && styles.outstandingTextZero
-          ]}>
-            {item.outstandingCount || 0}
+    <View style={styles.soldierCardContainer}>
+      <TouchableOpacity
+        style={styles.soldierCard}
+        onPress={() => handleSelectSoldier(item)}
+        onLongPress={() => handleEditSoldier(item)}
+        activeOpacity={0.7}
+      >
+        <View style={styles.soldierAvatar}>
+          <Text style={styles.avatarText}>
+            {item.name?.charAt(0) || '?'}
           </Text>
         </View>
-      ) : (
-        <Ionicons name="chevron-back" size={20} color={Colors.textLight} />
-      )}
-    </TouchableOpacity>
+
+        <View style={styles.soldierInfo}>
+          <Text style={styles.soldierName}>{item.name}</Text>
+          <Text style={styles.soldierNumber}>מ.א: {item.personalNumber}</Text>
+          {item.company && (
+            <Text style={styles.soldierCompany}>{item.company}</Text>
+          )}
+        </View>
+
+        {mode === 'return' ? (
+          <View style={[
+            styles.outstandingBadge,
+            (item.outstandingCount || 0) === 0 && styles.outstandingBadgeZero
+          ]}>
+            <Text style={[
+              styles.outstandingText,
+              (item.outstandingCount || 0) === 0 && styles.outstandingTextZero
+            ]}>
+              {item.outstandingCount || 0}
+            </Text>
+          </View>
+        ) : (
+          <Ionicons name="chevron-back" size={20} color={Colors.textLight} />
+        )}
+      </TouchableOpacity>
+
+      {/* Edit Button */}
+      <TouchableOpacity
+        style={styles.editButton}
+        onPress={() => handleEditSoldier(item)}
+        activeOpacity={0.7}
+      >
+        <Ionicons name="create-outline" size={18} color={Colors.primary} />
+      </TouchableOpacity>
+    </View>
   );
 
   const renderEmptyList = () => (
@@ -204,9 +249,9 @@ const SoldierSearchScreen: React.FC = () => {
             ? 'אין חיילים עם ציוד להחזרה'
             : mode === 'storage'
               ? 'אין חיילים עם ציוד לאפסון'
-              : mode === 'retrieve'
-                ? 'אין חיילים עם ציוד באפסון'
-                : 'הוסף חיילים למערכת'
+              : mode === 'retrieve' ? 'אין חיילים עם ציוד באפסון'
+                : mode.includes('rsp') ? 'לא נמצאו רס"פים. הגדר חיילים כרס"פים בעריכת חייל.'
+                  : 'הוסף חיילים למערכת'
         }
       </Text>
     </View>
@@ -227,11 +272,13 @@ const SoldierSearchScreen: React.FC = () => {
           <Text style={styles.headerTitle}>
             {mode === 'signature' ? 'בחירת חייל להחתמה' :
               mode === 'return' ? 'בחירת חייל לזיכוי' :
-              mode === 'storage' ? 'בחירת חייל לאפסון' :
-                'בחירת חייל להחזרה מאפסון'}
+                mode === 'storage' ? 'בחירת חייל לאפסון' :
+                  mode === 'retrieve' ? 'בחירת חייל להחזרה מאפסון' :
+                    mode === 'rsp_issue' ? 'בחירת רס"פ להחתמה' :
+                      'בחירת רס"פ לזיכוי'}
           </Text>
           <Text style={styles.headerSubtitle}>
-            {filteredSoldiers.length} חיילים
+            {filteredSoldiers.length} {mode.includes('rsp') ? 'רס"פים' : 'חיילים'}
           </Text>
         </View>
 
@@ -267,10 +314,7 @@ const SoldierSearchScreen: React.FC = () => {
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={renderEmptyList}
           refreshing={refreshing}
-          onRefresh={() => {
-            setRefreshing(true);
-            loadSoldiers();
-          }}
+          onRefresh={handleRefresh}
         />
       )}
     </View>
@@ -358,14 +402,33 @@ const styles = StyleSheet.create({
     paddingBottom: 100,
   },
 
+  soldierCardContainer: {
+    position: 'relative',
+    marginBottom: Spacing.md,
+  },
+
   soldierCard: {
     backgroundColor: Colors.backgroundCard,
     borderRadius: BorderRadius.lg,
     padding: Spacing.lg,
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: Spacing.md,
     ...Shadows.small,
+  },
+
+  editButton: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    width: 32,
+    height: 32,
+    borderRadius: BorderRadius.full,
+    backgroundColor: Colors.backgroundCard,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Shadows.small,
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
 
   soldierAvatar: {

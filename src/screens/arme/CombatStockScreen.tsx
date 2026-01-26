@@ -1,9 +1,9 @@
 /**
  * CombatStockScreen.tsx - Tableau de stock d'équipements de combat
- * Affiche la distribution par statut (Dispo, Stocké, Emporté) et par compagnie
+ * Tableau avec colonne fixe et scroll horizontal/vertical fluide.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -14,18 +14,40 @@ import {
   Platform,
   RefreshControl,
   Alert,
+  Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { Colors, Shadows } from '../../theme/Colors';
 import { combatStockService, EquipmentStock } from '../../services/combatStockService';
 
+const FIXED_COLUMN_WIDTH = 110;
+const DATA_CELL_WIDTH = 46;
+const ROW_HEIGHT = 40;
+const HEADER_HEIGHT = 40;
+
+const COLUMNS = [
+  { key: 'standard', label: 'תקן', width: DATA_CELL_WIDTH },
+  { key: 'shelf', label: 'מדף', width: DATA_CELL_WIDTH },
+  { key: 'loans', label: 'השאלות', width: DATA_CELL_WIDTH + 10 },
+  { key: 'compA', label: "א'", width: DATA_CELL_WIDTH - 6 },
+  { key: 'compB', label: "ב'", width: DATA_CELL_WIDTH - 6 },
+  { key: 'compC', label: "ג'", width: DATA_CELL_WIDTH - 6 },
+  { key: 'compD', label: "ד'", width: DATA_CELL_WIDTH - 6 },
+  { key: 'hq', label: 'מפקדה', width: DATA_CELL_WIDTH + 10 },
+  { key: 'stored', label: 'אפסון', width: DATA_CELL_WIDTH + 10 },
+  { key: 'total', label: 'סה"כ', width: DATA_CELL_WIDTH },
+];
+
 const CombatStockScreen: React.FC = () => {
   const navigation = useNavigation();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [stocks, setStocks] = useState<EquipmentStock[]>([]);
-  const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
+
+  // Refs pour la synchronisation verticale
+  const namesScrollRef = useRef<ScrollView>(null);
+  const dataScrollRef = useRef<ScrollView>(null);
 
   useEffect(() => {
     loadStocks();
@@ -35,6 +57,20 @@ const CombatStockScreen: React.FC = () => {
     try {
       setLoading(true);
       const data = await combatStockService.getAllEquipmentStocks();
+
+      // DEBUG: Vérifier les doublons
+      console.log('📊 [CombatStock] Total stocks reçus:', data.length);
+      const nameCount = new Map<string, number>();
+      data.forEach(stock => {
+        const count = nameCount.get(stock.equipmentName) || 0;
+        nameCount.set(stock.equipmentName, count + 1);
+      });
+      nameCount.forEach((count, name) => {
+        if (count > 1) {
+          console.warn(`⚠️ [CombatStock] DOUBLON: "${name}" apparaît ${count} fois`);
+        }
+      });
+
       setStocks(data);
     } catch (error) {
       console.error('Error loading stocks:', error);
@@ -45,132 +81,37 @@ const CombatStockScreen: React.FC = () => {
     }
   };
 
-  const toggleExpanded = (equipmentId: string) => {
-    setExpandedItems(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(equipmentId)) {
-        newSet.delete(equipmentId);
-      } else {
-        newSet.add(equipmentId);
-      }
-      return newSet;
-    });
+  const getCompanyValue = (stock: EquipmentStock, companyName: string): number => {
+    const company = stock.byCompany.find(c => c.company === companyName);
+    return company ? (company.issued + company.stored) : 0;
   };
 
-  const getCategoryColor = (category: string): string => {
-    const colors: { [key: string]: string } = {
-      'נשק': '#EF4444',
-      'אמצעי לחימה': '#F59E0B',
-      'אמל״ח': '#10B981',
-      'ציוד לוחם': '#3B82F6',
-      'אביזרים': '#8B5CF6',
+  const getRowValues = (stock: EquipmentStock) => {
+    const headquarters = getCompanyValue(stock, 'מפקדה/אגמ') + getCompanyValue(stock, 'מפקדה') + getCompanyValue(stock, 'ניוד');
+    return {
+      standard: '-',
+      shelf: stock.available,
+      loans: stock.issued,
+      compA: getCompanyValue(stock, 'פלוגה א'),
+      compB: getCompanyValue(stock, 'פלוגה ב'),
+      compC: getCompanyValue(stock, 'פלוגה ג'),
+      compD: getCompanyValue(stock, 'פלוגה ד'),
+      hq: headquarters,
+      stored: stock.stored,
+      total: stock.total,
     };
-    return colors[category] || '#64748B';
   };
 
-  const renderTableRow = (stock: EquipmentStock, index: number) => {
-    const isExpanded = expandedItems.has(stock.equipmentId);
-    const categoryColor = getCategoryColor(stock.category);
-    const isEven = index % 2 === 0;
-
-    return (
-      <View key={stock.equipmentId}>
-        {/* Main Row */}
-        <TouchableOpacity
-          style={[styles.tableRow, isEven && styles.tableRowEven]}
-          onPress={() => toggleExpanded(stock.equipmentId)}
-          activeOpacity={0.7}
-        >
-          {/* Status Columns (Left Side) */}
-          <View style={styles.statusColumns}>
-            <View style={styles.cellStatus}>
-              <Text style={[styles.statusValue, stock.available > 0 && styles.statusValueAvailable]}>
-                {stock.available}
-              </Text>
-            </View>
-            <View style={styles.cellStatus}>
-              <Text style={[styles.statusValue, stock.storage > 0 && styles.statusValueStorage]}>
-                {stock.storage}
-              </Text>
-            </View>
-            <View style={styles.cellStatus}>
-              <Text style={[styles.statusValue, stock.issued > 0 && styles.statusValueIssued]}>
-                {stock.issued}
-              </Text>
-            </View>
-          </View>
-
-          {/* Equipment Info (Right Side) */}
-          <View style={styles.equipmentInfoCell}>
-            <View style={styles.nameAndCategory}>
-              <Text style={styles.equipmentName} numberOfLines={1}>
-                {stock.equipmentName}
-              </Text>
-              <View style={styles.categoryRow}>
-                <View style={[styles.categoryDot, { backgroundColor: categoryColor }]} />
-                <Text style={styles.categoryLabel}>{stock.category}</Text>
-              </View>
-            </View>
-
-            <View style={styles.cellExpand}>
-              <Ionicons
-                name={isExpanded ? 'chevron-down' : 'chevron-back'}
-                size={16}
-                color={Colors.textSecondary}
-              />
-            </View>
-          </View>
-        </TouchableOpacity>
-
-        {/* Expanded Details */}
-        {isExpanded && stock.byCompany.length > 0 && (
-          <View style={styles.expandedSection}>
-            {/* Sub-table Header */}
-            <View style={styles.subTableHeader}>
-              <Text style={[styles.subHeaderText, styles.subCellStatus]}>אפסון</Text>
-              <Text style={[styles.subHeaderText, styles.subCellStatus]}>הונפק</Text>
-              <Text style={[styles.subHeaderText, styles.subCellSoldiers]}>חיילים</Text>
-              <Text style={[styles.subHeaderText, styles.subCellCompany]}>פלוגה</Text>
-            </View>
-
-            {/* Sub-table Rows */}
-            {stock.byCompany.map((company, idx) => (
-              <View
-                key={company.company}
-                style={[
-                  styles.subTableRow,
-                  idx % 2 === 0 && styles.subTableRowEven,
-                ]}
-              >
-                <Text style={[styles.subCellText, styles.subCellStatus, company.storage > 0 && styles.boldText]}>
-                  {company.storage}
-                </Text>
-                <Text style={[styles.subCellText, styles.subCellStatus, company.issued > 0 && styles.boldText]}>
-                  {company.issued}
-                </Text>
-                <Text style={[styles.subCellText, styles.subCellSoldiers]}>
-                  {company.soldiers}
-                </Text>
-                <Text style={[styles.subCellText, styles.subCellCompany]}>
-                  {company.company}
-                </Text>
-              </View>
-            ))}
-          </View>
-        )}
-
-        {isExpanded && stock.byCompany.length === 0 && (
-          <View style={styles.noDataRow}>
-            <Text style={styles.noDataText}>לא הוקצה לאף פלוגה</Text>
-          </View>
-        )}
-      </View>
-    );
+  const getValueColor = (key: string, value: number | string) => {
+    if (value === '-' || value === 0) return '#94A3B8';
+    switch (key) {
+      case 'shelf': return '#2563EB';
+      case 'loans': return '#059669';
+      case 'stored': return '#D97706';
+      case 'total': return '#1E293B';
+      default: return '#7C3AED'; // Compagnies
+    }
   };
-
-  const totalIssued = stocks.reduce((sum, s) => sum + s.issued, 0);
-  const totalStorage = stocks.reduce((sum, s) => sum + s.storage, 0);
-  const totalAvailable = stocks.reduce((sum, s) => sum + s.available, 0);
 
   if (loading) {
     return (
@@ -181,336 +122,133 @@ const CombatStockScreen: React.FC = () => {
     );
   }
 
+  const totalContentWidth = COLUMNS.reduce((sum, col) => sum + col.width, 0);
+
   return (
     <View style={styles.container}>
-      {/* Header */}
+      {/* Header compact */}
       <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.headerButton}
-          onPress={() => navigation.goBack()}
-        >
+        <TouchableOpacity style={styles.headerButton} onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-forward" size={22} color="#FFF" />
         </TouchableOpacity>
-
-        <Text style={styles.headerTitle}>מלאי נשק וציוד</Text>
-
+        <Text style={styles.headerTitle}>טבלת מלאי ({stocks.length})</Text>
         <TouchableOpacity style={styles.headerButton} onPress={loadStocks}>
           <Ionicons name="refresh" size={22} color="#FFF" />
         </TouchableOpacity>
       </View>
 
-      <ScrollView
-        style={styles.content}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={() => {
-              setRefreshing(true);
-              loadStocks();
-            }}
-            colors={[Colors.arme]}
-          />
-        }
-      >
-        {/* Summary Stats */}
-        <View style={styles.statsContainer}>
-          <View style={styles.statBox}>
-            <Text style={[styles.statValue, { color: '#10B981' }]}>{totalIssued}</Text>
-            <Text style={styles.statLabel}>הונפק</Text>
-          </View>
-          <View style={[styles.statBox, styles.statBoxMiddle]}>
-            <Text style={[styles.statValue, { color: '#F59E0B' }]}>{totalStorage}</Text>
-            <Text style={styles.statLabel}>אפסון</Text>
-          </View>
-          <View style={styles.statBox}>
-            <Text style={[styles.statValue, { color: '#3B82F6' }]}>{totalAvailable}</Text>
-            <Text style={styles.statLabel}>זמין</Text>
-          </View>
+      {stocks.length === 0 ? (
+        <View style={styles.emptyState}>
+          <Ionicons name="cube-outline" size={48} color="#CBD5E1" />
+          <Text style={styles.emptyText}>אין ציוד במערכת</Text>
         </View>
-
-        {/* Main Table */}
-        {stocks.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Ionicons name="cube-outline" size={48} color={Colors.textLight} />
-            <Text style={styles.emptyText}>אין ציוד במערכת</Text>
+      ) : (
+        <View style={styles.tableContainer}>
+          {/* 1. Zone Fixe (Noms) */}
+          <View style={styles.leftColumn}>
+            <View style={styles.headerCellFix}>
+              <Text style={styles.headerText}>ציוד</Text>
+            </View>
+            <ScrollView
+              ref={namesScrollRef}
+              style={styles.verticalList}
+              showsVerticalScrollIndicator={false}
+              scrollEnabled={false} // Désactivé, scrollé via dataScrollRef
+            >
+              {stocks.map((stock, index) => (
+                <View key={index} style={[styles.cellFix, index % 2 === 0 && styles.rowEven]}>
+                  <Text style={styles.equipmentName} numberOfLines={1}>{stock.equipmentName}</Text>
+                </View>
+              ))}
+              <View style={{ height: 40 }} />
+            </ScrollView>
           </View>
-        ) : (
-          <View style={styles.tableContainer}>
-            {/* Table Header */}
-            <View style={styles.tableHeader}>
-              <View style={styles.statusColumns}>
-                <Text style={[styles.headerCell, styles.cellStatus]}>זמין</Text>
-                <Text style={[styles.headerCell, styles.cellStatus]}>אפסון</Text>
-                <Text style={[styles.headerCell, styles.cellStatus]}>הונפק</Text>
+
+          {/* 2. Zone Scrollable (Données) */}
+          <ScrollView horizontal bounces={false} showsHorizontalScrollIndicator={true}>
+            <View style={{ width: totalContentWidth }}>
+              {/* Header des données */}
+              <View style={styles.dataHeaderRow}>
+                {COLUMNS.map((col) => (
+                  <View key={col.key} style={[styles.headerCellData, { width: col.width }]}>
+                    <Text style={styles.headerTextSmall}>{col.label}</Text>
+                  </View>
+                ))}
               </View>
-              <Text style={[styles.headerCell, styles.equipmentInfoCell, { textAlign: 'right', paddingRight: 40 }]}>ציוד</Text>
-            </View>
 
-            {/* Table Body */}
-            <View style={styles.tableBody}>
-              {stocks.map((stock, index) => renderTableRow(stock, index))}
+              {/* Corps des données (Scroll Vertical) */}
+              <ScrollView
+                ref={dataScrollRef}
+                style={styles.verticalList}
+                scrollEventThrottle={16}
+                onScroll={(e) => {
+                  namesScrollRef.current?.scrollTo({ y: e.nativeEvent.contentOffset.y, animated: false });
+                }}
+                refreshControl={
+                  <RefreshControl
+                    refreshing={refreshing}
+                    onRefresh={() => { setRefreshing(true); loadStocks(); }}
+                    colors={[Colors.arme]}
+                  />
+                }
+              >
+                {stocks.map((stock, index) => {
+                  const values = getRowValues(stock);
+                  return (
+                    <View key={index} style={[styles.dataRow, index % 2 === 0 && styles.rowEven]}>
+                      {COLUMNS.map((col) => (
+                        <View key={col.key} style={[styles.dataCell, { width: col.width }, col.key === 'total' && styles.totalCell]}>
+                          <Text style={[styles.cellValue, { color: getValueColor(col.key, values[col.key as keyof typeof values]) }, col.key === 'total' && styles.totalValue]}>
+                            {values[col.key as keyof typeof values]}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  );
+                })}
+                <View style={{ height: 40 }} />
+              </ScrollView>
             </View>
-          </View>
-        )}
-
-        <View style={{ height: 100 }} />
-      </ScrollView>
+          </ScrollView>
+        </View>
+      )}
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F8FAFC',
-  },
-  loadingContainer: {
-    flex: 1,
-    backgroundColor: '#F8FAFC',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 14,
-    color: '#64748B',
-  },
-  // Header
+  container: { flex: 1, backgroundColor: '#FFF' },
+  loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  loadingText: { marginTop: 12, color: '#64748B' },
   header: {
     backgroundColor: Colors.arme,
-    paddingTop: Platform.OS === 'ios' ? 54 : 24,
-    paddingBottom: 16,
-    paddingHorizontal: 16,
+    paddingTop: Platform.OS === 'ios' ? 50 : 20,
+    paddingBottom: 12,
+    paddingHorizontal: 12,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  headerButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#FFF',
-  },
-  // Content
-  content: {
-    flex: 1,
-    padding: 16,
-  },
-  // Stats
-  statsContainer: {
-    flexDirection: 'row',
-    backgroundColor: '#FFF',
-    borderRadius: 12,
-    padding: 4,
-    marginBottom: 16,
-    ...Shadows.small,
-  },
-  statBox: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: 16,
-  },
-  statBoxMiddle: {
-    borderLeftWidth: 1,
-    borderRightWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  statValue: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#1E293B',
-  },
-  statLabel: {
-    fontSize: 12,
-    color: '#64748B',
-    marginTop: 4,
-    fontWeight: '600',
-  },
-  // Table
-  tableContainer: {
-    backgroundColor: '#FFF',
-    borderRadius: 12,
-    overflow: 'hidden',
-    ...Shadows.small,
-  },
-  tableHeader: {
-    flexDirection: 'row',
-    backgroundColor: '#F1F5F9',
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-    borderBottomWidth: 2,
-    borderBottomColor: '#E2E8F0',
-  },
-  headerCell: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#475569',
-    textAlign: 'center',
-  },
-  tableBody: {
-    // Container for rows
-  },
-  tableRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
-  },
-  tableRowEven: {
-    backgroundColor: '#FAFBFC',
-  },
-  // Status Columns
-  statusColumns: {
-    flexDirection: 'row',
-    width: 180,
-  },
-  cellStatus: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  statusValue: {
-    fontSize: 15,
-    fontWeight: '500',
-    color: '#94A3B8',
-  },
-  statusValueAvailable: {
-    color: '#3B82F6',
-    fontWeight: '700',
-  },
-  statusValueStorage: {
-    color: '#F59E0B',
-    fontWeight: '700',
-  },
-  statusValueIssued: {
-    color: '#10B981',
-    fontWeight: '700',
-  },
-  // Equipment Info
-  equipmentInfoCell: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-  },
-  nameAndCategory: {
-    flex: 1,
-    alignItems: 'flex-end',
-    marginRight: 8,
-  },
-  equipmentName: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1E293B',
-    textAlign: 'right',
-  },
-  categoryRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 2,
-  },
-  categoryLabel: {
-    fontSize: 11,
-    color: '#64748B',
-    marginRight: 4,
-  },
-  categoryDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  cellExpand: {
-    width: 24,
-    alignItems: 'center',
-  },
-  // Expanded Section
-  expandedSection: {
-    backgroundColor: '#F8FAFC',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
-  },
-  subTableHeader: {
-    flexDirection: 'row',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
-    marginBottom: 4,
-    justifyContent: 'flex-end',
-  },
-  subHeaderText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#64748B',
-    textAlign: 'center',
-  },
-  subTableRow: {
-    flexDirection: 'row',
-    paddingVertical: 10,
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-  },
-  subTableRowEven: {
-    backgroundColor: '#F1F5F9',
-    borderRadius: 6,
-  },
-  subCellText: {
-    fontSize: 13,
-    color: '#475569',
-    textAlign: 'center',
-  },
-  boldText: {
-    fontWeight: '700',
-    color: '#1E293B',
-  },
-  subCellStatus: {
-    width: 50,
-  },
-  subCellSoldiers: {
-    width: 60,
-  },
-  subCellCompany: {
-    flex: 1,
-    textAlign: 'right',
-    paddingRight: 8,
-    fontWeight: '600',
-    color: '#334155',
-  },
-  noDataRow: {
-    backgroundColor: '#F8FAFC',
-    paddingVertical: 16,
-    alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
-  },
-  noDataText: {
-    fontSize: 13,
-    color: '#94A3B8',
-  },
-  // Empty State
-  emptyState: {
-    alignItems: 'center',
-    paddingVertical: 60,
-    backgroundColor: '#FFF',
-    borderRadius: 12,
-  },
-  emptyText: {
-    fontSize: 14,
-    color: '#94A3B8',
-    marginTop: 12,
-  },
+  headerButton: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
+  headerTitle: { fontSize: 16, fontWeight: '700', color: '#FFF' },
+  tableContainer: { flex: 1, flexDirection: 'row' },
+  leftColumn: { width: FIXED_COLUMN_WIDTH, borderRightWidth: 1, borderRightColor: '#E2E8F0', backgroundColor: '#FFF', zIndex: 10 },
+  verticalList: { flex: 1 },
+  headerCellFix: { height: HEADER_HEIGHT, backgroundColor: '#1E293B', justifyContent: 'center', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: '#334155' },
+  headerCellData: { height: HEADER_HEIGHT, backgroundColor: '#1E293B', justifyContent: 'center', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: '#334155', borderRightWidth: 1, borderRightColor: '#334155' },
+  headerText: { color: '#FFF', fontWeight: '700', fontSize: 13 },
+  headerTextSmall: { color: '#E2E8F0', fontWeight: '600', fontSize: 11 },
+  cellFix: { height: ROW_HEIGHT, justifyContent: 'center', paddingHorizontal: 8, borderBottomWidth: 1, borderBottomColor: '#E2E8F0' },
+  equipmentName: { fontSize: 12, fontWeight: '600', color: '#1E293B', textAlign: 'right' },
+  dataHeaderRow: { flexDirection: 'row', height: HEADER_HEIGHT },
+  dataRow: { flexDirection: 'row', height: ROW_HEIGHT, borderBottomWidth: 1, borderBottomColor: '#E2E8F0' },
+  dataCell: { height: ROW_HEIGHT, justifyContent: 'center', alignItems: 'center', borderRightWidth: 1, borderRightColor: '#F1F5F9' },
+  rowEven: { backgroundColor: '#F8FAFC' },
+  cellValue: { fontSize: 13, fontWeight: '600' },
+  totalCell: { backgroundColor: '#F1F5F9' },
+  totalValue: { fontWeight: '700' },
+  emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  emptyText: { marginTop: 12, color: '#94A3B8' },
 });
 
 export default CombatStockScreen;
-

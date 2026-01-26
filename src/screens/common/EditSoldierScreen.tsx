@@ -1,9 +1,9 @@
 /**
- * AddSoldierScreen.tsx - Ajout d'un nouveau soldat
+ * EditSoldierScreen.tsx - Modification d'un soldat existant
  * Design militaire professionnel
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -19,14 +19,13 @@ import {
   Switch,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
-import { soldierService } from '../../services/soldierService';
+import { soldierService } from '../../services/firebaseService';
 import { useSoldiers } from '../../contexts/SoldiersContext';
 
-const COMPANIES = ['פלוגה א', 'פלוגה ב', 'פלוגה ג', 'פלוגה ד', 'מפקדה', 'ניוד'];
+const COMPANIES = ['פלוגה א', 'פלוגה ב', 'פלוגה ג', 'פלוגה ד', 'מפקדה/אגמ', 'מפקדה', 'ניוד'];
 
-// Composant InputField défini HORS du composant principal pour éviter les re-renders
 interface InputFieldProps {
   label: string;
   field: string;
@@ -54,20 +53,21 @@ const InputField: React.FC<InputFieldProps> = React.memo(({
   onFocus,
   onBlur,
 }) => (
-  <View style={styles.inputContainer}>
-    <Text style={styles.inputLabel}>
+  <View style={styles.inputGroup}>
+    <Text style={styles.label}>
       {label}
-      {required && <Text style={styles.requiredMark}> *</Text>}
+      {required && <Text style={styles.required}> *</Text>}
     </Text>
     <View style={[
-      styles.inputWrapper,
-      focused && styles.inputWrapperFocused,
-      error && styles.inputWrapperError,
+      styles.inputContainer,
+      focused && styles.inputContainerFocused,
+      error && styles.inputContainerError,
     ]}>
       <TextInput
         style={styles.input}
         placeholder={placeholder}
         placeholderTextColor={Colors.placeholder}
+        textAlign="right"
         value={value}
         onChangeText={onChangeText}
         keyboardType={keyboardType}
@@ -81,10 +81,14 @@ const InputField: React.FC<InputFieldProps> = React.memo(({
   </View>
 ));
 
-const AddSoldierScreen: React.FC = () => {
+const EditSoldierScreen: React.FC = () => {
   const navigation = useNavigation();
+  const route = useRoute();
+  const { soldierId } = (route.params as { soldierId: string }) || {};
   const { refreshSoldiers } = useSoldiers();
-  const [loading, setLoading] = useState(false);
+
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [focusedInput, setFocusedInput] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
@@ -97,6 +101,37 @@ const AddSoldierScreen: React.FC = () => {
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    loadSoldier();
+  }, [soldierId]);
+
+  const loadSoldier = async () => {
+    try {
+      setLoading(true);
+      const soldier = await soldierService.getById(soldierId);
+
+      if (soldier) {
+        setFormData({
+          personalNumber: soldier.personalNumber || '',
+          name: soldier.name || '',
+          phone: soldier.phone || '',
+          company: soldier.company || '',
+          department: soldier.department || '',
+          isRsp: soldier.isRsp || false,
+        });
+      } else {
+        Alert.alert('שגיאה', 'החייל לא נמצא', [
+          { text: 'אישור', onPress: () => navigation.goBack() }
+        ]);
+      }
+    } catch (error) {
+      console.error('Error loading soldier:', error);
+      Alert.alert('שגיאה', 'לא ניתן לטעון את פרטי החייל');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
@@ -119,22 +154,50 @@ const AddSoldierScreen: React.FC = () => {
     if (!validateForm()) return;
 
     try {
-      setLoading(true);
-      await soldierService.create({
-        ...formData,
-      });
+      setSaving(true);
+      await soldierService.update(soldierId, formData);
 
-      // Rafraîchir le cache des soldats après création
+      // Rafraîchir le cache des soldats après modification
       await refreshSoldiers();
 
-      Alert.alert('הצלחה', 'החייל נוסף בהצלחה', [
+      Alert.alert('הצלחה', 'פרטי החייל עודכנו בהצלחה', [
         { text: 'אישור', onPress: () => navigation.goBack() }
       ]);
     } catch (error: any) {
-      Alert.alert('שגיאה', error.message || 'לא ניתן להוסיף את החייל');
+      Alert.alert('שגיאה', error.message || 'לא ניתן לעדכן את פרטי החייל');
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
+  };
+
+  const handleDelete = () => {
+    Alert.alert(
+      'מחיקת חייל',
+      'האם אתה בטוח שברצונך למחוק את החייל? פעולה זו אינה ניתנת לביטול.',
+      [
+        { text: 'ביטול', style: 'cancel' },
+        {
+          text: 'מחק',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setSaving(true);
+              await soldierService.delete(soldierId);
+
+              // Rafraîchir le cache après suppression
+              await refreshSoldiers();
+
+              Alert.alert('הצלחה', 'החייל נמחק בהצלחה', [
+                { text: 'אישור', onPress: () => navigation.goBack() }
+              ]);
+            } catch (error: any) {
+              Alert.alert('שגיאה', error.message || 'לא ניתן למחוק את החייל');
+              setSaving(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const handleFieldChange = (field: keyof typeof formData, text: string) => {
@@ -143,6 +206,15 @@ const AddSoldierScreen: React.FC = () => {
       setErrors(prev => ({ ...prev, [field]: '' }));
     }
   };
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+        <Text style={styles.loadingText}>טוען נתונים...</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -156,30 +228,30 @@ const AddSoldierScreen: React.FC = () => {
         </TouchableOpacity>
 
         <View style={styles.headerTitleContainer}>
-          <Text style={styles.headerTitle}>הוספת חייל</Text>
-          <Text style={styles.headerSubtitle}>רישום חייל חדש למערכת</Text>
+          <Text style={styles.headerTitle}>עריכת חייל</Text>
+          <Text style={styles.headerSubtitle}>{formData.name}</Text>
         </View>
 
-        <View style={styles.headerSpacer} />
+        <TouchableOpacity
+          style={styles.deleteButton}
+          onPress={handleDelete}
+          disabled={saving}
+        >
+          <Ionicons name="trash-outline" size={22} color={Colors.danger} />
+        </TouchableOpacity>
       </View>
 
       <KeyboardAvoidingView
-        style={styles.keyboardView}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.keyboardView}
       >
         <ScrollView
           style={styles.content}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
         >
-          {/* Form Card */}
+          {/* Form */}
           <View style={styles.formCard}>
-            <View style={styles.formHeader}>
-              <Ionicons name="person-add" size={24} color={Colors.primary} />
-              <Text style={styles.formTitle}>פרטי החייל</Text>
-            </View>
-
             <InputField
               label="מספר אישי"
               field="personalNumber"
@@ -221,22 +293,25 @@ const AddSoldierScreen: React.FC = () => {
             />
 
             {/* Company Selector */}
-            <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>פלוגה</Text>
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>פלוגה</Text>
               <View style={styles.companyGrid}>
                 {COMPANIES.map((company) => (
                   <TouchableOpacity
                     key={company}
                     style={[
-                      styles.companyButton,
-                      formData.company === company && styles.companyButtonSelected,
+                      styles.companyChip,
+                      formData.company === company && styles.companyChipActive,
                     ]}
-                    onPress={() => setFormData(prev => ({ ...prev, company }))}
+                    onPress={() => handleFieldChange('company', company)}
+                    activeOpacity={0.7}
                   >
-                    <Text style={[
-                      styles.companyButtonText,
-                      formData.company === company && styles.companyButtonTextSelected,
-                    ]}>
+                    <Text
+                      style={[
+                        styles.companyChipText,
+                        formData.company === company && styles.companyChipTextActive,
+                      ]}
+                    >
                       {company}
                     </Text>
                   </TouchableOpacity>
@@ -245,9 +320,9 @@ const AddSoldierScreen: React.FC = () => {
             </View>
 
             <InputField
-              label="מחלקה/תפקיד"
+              label="מחלקה"
               field="department"
-              placeholder="הזן מחלקה או תפקיד"
+              placeholder="הזן מחלקה (אופציונלי)"
               value={formData.department}
               error={errors.department}
               focused={focusedInput === 'department'}
@@ -268,30 +343,24 @@ const AddSoldierScreen: React.FC = () => {
             </View>
           </View>
 
-          {/* Submit Button */}
+          {/* Save Button */}
           <TouchableOpacity
-            style={[styles.submitButton, loading && styles.submitButtonDisabled]}
+            style={[styles.saveButton, saving && styles.saveButtonDisabled]}
             onPress={handleSubmit}
-            disabled={loading}
+            disabled={saving}
             activeOpacity={0.8}
           >
-            {loading ? (
-              <ActivityIndicator size="small" color={Colors.textWhite} />
+            {saving ? (
+              <ActivityIndicator color={Colors.textWhite} />
             ) : (
               <>
                 <Ionicons name="checkmark-circle" size={24} color={Colors.textWhite} />
-                <Text style={styles.submitButtonText}>שמור חייל</Text>
+                <Text style={styles.saveButtonText}>שמור שינויים</Text>
               </>
             )}
           </TouchableOpacity>
 
-          {/* Info Note */}
-          <View style={styles.infoNote}>
-            <Ionicons name="information-circle-outline" size={20} color={Colors.info} />
-            <Text style={styles.infoNoteText}>
-              שדות המסומנים ב-* הם שדות חובה
-            </Text>
-          </View>
+          <View style={styles.bottomSpacer} />
         </ScrollView>
       </KeyboardAvoidingView>
     </View>
@@ -302,6 +371,19 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,
+  },
+
+  loadingContainer: {
+    flex: 1,
+    backgroundColor: Colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  loadingText: {
+    marginTop: Spacing.md,
+    fontSize: FontSize.base,
+    color: Colors.textSecondary,
   },
 
   // Header
@@ -332,22 +414,26 @@ const styles = StyleSheet.create({
   },
 
   headerTitle: {
-    fontSize: FontSize.xxl,
+    fontSize: FontSize.xl,
     fontWeight: '700',
     color: Colors.textWhite,
   },
 
   headerSubtitle: {
-    fontSize: FontSize.md,
+    fontSize: FontSize.sm,
     color: 'rgba(255, 255, 255, 0.8)',
     marginTop: Spacing.xs,
   },
 
-  headerSpacer: {
+  deleteButton: {
     width: 44,
+    height: 44,
+    borderRadius: BorderRadius.full,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
-  // Content
   keyboardView: {
     flex: 1,
   },
@@ -357,73 +443,55 @@ const styles = StyleSheet.create({
   },
 
   scrollContent: {
-    padding: Spacing.lg,
-    paddingBottom: 100,
+    padding: Spacing.xl,
   },
 
-  // Form Card
+  // Form
   formCard: {
     backgroundColor: Colors.backgroundCard,
     borderRadius: BorderRadius.xl,
     padding: Spacing.xl,
+    marginBottom: Spacing.lg,
     ...Shadows.small,
   },
 
-  formHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    marginBottom: Spacing.xl,
-    paddingBottom: Spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
-
-  formTitle: {
-    fontSize: FontSize.lg,
-    fontWeight: '600',
-    color: Colors.text,
-    marginRight: Spacing.sm,
-  },
-
-  // Input
-  inputContainer: {
+  inputGroup: {
     marginBottom: Spacing.lg,
   },
 
-  inputLabel: {
+  label: {
     fontSize: FontSize.md,
-    fontWeight: '500',
+    fontWeight: '600',
     color: Colors.text,
     marginBottom: Spacing.sm,
     textAlign: 'right',
   },
 
-  requiredMark: {
+  required: {
     color: Colors.danger,
   },
 
-  inputWrapper: {
+  inputContainer: {
     backgroundColor: Colors.backgroundInput,
     borderRadius: BorderRadius.md,
-    borderWidth: 1.5,
-    borderColor: Colors.border,
+    borderWidth: 2,
+    borderColor: 'transparent',
+    paddingHorizontal: Spacing.md,
   },
 
-  inputWrapperFocused: {
+  inputContainerFocused: {
     borderColor: Colors.primary,
     backgroundColor: Colors.backgroundCard,
   },
 
-  inputWrapperError: {
+  inputContainerError: {
     borderColor: Colors.danger,
   },
 
   input: {
-    paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.md,
     fontSize: FontSize.base,
     color: Colors.text,
+    paddingVertical: Spacing.md,
     textAlign: 'right',
   },
 
@@ -434,72 +502,62 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
 
-  // Company Grid
+  // Company Selector
   companyGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: Spacing.sm,
   },
 
-  companyButton: {
+  companyChip: {
+    paddingHorizontal: Spacing.lg,
     paddingVertical: Spacing.sm,
-    paddingHorizontal: Spacing.md,
-    borderRadius: BorderRadius.md,
+    borderRadius: BorderRadius.full,
     backgroundColor: Colors.backgroundInput,
-    borderWidth: 1,
-    borderColor: Colors.border,
+    borderWidth: 2,
+    borderColor: 'transparent',
   },
 
-  companyButtonSelected: {
+  companyChipActive: {
     backgroundColor: Colors.primary,
     borderColor: Colors.primary,
   },
 
-  companyButtonText: {
-    fontSize: FontSize.md,
-    color: Colors.textSecondary,
-    fontWeight: '500',
-  },
-
-  companyButtonTextSelected: {
-    color: Colors.textWhite,
-  },
-
-  // Submit Button
-  submitButton: {
-    backgroundColor: Colors.success,
-    borderRadius: BorderRadius.md,
-    paddingVertical: Spacing.lg,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing.sm,
-    marginTop: Spacing.xl,
-    ...Shadows.small,
-  },
-
-  submitButtonDisabled: {
-    backgroundColor: Colors.disabled,
-  },
-
-  submitButtonText: {
-    fontSize: FontSize.lg,
-    fontWeight: '600',
-    color: Colors.textWhite,
-  },
-
-  // Info Note
-  infoNote: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: Spacing.lg,
-    gap: Spacing.xs,
-  },
-
-  infoNoteText: {
+  companyChipText: {
     fontSize: FontSize.sm,
+    fontWeight: '600',
     color: Colors.textSecondary,
+  },
+
+  companyChipTextActive: {
+    color: Colors.textWhite,
+  },
+
+  // Save Button
+  saveButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.success,
+    paddingVertical: Spacing.lg,
+    borderRadius: BorderRadius.lg,
+    gap: Spacing.sm,
+    ...Shadows.medium,
+  },
+
+  saveButtonDisabled: {
+    backgroundColor: Colors.disabled,
+    opacity: 0.6,
+  },
+
+  saveButtonText: {
+    fontSize: FontSize.lg,
+    fontWeight: '700',
+    color: Colors.textWhite,
+  },
+
+  bottomSpacer: {
+    height: Spacing.xxxl,
   },
   switchContainer: {
     flexDirection: 'row-reverse',
@@ -517,4 +575,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default AddSoldierScreen;
+export default EditSoldierScreen;

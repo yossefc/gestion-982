@@ -14,8 +14,9 @@ import {
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import SignatureCanvas from 'react-native-signature-canvas';
 import { RootStackParamList, Soldier, AssignmentItem } from '../../types';
-import { soldierService } from '../../services/firebaseService';
+import { soldierService, combatEquipmentService } from '../../services/firebaseService';
 import { assignmentService } from '../../services/assignmentService';
+import { transactionalAssignmentService } from '../../services/transactionalAssignmentService';
 import { weaponInventoryService } from '../../services/weaponInventoryService';
 import { useAuth } from '../../contexts/AuthContext';
 import { Colors, Shadows } from '../../theme/Colors';
@@ -28,6 +29,7 @@ interface ReturnItem extends AssignmentItem {
   returnQuantity: number;
   availableSerials: string[]; // Serials disponibles (depuis serial string)
   selectedSerials: string[]; // Serials sélectionnés pour le retour
+  status?: 'assigned' | 'stored';
 }
 
 const CombatReturnScreen: React.FC = () => {
@@ -60,36 +62,39 @@ const CombatReturnScreen: React.FC = () => {
     try {
       console.log(`[CombatReturn] Loading data for soldier: ${soldierId}`);
 
-      const [soldierData, currentItems] = await Promise.all([
+      const [soldierData, allEquipment, currentItems] = await Promise.all([
         soldierService.getById(soldierId),
-        assignmentService.calculateCurrentHoldings(soldierId, 'combat'),
+        combatEquipmentService.getAll(),
+        transactionalAssignmentService.getCurrentHoldings(soldierId, 'combat'),
       ]);
 
       console.log(`[CombatReturn] Soldier: ${soldierData?.name}`);
       console.log(`[CombatReturn] Current items from calculateCurrentHoldings:`, currentItems.length);
-      console.log(`[CombatReturn] Items details:`, currentItems.map(i => ({
+      console.log(`[CombatReturn] Items details:`, currentItems.map((i: any) => ({
         name: i.equipmentName,
         qty: i.quantity,
-        serial: i.serial,
+        serial: (i.serials || []).join(','),
       })));
 
       setSoldier(soldierData);
 
       // Convertir les items en ReturnItems
       // Convertir serial (string) en tableau de serials
-      const returnItems: ReturnItem[] = currentItems.map(item => {
-        const serialsArray = item.serial
-          ? item.serial.split(',').map(s => s.trim())
-          : [];
+      const returnItems: ReturnItem[] = currentItems.map((item: any) => {
+        const serialsArray = item.serials || [];
 
         console.log(`[CombatReturn] Processing item ${item.equipmentName}: ${serialsArray.length} serials`);
 
         return {
-          ...item,
+          equipmentId: item.equipmentId,
+          equipmentName: item.equipmentName,
+          quantity: item.quantity,
+          serial: (item.serials || []).join(','), // Unified AssignmentItem field
           selected: false,
           returnQuantity: 0,
           availableSerials: serialsArray,
           selectedSerials: [], // Initialement vide
+          status: item.status, // Transférer le statut
         };
       });
 
@@ -108,11 +113,11 @@ const CombatReturnScreen: React.FC = () => {
       prev.map(item =>
         item.equipmentId === equipmentId
           ? {
-              ...item,
-              selected: !item.selected,
-              returnQuantity: !item.selected ? item.quantity : 0,
-              selectedSerials: [],
-            }
+            ...item,
+            selected: !item.selected,
+            returnQuantity: !item.selected ? item.quantity : 0,
+            selectedSerials: [],
+          }
           : item
       )
     );
@@ -248,26 +253,22 @@ const CombatReturnScreen: React.FC = () => {
                 return itemData;
               });
 
-              // Créer le credit assignment (sans timestamp - ajouté automatiquement)
-              const assignmentData: any = {
+              // Create transactional return assignment with requestId
+              console.log('[CombatReturn] Creating transactional return assignment...');
+
+              const requestId = `combat_return_${soldierId}_${Date.now()}`;
+
+              const assignmentId = await transactionalAssignmentService.returnEquipment({
                 soldierId,
                 soldierName: soldier?.name || '',
                 soldierPersonalNumber: soldier?.personalNumber || '',
-                type: 'combat' as const,
-                action: 'credit' as const,
+                type: 'combat',
                 items: creditItems,
-                status: 'זוכה' as const,
-                assignedBy: user?.id || '',
-              };
+                returnedBy: user?.id || '',
+                requestId,
+              });
 
-              // Ajouter les champs optionnels seulement s'ils existent
-              if (soldier?.phone) assignmentData.soldierPhone = soldier.phone;
-              if (soldier?.company) assignmentData.soldierCompany = soldier.company;
-              if (user?.name) assignmentData.assignedByName = user.name;
-              if (user?.email) assignmentData.assignedByEmail = user.email;
-
-              const assignmentId = await assignmentService.create(assignmentData, signature || undefined);
-              console.log('Combat credit assignment created:', assignmentId);
+              console.log('[CombatReturn] Transactional return assignment created:', assignmentId);
 
               // Update weapon inventory status for returned weapons
               console.log('[CombatReturn] =====================================');
@@ -316,18 +317,18 @@ const CombatReturnScreen: React.FC = () => {
               console.log('[CombatReturn] FIN MISE À JOUR weapons_inventory');
               console.log('[CombatReturn] =====================================');
 
-              // Calculer les items restants (recalculer depuis assignments)
-              console.log('[CombatReturn] Recalculating current holdings after credit...');
-              const remainingItems = await assignmentService.calculateCurrentHoldings(
+              // Recalculer les holdings pour voir s'il reste quelque chose
+              console.log('[CombatReturn] Final check of remaining items...');
+              const remainingItems = await transactionalAssignmentService.getCurrentHoldings(
                 soldierId,
                 'combat'
               );
 
               console.log('[CombatReturn] Remaining items after credit:', remainingItems.length);
-              console.log('[CombatReturn] Remaining items details:', remainingItems.map(i => ({
+              console.log('[CombatReturn] Remaining items details:', remainingItems.map((i: any) => ({
                 name: i.equipmentName,
                 qty: i.quantity,
-                serial: i.serial,
+                serial: (i.serials || []).join(','),
               })));
 
               const hasRemainingItems = remainingItems.length > 0;
@@ -349,10 +350,11 @@ const CombatReturnScreen: React.FC = () => {
               // Montrer ce qui reste (s'il reste quelque chose)
               if (hasRemainingItems) {
                 whatsappMessage += '\nציוד שנותר בידיך:\n';
-                remainingItems.forEach(item => {
+                remainingItems.forEach((item: any) => {
                   whatsappMessage += `• ${item.equipmentName} - כמות: ${item.quantity}`;
-                  if (item.serial) {
-                    whatsappMessage += ` (מסטב: ${item.serial})`;
+                  const serialStr = (item.serials || []).join(',');
+                  if (serialStr) {
+                    whatsappMessage += ` (מסטב: ${serialStr})`;
                   }
                   whatsappMessage += '\n';
                 });
@@ -546,7 +548,14 @@ const CombatReturnScreen: React.FC = () => {
                     {item.selected && <Text style={styles.checkmark}>✓</Text>}
                   </View>
                   <View style={styles.itemInfo}>
-                    <Text style={styles.itemName}>{item.equipmentName}</Text>
+                    <View style={styles.itemNameContainer}>
+                      <Text style={styles.itemName}>{item.equipmentName}</Text>
+                      {item.status === 'stored' && (
+                        <View style={styles.storedBadge}>
+                          <Text style={styles.storedBadgeText}>באפסון</Text>
+                        </View>
+                      )}
+                    </View>
 
                     {/* Display serials prominently */}
                     {item.availableSerials && item.availableSerials.length > 0 && (
@@ -605,7 +614,7 @@ const CombatReturnScreen: React.FC = () => {
                               style={[
                                 styles.serialChip,
                                 item.selectedSerials.includes(serial) &&
-                                  styles.serialChipSelected,
+                                styles.serialChipSelected,
                               ]}
                               onPress={() =>
                                 toggleSerial(item.equipmentId, serial)
@@ -616,7 +625,7 @@ const CombatReturnScreen: React.FC = () => {
                                 style={[
                                   styles.serialChipText,
                                   item.selectedSerials.includes(serial) &&
-                                    styles.serialChipTextSelected,
+                                  styles.serialChipTextSelected,
                                 ]}
                               >
                                 {serial}
@@ -824,6 +833,22 @@ const styles = StyleSheet.create({
   itemInfo: {
     flex: 1,
     alignItems: 'flex-end',
+  },
+  itemNameContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  storedBadge: {
+    backgroundColor: '#E3F2FD',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  storedBadgeText: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: '#1976D2',
   },
   itemName: {
     fontSize: 16,

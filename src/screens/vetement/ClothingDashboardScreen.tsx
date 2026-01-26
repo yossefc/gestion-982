@@ -21,6 +21,7 @@ import { useNavigation } from '@react-navigation/native';
 import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
 import { assignmentService } from '../../services/assignmentService';
 import { soldierService } from '../../services/soldierService';
+import { transactionalAssignmentService } from '../../services/transactionalAssignmentService';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -80,8 +81,8 @@ const ClothingDashboardScreen: React.FC = () => {
       });
 
       // Calculer le nombre de soldats qui ont actuellement de l'équipement
-      const soldiersWithHoldings = await assignmentService.getSoldiersWithCurrentHoldings('clothing');
-      const soldiersWithEquipment = soldiersWithHoldings.length;
+      const allHoldings = await transactionalAssignmentService.getAllHoldings('clothing');
+      const soldiersWithEquipment = allHoldings.filter(h => (h.items || []).length > 0).length;
 
       setStats({
         totalAssignments: assignments.length,
@@ -162,7 +163,7 @@ const ClothingDashboardScreen: React.FC = () => {
         </TouchableOpacity>
 
         <View style={styles.headerTitleContainer}>
-          <Text style={styles.headerTitle}>דאשבורד ביגוד</Text>
+          <Text style={styles.headerTitle}>דאשבורד אפנאות</Text>
           <Text style={styles.headerSubtitle}>סטטיסטיקות ודוחות</Text>
         </View>
 
@@ -306,14 +307,14 @@ const ClothingDashboardScreen: React.FC = () => {
         <View style={styles.actionsRow}>
           <TouchableOpacity
             style={styles.actionButton}
-            onPress={() => navigation.navigate('SoldierSearch' as never, { mode: 'signature', type: 'clothing' } as never)}
+            onPress={() => (navigation as any).navigate('SoldierSearch', { mode: 'signature', type: 'clothing' })}
           >
             <Ionicons name="create" size={24} color={Colors.vetement} />
             <Text style={styles.actionButtonText}>החתמה חדשה</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.actionButton}
-            onPress={() => navigation.navigate('SoldierSearch' as never, { mode: 'return', type: 'clothing' } as never)}
+            onPress={() => (navigation as any).navigate('SoldierSearch', { mode: 'return', type: 'clothing' })}
           >
             <Ionicons name="return-down-back" size={24} color={Colors.warning} />
             <Text style={styles.actionButtonText}>זיכוי</Text>

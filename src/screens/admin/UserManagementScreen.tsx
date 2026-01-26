@@ -19,6 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
 import { userService } from '../../services/userService';
+import { UserRole } from '../../types';
 
 interface User {
   id: string;
@@ -31,7 +32,7 @@ const ROLES = [
   { value: 'admin', label: 'מנהל', color: Colors.soldatsDark, bg: Colors.soldatsLight },
   { value: 'both', label: 'מלא', color: Colors.successDark, bg: Colors.successLight },
   { value: 'arme', label: 'נשק', color: Colors.armeDark, bg: Colors.armeLight },
-  { value: 'vetement', label: 'ביגוד', color: Colors.vetementDark, bg: Colors.vetementLight },
+  { value: 'vetement', label: 'אפנאות', color: Colors.vetementDark, bg: Colors.vetementLight },
 ];
 
 const UserManagementScreen: React.FC = () => {
@@ -73,7 +74,7 @@ const UserManagementScreen: React.FC = () => {
 
     try {
       setSaving(true);
-      await userService.updateRole(selectedUser.id, newRole);
+      await userService.updateRole(selectedUser.id, newRole as UserRole);
       setUsers(prev => prev.map(u =>
         u.id === selectedUser.id ? { ...u, role: newRole as any } : u
       ));

@@ -51,22 +51,22 @@ const VetementHomeScreen: React.FC = () => {
   const menuItems = [
     {
       title: 'החתמת חייל',
-      subtitle: 'הנפקת ציוד ביגוד',
+      subtitle: 'הנפקת ציוד אפנאות',
       icon: 'create',
       color: Colors.success,
       lightColor: Colors.successLight,
-      onPress: () => navigation.navigate('SoldierSearch' as never, { mode: 'signature', type: 'clothing' } as never),
+      onPress: () => (navigation as any).navigate('SoldierSearch', { mode: 'signature', type: 'clothing' }),
     },
     {
       title: 'זיכוי חייל',
-      subtitle: 'החזרת ציוד ביגוד',
+      subtitle: 'החזרת ציוד אפנאות',
       icon: 'return-down-back',
       color: Colors.warning,
       lightColor: Colors.warningLight,
-      onPress: () => navigation.navigate('SoldierSearch' as never, { mode: 'return', type: 'clothing' } as never),
+      onPress: () => (navigation as any).navigate('SoldierSearch', { mode: 'return', type: 'clothing' }),
     },
     {
-      title: 'מלאי ביגוד',
+      title: 'מלאי אפנאות',
       subtitle: 'פילוח לפי פלוגות',
       icon: 'cube',
       color: Colors.vetement,
@@ -96,6 +96,14 @@ const VetementHomeScreen: React.FC = () => {
       color: Colors.soldats,
       lightColor: Colors.soldatsLight,
       onPress: () => navigation.navigate('AddSoldier' as never),
+    },
+    {
+      title: 'ניהול רס"פים',
+      subtitle: 'החתמה וניהול ציוד רס"פים',
+      icon: 'construct',
+      color: '#6366F1',
+      lightColor: '#E0E7FF',
+      onPress: () => navigation.navigate('RspHome' as never),
     },
   ];
 
@@ -171,7 +179,7 @@ const VetementHomeScreen: React.FC = () => {
         </TouchableOpacity>
 
         <View style={styles.headerTitleContainer}>
-          <Text style={styles.headerTitle}>ביגוד</Text>
+          <Text style={styles.headerTitle}>אפסנאות</Text>
           <Text style={styles.headerSubtitle}>ניהול ציוד אישי</Text>
         </View>
 
@@ -226,8 +234,8 @@ const VetementHomeScreen: React.FC = () => {
         <View style={styles.infoCard}>
           <Ionicons name="shirt-outline" size={24} color={Colors.vetement} />
           <View style={styles.infoContent}>
-            <Text style={styles.infoTitle}>מודול ביגוד</Text>
-            <Text style={styles.infoText}>ניהול ציוד אישי וביגוד לחיילים</Text>
+            <Text style={styles.infoTitle}>מודול אפנאות</Text>
+            <Text style={styles.infoText}>ניהול ציוד אישי ואפנאות לחיילים</Text>
           </View>
         </View>
       </ScrollView>

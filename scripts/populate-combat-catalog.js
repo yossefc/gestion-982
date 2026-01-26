@@ -152,25 +152,25 @@ const combatEquipments = [
         hasSubEquipment: false
     },
 
-    // === BIGOUDIM LAKHIMA (ביגודי לחימה) ===
+    // === BIGOUDIM LAKHIMA (אפנאותי לחימה) ===
     {
         name: 'מדים א׳',
-        category: 'ביגודי לחימה',
+        category: 'אפנאותי לחימה',
         hasSubEquipment: false
     },
     {
         name: 'מדים ב׳',
-        category: 'ביגודי לחימה',
+        category: 'אפנאותי לחימה',
         hasSubEquipment: false
     },
     {
         name: 'ז׳קט חורף',
-        category: 'ביגודי לחימה',
+        category: 'אפנאותי לחימה',
         hasSubEquipment: false
     },
     {
         name: 'שקי שינה',
-        category: 'ביגודי לחימה',
+        category: 'אפנאותי לחימה',
         hasSubEquipment: false
     },
 

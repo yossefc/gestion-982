@@ -19,7 +19,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { useNavigation } from '@react-navigation/native';
 import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
-import { getFirestore, collection, getDocs } from 'firebase/firestore';
+import { getFirestore, collection, getDocs, getDocsFromServer } from 'firebase/firestore';
 
 interface CollectionInfo {
   name: string;
@@ -32,12 +32,12 @@ interface CollectionInfo {
 const COLLECTIONS = [
   'soldiers',
   'users',
-  'soldier_equipment',
   'soldier_holdings',
-  'equipment_combat',
-  'equipment_clothing',
+  'combatEquipment',
   'clothingEquipment',
   'assignments',
+  'manot',
+  'weapons_inventory',
 ];
 
 const DatabaseDebugScreen: React.FC = () => {
@@ -61,11 +61,11 @@ const DatabaseDebugScreen: React.FC = () => {
     }));
     setCollections(collectionData);
 
-    // Load each collection
+    // Load each collection (force from server, not cache)
     for (let i = 0; i < COLLECTIONS.length; i++) {
       const name = COLLECTIONS[i];
       try {
-        const snapshot = await getDocs(collection(db, name));
+        const snapshot = await getDocsFromServer(collection(db, name));
         const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
         setCollections(prev => prev.map(c =>
@@ -94,10 +94,10 @@ const DatabaseDebugScreen: React.FC = () => {
         collections: {}
       };
 
-      // Exporter toutes les collections
+      // Exporter toutes les collections (force from server, not cache)
       for (const name of COLLECTIONS) {
         try {
-          const snapshot = await getDocs(collection(db, name));
+          const snapshot = await getDocsFromServer(collection(db, name));
           const docs = snapshot.docs.map(doc => ({
             id: doc.id,
             ...doc.data()
@@ -140,12 +140,12 @@ const DatabaseDebugScreen: React.FC = () => {
     switch (name) {
       case 'soldiers': return 'people';
       case 'users': return 'person-circle';
-      case 'soldier_equipment':
       case 'soldier_holdings': return 'documents';
-      case 'equipment_combat': return 'shield';
-      case 'equipment_clothing':
+      case 'combatEquipment': return 'shield';
       case 'clothingEquipment': return 'shirt';
       case 'assignments': return 'clipboard';
+      case 'manot': return 'cube';
+      case 'weapons_inventory': return 'shield-checkmark';
       default: return 'folder';
     }
   };
@@ -154,12 +154,12 @@ const DatabaseDebugScreen: React.FC = () => {
     switch (name) {
       case 'soldiers': return Colors.soldats;
       case 'users': return Colors.info;
-      case 'soldier_equipment':
       case 'soldier_holdings': return Colors.warning;
-      case 'equipment_combat': return Colors.arme;
-      case 'equipment_clothing':
+      case 'combatEquipment': return Colors.arme;
       case 'clothingEquipment': return Colors.vetement;
       case 'assignments': return Colors.success;
+      case 'manot': return '#00897B';
+      case 'weapons_inventory': return '#D32F2F';
       default: return Colors.textSecondary;
     }
   };

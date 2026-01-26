@@ -1,6 +1,6 @@
 /**
  * HomeScreen.tsx - Écran d'accueil principal
- * Design militaire professionnel
+ * Design militaire moderne - équilibré et plaisant
  */
 
 import React, { useState, useEffect } from 'react';
@@ -13,13 +13,16 @@ import {
   ActivityIndicator,
   Platform,
   RefreshControl,
+  Image,
+  Dimensions,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
-import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
+import { Colors, Spacing, BorderRadius } from '../../theme/Colors';
 import { useAuth } from '../../contexts/AuthContext';
 import { soldierService } from '../../services/soldierService';
-import { assignmentService } from '../../services/assignmentService';
+
+const { width } = Dimensions.get('window');
 
 const HomeScreen: React.FC = () => {
   const navigation = useNavigation();
@@ -28,32 +31,27 @@ const HomeScreen: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [stats, setStats] = useState({
     totalSoldiers: 0,
-    todayAssignments: 0,
-    pendingSignatures: 0,
+    byCompany: {} as Record<string, number>,
   });
 
   useEffect(() => {
-    loadStats();
-  }, []);
+    if (user) {
+      loadStats();
+    }
+  }, [user]);
 
   const loadStats = async () => {
     try {
       const soldiers = await soldierService.getAll();
-      const assignments = await assignmentService.getAll();
-
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const todayAssignments = assignments.filter((a: any) => {
-        const date = a.createdAt?.toDate?.() || new Date(a.createdAt);
-        return date >= today;
+      const companyCount: Record<string, number> = {};
+      soldiers.forEach((soldier: any) => {
+        const company = soldier.company || 'לא משויך';
+        companyCount[company] = (companyCount[company] || 0) + 1;
       });
-
-      const pending = assignments.filter((a: any) => a.status === 'OPEN');
 
       setStats({
         totalSoldiers: soldiers.length,
-        todayAssignments: todayAssignments.length,
-        pendingSignatures: pending.length,
+        byCompany: companyCount,
       });
     } catch (error) {
       console.error('Error loading stats:', error);
@@ -72,185 +70,220 @@ const HomeScreen: React.FC = () => {
   const canAccessVetement = userRole === 'admin' || userRole === 'both' || userRole === 'vetement';
   const canAccessAdmin = userRole === 'admin';
 
-  const getRoleBadge = () => {
-    const roleConfig: Record<string, { label: string; color: string; bg: string }> = {
-      admin: { label: 'מנהל', color: Colors.soldatsDark, bg: Colors.soldatsLight },
-      both: { label: 'מלא', color: Colors.successDark, bg: Colors.successLight },
-      arme: { label: 'נשק', color: Colors.armeDark, bg: Colors.armeLight },
-      vetement: { label: 'ביגוד', color: Colors.vetementDark, bg: Colors.vetementLight },
+  const getRoleConfig = () => {
+    const config: Record<string, { label: string; color: string }> = {
+      admin: { label: 'מנהל מערכת', color: '#6366F1' },
+      both: { label: 'הרשאה מלאה', color: '#10B981' },
+      arme: { label: 'נשקייה', color: '#F59E0B' },
+      vetement: { label: 'אפנאות', color: '#3B82F6' },
     };
-    return roleConfig[userRole || ''] || { label: 'משתמש', color: Colors.textSecondary, bg: Colors.backgroundSecondary };
+    return config[userRole || ''] || { label: 'משתמש', color: '#64748B' };
   };
 
-  const roleBadge = getRoleBadge();
+  const roleConfig = getRoleConfig();
 
-  const ModuleCard = ({
-    title,
-    subtitle,
-    icon,
-    color,
-    lightColor,
-    onPress,
-  }: {
-    title: string;
-    subtitle: string;
-    icon: string;
-    color: string;
-    lightColor: string;
-    onPress: () => void;
-  }) => (
-    <TouchableOpacity
-      style={[styles.moduleCard, { borderLeftColor: color }]}
-      onPress={onPress}
-      activeOpacity={0.7}
-    >
-      <View style={[styles.moduleIconContainer, { backgroundColor: lightColor }]}>
-        <Ionicons name={icon as any} size={32} color={color} />
-      </View>
-      <View style={styles.moduleContent}>
-        <Text style={styles.moduleTitle}>{title}</Text>
-        <Text style={styles.moduleSubtitle}>{subtitle}</Text>
-      </View>
-      <Ionicons name="chevron-back" size={24} color={Colors.textLight} />
-    </TouchableOpacity>
-  );
-
-  const QuickActionButton = ({
-    title,
-    icon,
-    onPress,
-  }: {
-    title: string;
-    icon: string;
-    onPress: () => void;
-  }) => (
-    <TouchableOpacity style={styles.quickAction} onPress={onPress} activeOpacity={0.7}>
-      <View style={styles.quickActionIcon}>
-        <Ionicons name={icon as any} size={24} color={Colors.primary} />
-      </View>
-      <Text style={styles.quickActionText}>{title}</Text>
-    </TouchableOpacity>
-  );
+  // Couleurs pour les compagnies
+  const companyColors = ['#10B981', '#3B82F6', '#F59E0B', '#8B5CF6', '#EC4899', '#14B8A6'];
 
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={Colors.primary} />
+        <ActivityIndicator size="small" color="#4F6D7A" />
+        <Text style={styles.loadingText}>טוען נתונים...</Text>
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerTop}>
-          <TouchableOpacity style={styles.notificationButton}>
-            <Ionicons name="notifications-outline" size={24} color={Colors.textWhite} />
-          </TouchableOpacity>
-
-          <View style={styles.logoContainer}>
-            <View style={styles.logo}>
-              <Text style={styles.logoText}>982</Text>
+      {/* Header avec gradient subtil */}
+      <LinearGradient
+        colors={['#4F6D7A', '#3D5A6C']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.header}
+      >
+        <View style={styles.headerContent}>
+          <View style={styles.userSection}>
+            <Text style={styles.greeting}>שלום,</Text>
+            <Text style={styles.userName}>{user?.displayName || user?.email?.split('@')[0]}</Text>
+            <View style={[styles.roleBadge, { backgroundColor: roleConfig.color + '30' }]}>
+              <View style={[styles.roleDot, { backgroundColor: roleConfig.color }]} />
+              <Text style={[styles.roleText, { color: '#FFFFFF' }]}>{roleConfig.label}</Text>
             </View>
           </View>
 
-          <TouchableOpacity style={styles.settingsButton}>
-            <Ionicons name="settings-outline" size={24} color={Colors.textWhite} />
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.welcomeSection}>
-          <Text style={styles.welcomeText}>שלום,</Text>
-          <Text style={styles.userName}>{user?.displayName || user?.email?.split('@')[0]}</Text>
-          <View style={[styles.roleBadge, { backgroundColor: roleBadge.bg }]}>
-            <Text style={[styles.roleBadgeText, { color: roleBadge.color }]}>{roleBadge.label}</Text>
+          <View style={styles.logoContainer}>
+            <Image
+              source={require('../../../assets/images/logo-982.png')}
+              style={styles.logoImage}
+              resizeMode="contain"
+            />
           </View>
         </View>
-      </View>
+      </LinearGradient>
 
       <ScrollView
         style={styles.content}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[Colors.primary]} />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#4F6D7A"
+          />
         }
       >
-        {/* Quick Stats */}
-        <View style={styles.statsRow}>
-          <View style={[styles.statCard, { backgroundColor: Colors.infoLight }]}>
-            <Ionicons name="people" size={24} color={Colors.info} />
-            <Text style={[styles.statValue, { color: Colors.info }]}>{stats.totalSoldiers}</Text>
-            <Text style={styles.statLabel}>חיילים</Text>
+        {/* Carte statistique principale */}
+        <View style={styles.mainStatCard}>
+          <View style={styles.mainStatHeader}>
+            <Text style={styles.mainStatLabel}>סה״כ חיילים במערכת</Text>
           </View>
-          <View style={[styles.statCard, { backgroundColor: Colors.successLight }]}>
-            <Ionicons name="today" size={24} color={Colors.success} />
-            <Text style={[styles.statValue, { color: Colors.success }]}>{stats.todayAssignments}</Text>
-            <Text style={styles.statLabel}>היום</Text>
-          </View>
-          <View style={[styles.statCard, { backgroundColor: Colors.warningLight }]}>
-            <Ionicons name="time" size={24} color={Colors.warning} />
-            <Text style={[styles.statValue, { color: Colors.warning }]}>{stats.pendingSignatures}</Text>
-            <Text style={styles.statLabel}>ממתינים</Text>
+          <Text style={styles.mainStatValue}>{stats.totalSoldiers}</Text>
+          <View style={styles.mainStatBar}>
+            <View style={[styles.mainStatBarFill, { width: '100%' }]} />
           </View>
         </View>
 
-        {/* Module Cards */}
-        <Text style={styles.sectionTitle}>מודולים</Text>
+        {/* Répartition par compagnie */}
+        <View style={styles.sectionHeader}>
+          <View style={styles.sectionDot} />
+          <Text style={styles.sectionTitle}>פילוח לפי פלוגות</Text>
+        </View>
 
-        {canAccessArme && (
-          <ModuleCard
-            title="נשק וציוד לוחם"
-            subtitle="החתמה וזיכוי ציוד קרבי"
-            icon="shield"
-            color={Colors.arme}
-            lightColor={Colors.armeLight}
-            onPress={() => navigation.navigate('ArmeHome' as never)}
-          />
-        )}
+        <View style={styles.companiesCard}>
+          {Object.entries(stats.byCompany)
+            .sort(([a], [b]) => a.localeCompare(b, 'he'))
+            .map(([company, count], index) => {
+              const color = companyColors[index % companyColors.length];
+              const percentage = stats.totalSoldiers > 0 ? (count / stats.totalSoldiers) * 100 : 0;
 
-        {canAccessVetement && (
-          <ModuleCard
-            title="ביגוד"
-            subtitle="החתמה וזיכוי ציוד אישי"
-            icon="shirt"
-            color={Colors.vetement}
-            lightColor={Colors.vetementLight}
-            onPress={() => navigation.navigate('VetementHome' as never)}
-          />
-        )}
+              return (
+                <View key={company} style={styles.companyItem}>
+                  <View style={styles.companyInfo}>
+                    <View style={[styles.companyDot, { backgroundColor: color }]} />
+                    <Text style={styles.companyName}>{company}</Text>
+                  </View>
+                  <View style={styles.companyStats}>
+                    <View style={styles.companyBarContainer}>
+                      <View
+                        style={[
+                          styles.companyBar,
+                          { width: `${percentage}%`, backgroundColor: color + '40' }
+                        ]}
+                      />
+                    </View>
+                    <Text style={styles.companyCount}>{count}</Text>
+                  </View>
+                </View>
+              );
+            })}
+        </View>
 
-        {canAccessAdmin && (
-          <ModuleCard
-            title="ניהול מערכת"
-            subtitle="הגדרות, משתמשים ודוחות"
-            icon="cog"
-            color={Colors.soldats}
-            lightColor={Colors.soldatsLight}
-            onPress={() => navigation.navigate('AdminPanel' as never)}
-          />
-        )}
+        {/* Modules */}
+        <View style={styles.sectionHeader}>
+          <View style={styles.sectionDot} />
+          <Text style={styles.sectionTitle}>מודולים</Text>
+        </View>
 
-        {/* Quick Actions */}
-        <Text style={styles.sectionTitle}>פעולות מהירות</Text>
+        <View style={styles.modulesContainer}>
+          {canAccessArme && (
+            <TouchableOpacity
+              style={styles.moduleCard}
+              onPress={() => navigation.navigate('ArmeHome' as never)}
+              activeOpacity={0.7}
+            >
+              <LinearGradient
+                colors={['#F59E0B', '#D97706']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.moduleAccent}
+              />
+              <View style={styles.moduleContent}>
+                <Text style={styles.moduleTitle}>נשקייה</Text>
+                <Text style={styles.moduleDesc}>החתמה וזיכוי ציוד קרבי</Text>
+              </View>
+              <Text style={styles.moduleArrow}>←</Text>
+            </TouchableOpacity>
+          )}
+
+          {canAccessVetement && (
+            <TouchableOpacity
+              style={styles.moduleCard}
+              onPress={() => navigation.navigate('VetementHome' as never)}
+              activeOpacity={0.7}
+            >
+              <LinearGradient
+                colors={['#3B82F6', '#2563EB']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.moduleAccent}
+              />
+              <View style={styles.moduleContent}>
+                <Text style={styles.moduleTitle}>אפסנאות</Text>
+                <Text style={styles.moduleDesc}>החתמה וזיכוי ציוד אישי</Text>
+              </View>
+              <Text style={styles.moduleArrow}>←</Text>
+            </TouchableOpacity>
+          )}
+
+          {canAccessAdmin && (
+            <TouchableOpacity
+              style={styles.moduleCard}
+              onPress={() => navigation.navigate('AdminPanel' as never)}
+              activeOpacity={0.7}
+            >
+              <LinearGradient
+                colors={['#6366F1', '#4F46E5']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.moduleAccent}
+              />
+              <View style={styles.moduleContent}>
+                <Text style={styles.moduleTitle}>ניהול מערכת</Text>
+                <Text style={styles.moduleDesc}>הגדרות, משתמשים ודוחות</Text>
+              </View>
+              <Text style={styles.moduleArrow}>←</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Actions rapides */}
+        <View style={styles.sectionHeader}>
+          <View style={styles.sectionDot} />
+          <Text style={styles.sectionTitle}>פעולות מהירות</Text>
+        </View>
+
         <View style={styles.quickActionsRow}>
-          <QuickActionButton
-            title="חייל חדש"
-            icon="person-add"
+          <TouchableOpacity
+            style={styles.quickActionCard}
             onPress={() => navigation.navigate('AddSoldier' as never)}
-          />
+            activeOpacity={0.7}
+          >
+            <View style={[styles.quickActionIconBg, { backgroundColor: '#10B98120' }]}>
+              <Text style={[styles.quickActionIcon, { color: '#10B981' }]}>+</Text>
+            </View>
+            <Text style={styles.quickActionText}>הוספת חייל</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.quickActionCard}
+            onPress={() => (navigation as any).navigate('SoldierSearch', { mode: 'signature', type: 'combat' })}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.quickActionIconBg, { backgroundColor: '#3B82F620' }]}>
+              <Text style={[styles.quickActionIcon, { color: '#3B82F6' }]}>⌕</Text>
+            </View>
+            <Text style={styles.quickActionText}>חיפוש חייל</Text>
+          </TouchableOpacity>
         </View>
 
-        {/* Info Card */}
-        <View style={styles.infoCard}>
-          <View style={styles.infoIconContainer}>
-            <Ionicons name="information-circle" size={24} color={Colors.olive} />
-          </View>
-          <View style={styles.infoContent}>
-            <Text style={styles.infoTitle}>מערכת ניהול ציוד</Text>
-            <Text style={styles.infoText}>גדוד 982 - גרסה 1.0.0</Text>
-          </View>
+        {/* Footer */}
+        <View style={styles.footer}>
+          <View style={styles.footerLine} />
+          <Text style={styles.footerText}>מערכת ניהול ציוד • גדוד 982</Text>
+          <Text style={styles.footerVersion}>גרסה 1.0.0</Text>
         </View>
       </ScrollView>
     </View>
@@ -260,98 +293,90 @@ const HomeScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: '#F0F4F8',
   },
 
   loadingContainer: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: '#F0F4F8',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 12,
+  },
+
+  loadingText: {
+    fontSize: 13,
+    color: '#64748B',
+    fontWeight: '500',
   },
 
   // Header
   header: {
-    backgroundColor: Colors.primary,
-    paddingTop: Platform.OS === 'ios' ? 50 : 20,
-    paddingBottom: Spacing.xxl,
-    paddingHorizontal: Spacing.lg,
-    borderBottomLeftRadius: BorderRadius.xl,
-    borderBottomRightRadius: BorderRadius.xl,
-    ...Shadows.medium,
+    paddingTop: Platform.OS === 'ios' ? 56 : 28,
+    paddingHorizontal: 20,
+    paddingBottom: 24,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
   },
 
-  headerTop: {
+  headerContent: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: Spacing.lg,
+    alignItems: 'flex-start',
   },
 
-  notificationButton: {
-    width: 44,
-    height: 44,
-    borderRadius: BorderRadius.full,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
+  userSection: {
+    flex: 1,
+    alignItems: 'flex-end',
   },
 
-  settingsButton: {
-    width: 44,
-    height: 44,
-    borderRadius: BorderRadius.full,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  logoContainer: {
-    alignItems: 'center',
-  },
-
-  logo: {
-    width: 56,
-    height: 56,
-    borderRadius: BorderRadius.full,
-    backgroundColor: Colors.textWhite,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...Shadows.small,
-  },
-
-  logoText: {
-    fontSize: FontSize.lg,
-    fontWeight: '800',
-    color: Colors.primary,
-  },
-
-  welcomeSection: {
-    alignItems: 'center',
-  },
-
-  welcomeText: {
-    fontSize: FontSize.base,
-    color: 'rgba(255, 255, 255, 0.8)',
+  greeting: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.7)',
+    fontWeight: '400',
   },
 
   userName: {
-    fontSize: FontSize.xxl,
+    fontSize: 24,
     fontWeight: '700',
-    color: Colors.textWhite,
-    marginTop: Spacing.xs,
+    color: '#FFFFFF',
+    marginTop: 2,
   },
 
   roleBadge: {
-    paddingVertical: Spacing.xs,
-    paddingHorizontal: Spacing.md,
-    borderRadius: BorderRadius.full,
-    marginTop: Spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    marginTop: 10,
+    gap: 6,
   },
 
-  roleBadgeText: {
-    fontSize: FontSize.sm,
+  roleDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+
+  roleText: {
+    fontSize: 12,
     fontWeight: '600',
+  },
+
+  logoContainer: {
+    width: 52,
+    height: 52,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 16,
+  },
+
+  logoImage: {
+    width: 38,
+    height: 38,
   },
 
   // Content
@@ -360,146 +385,267 @@ const styles = StyleSheet.create({
   },
 
   scrollContent: {
-    padding: Spacing.lg,
+    padding: 20,
+    paddingTop: 24,
     paddingBottom: 100,
   },
 
-  sectionTitle: {
-    fontSize: FontSize.lg,
-    fontWeight: '600',
-    color: Colors.text,
-    marginBottom: Spacing.md,
-    marginTop: Spacing.lg,
-    textAlign: 'right',
+  // Main stat card
+  mainStatCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 24,
+    shadowColor: '#4F6D7A',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 3,
   },
 
-  // Stats Row
-  statsRow: {
+  mainStatHeader: {
     flexDirection: 'row',
-    gap: Spacing.md,
-    marginTop: -Spacing.xl,
+    justifyContent: 'flex-end',
   },
 
-  statCard: {
-    flex: 1,
-    borderRadius: BorderRadius.lg,
-    padding: Spacing.md,
-    alignItems: 'center',
-    ...Shadows.small,
+  mainStatLabel: {
+    fontSize: 14,
+    color: '#64748B',
+    fontWeight: '500',
   },
 
-  statValue: {
-    fontSize: FontSize.xxl,
+  mainStatValue: {
+    fontSize: 42,
     fontWeight: '700',
-    marginTop: Spacing.xs,
+    color: '#1E293B',
+    textAlign: 'right',
+    marginTop: 8,
+    letterSpacing: -1,
   },
 
-  statLabel: {
-    fontSize: FontSize.xs,
-    color: Colors.textSecondary,
-    marginTop: Spacing.xs,
+  mainStatBar: {
+    height: 4,
+    backgroundColor: '#E2E8F0',
+    borderRadius: 2,
+    marginTop: 16,
+    overflow: 'hidden',
   },
 
-  // Module Cards
-  moduleCard: {
-    backgroundColor: Colors.backgroundCard,
-    borderRadius: BorderRadius.lg,
-    padding: Spacing.lg,
+  mainStatBarFill: {
+    height: '100%',
+    backgroundColor: '#4F6D7A',
+    borderRadius: 2,
+  },
+
+  // Section header
+  sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: Spacing.md,
-    borderLeftWidth: 4,
-    ...Shadows.small,
+    justifyContent: 'flex-end',
+    marginBottom: 14,
+    marginTop: 8,
+    gap: 8,
   },
 
-  moduleIconContainer: {
-    width: 64,
-    height: 64,
-    borderRadius: BorderRadius.lg,
+  sectionDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#4F6D7A',
+  },
+
+  sectionTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#475569',
+  },
+
+  // Companies
+  companiesCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 8,
+    marginBottom: 24,
+    shadowColor: '#4F6D7A',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+
+  companyItem: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: Spacing.md,
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+  },
+
+  companyInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+
+  companyDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+
+  companyName: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#334155',
+  },
+
+  companyStats: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+
+  companyBarContainer: {
+    width: 60,
+    height: 6,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+
+  companyBar: {
+    height: '100%',
+    borderRadius: 3,
+  },
+
+  companyCount: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1E293B',
+    minWidth: 28,
+    textAlign: 'left',
+  },
+
+  // Modules
+  modulesContainer: {
+    gap: 12,
+    marginBottom: 24,
+  },
+
+  moduleCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    padding: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    shadowColor: '#4F6D7A',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 3,
+    overflow: 'hidden',
+  },
+
+  moduleAccent: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: 5,
+    borderTopRightRadius: 14,
+    borderBottomRightRadius: 14,
   },
 
   moduleContent: {
     flex: 1,
     alignItems: 'flex-end',
+    paddingRight: 8,
   },
 
   moduleTitle: {
-    fontSize: FontSize.lg,
-    fontWeight: '600',
-    color: Colors.text,
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#1E293B',
   },
 
-  moduleSubtitle: {
-    fontSize: FontSize.sm,
-    color: Colors.textSecondary,
-    marginTop: Spacing.xs,
+  moduleDesc: {
+    fontSize: 13,
+    color: '#64748B',
+    marginTop: 3,
   },
 
-  // Quick Actions
+  moduleArrow: {
+    fontSize: 20,
+    color: '#94A3B8',
+    fontWeight: '300',
+  },
+
+  // Quick actions
   quickActionsRow: {
     flexDirection: 'row',
-    gap: Spacing.md,
+    gap: 12,
+    marginBottom: 32,
   },
 
-  quickAction: {
+  quickActionCard: {
     flex: 1,
-    backgroundColor: Colors.backgroundCard,
-    borderRadius: BorderRadius.lg,
-    padding: Spacing.lg,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    padding: 18,
     alignItems: 'center',
-    ...Shadows.small,
+    shadowColor: '#4F6D7A',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+
+  quickActionIconBg: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
   },
 
   quickActionIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: BorderRadius.full,
-    backgroundColor: Colors.primaryLight + '20',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: Spacing.sm,
+    fontSize: 24,
+    fontWeight: '500',
   },
 
   quickActionText: {
-    fontSize: FontSize.md,
-    fontWeight: '500',
-    color: Colors.text,
-  },
-
-  // Info Card
-  infoCard: {
-    backgroundColor: Colors.olive + '15',
-    borderRadius: BorderRadius.lg,
-    padding: Spacing.lg,
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: Spacing.xl,
-    borderWidth: 1,
-    borderColor: Colors.olive + '30',
-  },
-
-  infoIconContainer: {
-    marginLeft: Spacing.md,
-  },
-
-  infoContent: {
-    flex: 1,
-    alignItems: 'flex-end',
-  },
-
-  infoTitle: {
-    fontSize: FontSize.md,
+    fontSize: 14,
     fontWeight: '600',
-    color: Colors.olive,
+    color: '#334155',
   },
 
-  infoText: {
-    fontSize: FontSize.sm,
-    color: Colors.olive,
-    marginTop: Spacing.xs,
+  // Footer
+  footer: {
+    alignItems: 'center',
+    paddingTop: 16,
+  },
+
+  footerLine: {
+    width: 40,
+    height: 3,
+    backgroundColor: '#CBD5E1',
+    borderRadius: 2,
+    marginBottom: 16,
+  },
+
+  footerText: {
+    fontSize: 13,
+    color: '#64748B',
+    fontWeight: '500',
+  },
+
+  footerVersion: {
+    fontSize: 11,
+    color: '#94A3B8',
+    marginTop: 4,
   },
 });
 

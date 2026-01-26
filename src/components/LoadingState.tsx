@@ -16,7 +16,7 @@ export const LoadingState: React.FC<LoadingStateProps> = ({
 }) => {
   return (
     <View style={[styles.container, style]}>
-      <ActivityIndicator size={size} color={Colors.status.info} />
+      <ActivityIndicator size={size} color={Colors.info} />
       {message && <Text style={styles.message}>{message}</Text>}
     </View>
   );
@@ -32,7 +32,7 @@ const styles = StyleSheet.create({
   message: {
     marginTop: 15,
     fontSize: 16,
-    color: Colors.text.secondary,
+    color: Colors.textSecondary,
   },
 });
 

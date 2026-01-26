@@ -49,7 +49,7 @@ Catalogue des équipements de combat disponibles.
 
 **Exemples:**
 - M16, M203, MAG, קשת
-- Catégories: נשק, אופטיקה, ביגוד לחימה
+- Catégories: נשק, אופטיקה, אפנאות לחימה
 
 ---
 

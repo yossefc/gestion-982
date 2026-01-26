@@ -15,6 +15,7 @@ import {
   Platform,
   ScrollView,
   Alert,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
@@ -64,7 +65,11 @@ const LoginScreen: React.FC = () => {
         <View style={styles.logoSection}>
           <View style={styles.logoContainer}>
             <View style={styles.logo}>
-              <Text style={styles.logoText}>982</Text>
+              <Image
+                source={require('../../../assets/images/logo-982.png')}
+                style={styles.logoImage}
+                resizeMode="contain"
+              />
             </View>
             <View style={styles.logoRing} />
           </View>
@@ -243,20 +248,26 @@ const styles = StyleSheet.create({
   },
 
   logo: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
     backgroundColor: Colors.textWhite,
     alignItems: 'center',
     justifyContent: 'center',
     ...Shadows.large,
+    overflow: 'hidden',
+  },
+
+  logoImage: {
+    width: '90%',
+    height: '90%',
   },
 
   logoRing: {
     position: 'absolute',
-    width: 120,
-    height: 120,
-    borderRadius: 60,
+    width: 140,
+    height: 140,
+    borderRadius: 70,
     borderWidth: 2,
     borderColor: 'rgba(255, 255, 255, 0.3)',
     top: -10,

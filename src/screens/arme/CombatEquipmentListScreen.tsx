@@ -16,12 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { CombatEquipment } from '../../types';
 import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
-import {
-  getAllCombatEquipment,
-  addCombatEquipment,
-  deleteCombatEquipment,
-  DEFAULT_COMBAT_EQUIPMENT
-} from '../../services/equipmentService';
+import { combatEquipmentService, DEFAULT_COMBAT_EQUIPMENT } from '../../services/firebaseService';
 
 const CATEGORY_CONFIG: { [key: string]: { icon: string; color: string } } = {
   'נשק': { icon: '🔫', color: '#E53935' },
@@ -48,7 +43,7 @@ const CombatEquipmentListScreen: React.FC = () => {
 
   const loadEquipment = async () => {
     try {
-      const data = await getAllCombatEquipment();
+      const data = await combatEquipmentService.getAll();
 
       if (data.length === 0) {
         Alert.alert(
@@ -61,7 +56,7 @@ const CombatEquipmentListScreen: React.FC = () => {
               onPress: async () => {
                 try {
                   for (const eq of DEFAULT_COMBAT_EQUIPMENT) {
-                    await addCombatEquipment(eq);
+                    await combatEquipmentService.create(eq);
                   }
                   loadEquipment();
                 } catch (error) {
@@ -122,7 +117,7 @@ const CombatEquipmentListScreen: React.FC = () => {
           style: 'destructive',
           onPress: async () => {
             try {
-              await deleteCombatEquipment(item.id);
+              await combatEquipmentService.delete(item.id);
               Alert.alert('הצלחה', 'הציוד נמחק בהצלחה');
               loadEquipment();
             } catch (error) {

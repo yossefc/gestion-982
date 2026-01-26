@@ -20,6 +20,7 @@ import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Co
 import { soldierService } from '../../services/soldierService';
 import { userService } from '../../services/userService';
 import { assignmentService } from '../../services/assignmentService';
+import { migrateArmamentStatuses } from '../../utils/migrateStatuses';
 
 const AdminPanelScreen: React.FC = () => {
   const navigation = useNavigation();
@@ -86,6 +87,34 @@ const AdminPanelScreen: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleMigrateStatuses = () => {
+    Alert.alert(
+      'עדכון סטטוסים',
+      'פעולה זו תאחד את כל הסטטוסים של הציוד והנשק במערכת לפורמט החדש. האם להמשיך?',
+      [
+        { text: 'ביטול', style: 'cancel' },
+        {
+          text: 'אישור',
+          onPress: async () => {
+            try {
+              setLoading(true);
+              const result = await migrateArmamentStatuses();
+              if (result.success) {
+                Alert.alert('הצלחה', `התהליך הושלם. עודכנו ${result.updatedCount} מסמכים.`);
+              } else {
+                Alert.alert('שגיאה', 'התהליך נכשל');
+              }
+            } catch (error) {
+              Alert.alert('שגיאה', 'אירעה שגיאה בלתי צפויה');
+            } finally {
+              setLoading(false);
+            }
+          }
+        },
+      ]
+    );
   };
 
   const StatCard = ({
@@ -212,13 +241,20 @@ const AdminPanelScreen: React.FC = () => {
         </View>
 
         {/* Management Actions */}
-        <Text style={styles.sectionTitle}>ניהול משתמשים</Text>
+        <Text style={styles.sectionTitle}>ניהול משתמשים וחיילים</Text>
         <ActionCard
           title="ניהול משתמשים"
           subtitle="הוספה, עריכה והרשאות משתמשים"
           icon="people-circle"
           color={Colors.soldats}
           onPress={() => navigation.navigate('UserManagement' as never)}
+        />
+        <ActionCard
+          title="היסטוריית חייל"
+          subtitle="צפייה בכל ההחתמות של חייל ספציפי"
+          icon="time"
+          color={Colors.info}
+          onPress={() => navigation.navigate('SoldierHistory' as never)}
         />
 
         {/* Database Actions */}
@@ -231,11 +267,32 @@ const AdminPanelScreen: React.FC = () => {
           onPress={() => navigation.navigate('DatabaseDebug' as never)}
         />
         <ActionCard
+          title="מיגרציות Firestore"
+          subtitle="ניקוי כפילויות והוספת nameKey"
+          icon="git-merge"
+          color={Colors.danger}
+          onPress={() => navigation.navigate('Migration' as never)}
+        />
+        <ActionCard
           title="אתחול נתוני ברירת מחדל"
           subtitle="הוספת ציוד ומנות ברירת מחדל"
           icon="refresh-circle"
           color={Colors.warning}
           onPress={handleInitializeData}
+        />
+        <ActionCard
+          title="עדכון סטטוסים (אמל״ח)"
+          subtitle="איחוד סטטוסיםassigned/stored/defective"
+          icon="sync-circle"
+          color={Colors.arme}
+          onPress={handleMigrateStatuses}
+        />
+        <ActionCard
+          title="Migration RSP"
+          subtitle="Initialiser le champ isRsp pour les soldats existants"
+          icon="construct"
+          color={Colors.soldats}
+          onPress={() => navigation.navigate('RspMigration' as never)}
         />
 
         {/* Export Actions */}

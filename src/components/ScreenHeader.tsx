@@ -53,7 +53,7 @@ export const ScreenHeader: React.FC<ScreenHeaderProps> = ({
 
 const styles = StyleSheet.create({
   header: {
-    backgroundColor: Colors.background.header,
+    backgroundColor: Colors.backgroundHeader,
     paddingTop: 60,
     paddingHorizontal: 20,
     paddingBottom: 20,
@@ -70,7 +70,7 @@ const styles = StyleSheet.create({
   },
   backButtonText: {
     fontSize: 28,
-    color: Colors.text.white,
+    color: Colors.textWhite,
   },
   titleContainer: {
     flex: 1,
@@ -79,7 +79,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: Colors.text.white,
+    color: Colors.textWhite,
   },
   subtitle: {
     fontSize: 14,

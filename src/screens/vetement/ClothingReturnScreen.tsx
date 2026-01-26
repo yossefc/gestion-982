@@ -19,6 +19,7 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import SignatureCanvas from 'react-native-signature-canvas';
 import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
 import { assignmentService } from '../../services/assignmentService';
+import { transactionalAssignmentService } from '../../services/transactionalAssignmentService';
 import { useAuth } from '../../contexts/AuthContext';
 
 interface HoldingItem {
@@ -57,7 +58,7 @@ const ClothingReturnScreen: React.FC = () => {
   const loadHoldings = async () => {
     try {
       setLoading(true);
-      const items = await assignmentService.calculateCurrentHoldings(soldier.id, 'clothing');
+      const items = await transactionalAssignmentService.getCurrentHoldings(soldier.id, 'clothing');
       console.log('Holdings loaded for soldier:', soldier.id, items);
       setHoldings(items || []);
     } catch (error) {
@@ -135,21 +136,20 @@ const ClothingReturnScreen: React.FC = () => {
         serial: item.selectedSerials?.join(',') || '',
       }));
 
-      // Create credit assignment with correct field names
-      await assignmentService.create({
+      // Create transactional return assignment with requestId
+      console.log('[ClothingReturn] Creating transactional return assignment...');
+
+      const requestId = `clothing_return_${soldier.id}_${Date.now()}`;
+
+      const assignmentId = await transactionalAssignmentService.returnEquipment({
         soldierId: soldier.id,
         soldierName: soldier.name,
         soldierPersonalNumber: soldier.personalNumber,
-        soldierPhone: soldier.phone,
-        soldierCompany: soldier.company,
         type: 'clothing',
-        action: 'credit',
         items,
-        status: 'זוכה',
-        assignedBy: user?.uid || '',
-        assignedByName: user?.displayName || user?.email || '',
-        assignedByEmail: user?.email || '',
-      }, signatureData);
+        returnedBy: user?.id || '',
+        requestId,
+      });
 
       Alert.alert('הצלחה', 'הזיכוי בוצע בהצלחה', [
         { text: 'אישור', onPress: () => navigation.goBack() }
@@ -183,7 +183,7 @@ const ClothingReturnScreen: React.FC = () => {
         </TouchableOpacity>
 
         <View style={styles.headerTitleContainer}>
-          <Text style={styles.headerTitle}>זיכוי ביגוד</Text>
+          <Text style={styles.headerTitle}>זיכוי אפנאות</Text>
           <Text style={styles.headerSubtitle}>{soldier.name}</Text>
         </View>
 

@@ -12,8 +12,7 @@ import {
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
-import { dashboardService, manaService } from '../../services/firebaseService';
-import { getAllCombatEquipment } from '../../services/equipmentService';
+import { dashboardService, manaService, combatEquipmentService } from '../../services/firebaseService';
 import { useAuth } from '../../contexts/AuthContext';
 
 interface MenuItemProps {
@@ -53,7 +52,7 @@ const ArmeHomeScreen: React.FC = () => {
       const [dashboardStats, manot, equipment] = await Promise.all([
         dashboardService.getCombatStats(),
         manaService.getAll(),
-        getAllCombatEquipment(),
+        combatEquipmentService.getAll(),
       ]);
 
       setStats({

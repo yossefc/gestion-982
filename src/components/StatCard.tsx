@@ -14,8 +14,8 @@ interface StatCardProps {
 export const StatCard: React.FC<StatCardProps> = ({
   label,
   value,
-  backgroundColor = Colors.background.card,
-  textColor = Colors.text.primary,
+  backgroundColor = Colors.backgroundCard,
+  textColor = Colors.text,
   style,
 }) => {
   return (

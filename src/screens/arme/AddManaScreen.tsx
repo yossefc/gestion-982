@@ -16,7 +16,7 @@ import {
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
 import { PackageType, CombatEquipment, RootStackParamList } from '../../types';
-import { addMana, updateMana, getManaById, getAllCombatEquipment } from '../../services/equipmentService';
+import { manaService, combatEquipmentService } from '../../services/firebaseService';
 
 type AddManaRouteProp = RouteProp<RootStackParamList, 'AddMana'>;
 
@@ -51,7 +51,7 @@ const AddManaScreen: React.FC = () => {
       await loadEquipment();
 
       if (isEditMode && manaId) {
-        const manaData = await getManaById(manaId);
+        const manaData = await manaService.getById(manaId);
         if (manaData) {
           setName(manaData.name);
           setType(manaData.type || 'מנה');
@@ -72,7 +72,7 @@ const AddManaScreen: React.FC = () => {
 
   const loadEquipment = async () => {
     try {
-      const equipment = await getAllCombatEquipment();
+      const equipment = await combatEquipmentService.getAll();
       setAvailableEquipment(equipment);
     } catch (error) {
       console.error('Error loading equipment:', error);
@@ -129,7 +129,7 @@ const AddManaScreen: React.FC = () => {
       setLoading(true);
 
       if (isEditMode && manaId) {
-        await updateMana(manaId, {
+        await manaService.update(manaId, {
           name: name.trim(),
           type,
           equipments: selectedEquipments,
@@ -139,7 +139,7 @@ const AddManaScreen: React.FC = () => {
           { text: 'אישור', onPress: () => navigation.goBack() },
         ]);
       } else {
-        await addMana({
+        await manaService.create({
           name: name.trim(),
           type,
           equipments: selectedEquipments,

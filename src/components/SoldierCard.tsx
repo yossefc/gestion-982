@@ -52,19 +52,19 @@ const styles = StyleSheet.create({
   card: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.background.card,
+    backgroundColor: Colors.backgroundCard,
     borderRadius: 12,
     padding: 15,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: Colors.border.light,
+    borderColor: Colors.borderLight,
     ...Shadows.medium,
   },
   avatar: {
     width: 50,
     height: 50,
     borderRadius: 25,
-    backgroundColor: Colors.status.info,
+    backgroundColor: Colors.info,
     justifyContent: 'center',
     alignItems: 'center',
     marginLeft: 15,
@@ -72,7 +72,7 @@ const styles = StyleSheet.create({
   avatarText: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: Colors.text.white,
+    color: Colors.textWhite,
   },
   info: {
     flex: 1,
@@ -81,24 +81,24 @@ const styles = StyleSheet.create({
   name: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: Colors.text.primary,
+    color: Colors.text,
     marginBottom: 4,
   },
   details: {
     fontSize: 13,
-    color: Colors.text.secondary,
+    color: Colors.textSecondary,
     marginBottom: 2,
   },
   phone: {
     fontSize: 12,
-    color: Colors.text.light,
+    color: Colors.textLight,
   },
   chevron: {
     marginRight: 10,
   },
   chevronText: {
     fontSize: 24,
-    color: Colors.military.navyBlue,
+    color: Colors.navyBlue,
   },
 });
 

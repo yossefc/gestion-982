@@ -19,7 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
 import { weaponInventoryService } from '../../services/weaponInventoryService';
-import { getAllCombatEquipment } from '../../services/equipmentService';
+import { combatEquipmentService } from '../../services/firebaseService';
 
 const AddWeaponToInventoryScreen: React.FC = () => {
   const navigation = useNavigation<any>();
@@ -36,7 +36,7 @@ const AddWeaponToInventoryScreen: React.FC = () => {
 
   const loadCategories = async () => {
     try {
-      const equipment = await getAllCombatEquipment();
+      const equipment = await combatEquipmentService.getAll();
       const uniqueCategories = Array.from(
         new Set(equipment.map((e) => e.name).filter((name) => name))
       );
@@ -146,7 +146,7 @@ const AddWeaponToInventoryScreen: React.FC = () => {
               placeholderTextColor={Colors.textLight}
               textAlign="right"
             />
-            <Ionicons name="rifle-outline" size={20} color={Colors.textSecondary} />
+            <Ionicons name="barcode-outline" size={20} color={Colors.textSecondary} />
           </View>
 
           {/* Suggestions */}

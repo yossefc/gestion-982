@@ -21,7 +21,7 @@ export const ModuleCard: React.FC<ModuleCardProps> = ({
   onPress,
   disabled = false,
   badge,
-  backgroundColor = Colors.background.card,
+  backgroundColor = Colors.backgroundCard,
   style,
 }) => {
   return (
@@ -62,7 +62,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     marginBottom: 15,
     borderWidth: 1,
-    borderColor: Colors.border.light,
+    borderColor: Colors.borderLight,
     ...Shadows.medium,
   },
   disabled: {
@@ -79,7 +79,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: -5,
     right: -5,
-    backgroundColor: Colors.status.danger,
+    backgroundColor: Colors.danger,
     borderRadius: 10,
     minWidth: 20,
     height: 20,
@@ -88,7 +88,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 5,
   },
   badgeText: {
-    color: Colors.text.white,
+    color: Colors.textWhite,
     fontSize: 11,
     fontWeight: 'bold',
   },
@@ -99,19 +99,19 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: Colors.text.primary,
+    color: Colors.text,
     marginBottom: 4,
   },
   subtitle: {
     fontSize: 13,
-    color: Colors.text.secondary,
+    color: Colors.textSecondary,
   },
   chevron: {
     marginRight: 5,
   },
   chevronText: {
     fontSize: 28,
-    color: Colors.military.navyBlue,
+    color: Colors.navyBlue,
     fontWeight: 'bold',
   },
 });

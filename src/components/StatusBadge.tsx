@@ -12,23 +12,38 @@ interface StatusBadgeProps {
 const statusConfig: Record<EquipmentStatus, { label: string; color: string; bgColor: string }> = {
   'נופק לחייל': {
     label: 'נופק לחייל',
-    color: Colors.text.white,
-    bgColor: Colors.status.success,
+    color: Colors.textWhite,
+    bgColor: Colors.success,
   },
   'לא חתום': {
     label: 'לא חתום',
-    color: Colors.text.white,
-    bgColor: Colors.status.warning,
+    color: Colors.textWhite,
+    bgColor: Colors.warning,
   },
   'זוכה': {
     label: 'זוכה',
-    color: Colors.text.white,
-    bgColor: Colors.status.info,
+    color: Colors.textWhite,
+    bgColor: Colors.info,
+  },
+  'הופקד': {
+    label: 'הופקד',
+    color: Colors.textWhite,
+    bgColor: Colors.infoDark,
+  },
+  'אופסן': {
+    label: 'אופסן',
+    color: Colors.textWhite,
+    bgColor: Colors.warningDark,
+  },
+  'תקול': {
+    label: 'תקול',
+    color: Colors.textWhite,
+    bgColor: Colors.danger,
   },
   '': {
     label: 'ללא סטטוס',
-    color: Colors.text.secondary,
-    bgColor: Colors.border.medium,
+    color: Colors.textSecondary,
+    bgColor: Colors.borderMedium,
   },
 };
 

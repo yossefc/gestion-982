@@ -29,7 +29,7 @@ interface Equipment {
   requiresSerial?: boolean;
 }
 
-const CATEGORIES = ['כללי', 'ביגוד עליון', 'ביגוד תחתון', 'הנעלה', 'אביזרים'];
+const CATEGORIES = ['כללי', 'אפנאות עליון', 'אפנאות תחתון', 'הנעלה', 'אביזרים'];
 
 const ClothingEquipmentManagementScreen: React.FC = () => {
   const navigation = useNavigation();

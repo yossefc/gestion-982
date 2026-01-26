@@ -23,7 +23,7 @@ import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Co
 import { weaponInventoryService } from '../../services/weaponInventoryService';
 import { WeaponInventoryItem, WeaponStatus } from '../../types';
 
-type FilterTab = 'all' | 'available' | 'assigned' | 'storage';
+type FilterTab = 'all' | 'available' | 'assigned' | 'stored' | 'defective';
 
 const WeaponInventoryListScreen: React.FC = () => {
   const navigation = useNavigation<any>();
@@ -38,7 +38,8 @@ const WeaponInventoryListScreen: React.FC = () => {
     total: 0,
     available: 0,
     assigned: 0,
-    storage: 0,
+    stored: 0,
+    defective: 0,
   });
 
   // Modal state
@@ -74,7 +75,8 @@ const WeaponInventoryListScreen: React.FC = () => {
         total: inventoryStats.total,
         available: inventoryStats.available,
         assigned: inventoryStats.assigned,
-        storage: inventoryStats.storage,
+        stored: inventoryStats.stored,
+        defective: inventoryStats.defective,
       });
 
       // Appliquer le filtre actuel
@@ -102,8 +104,11 @@ const WeaponInventoryListScreen: React.FC = () => {
       case 'assigned':
         filtered = weaponsList.filter((w) => w.status === 'assigned');
         break;
-      case 'storage':
-        filtered = weaponsList.filter((w) => w.status === 'storage');
+      case 'stored':
+        filtered = weaponsList.filter((w) => w.status === 'stored');
+        break;
+      case 'defective':
+        filtered = weaponsList.filter((w) => w.status === 'defective');
         break;
       default:
         filtered = weaponsList;
@@ -288,8 +293,10 @@ const WeaponInventoryListScreen: React.FC = () => {
         return Colors.success;
       case 'assigned':
         return Colors.warning;
-      case 'storage':
+      case 'stored':
         return Colors.info;
+      case 'defective':
+        return Colors.danger;
       default:
         return Colors.textSecondary;
     }
@@ -301,8 +308,10 @@ const WeaponInventoryListScreen: React.FC = () => {
         return 'זמין';
       case 'assigned':
         return 'מוקצה';
-      case 'storage':
+      case 'stored':
         return 'אפסון';
+      case 'defective':
+        return 'תקול';
       default:
         return '';
     }
@@ -344,17 +353,25 @@ const WeaponInventoryListScreen: React.FC = () => {
                 activeOpacity={0.7}
               >
                 <View style={styles.weaponRowContent}>
-                  <Text style={styles.serialNumberTable}>{weapon.serialNumber}</Text>
+                  <View style={styles.weaponInfoMain}>
+                    <Text style={styles.serialNumberTable}>{weapon.serialNumber}</Text>
+                    <Text style={[
+                      styles.statusBadgeSmall,
+                      { color: getStatusColor(weapon.status) }
+                    ]}>
+                      {weapon.status === 'assigned' ? 'אצל החייל' : getStatusText(weapon.status)}
+                    </Text>
+                  </View>
+
                   <View style={styles.weaponStatus}>
-                    {weapon.status === 'assigned' && weapon.assignedTo && (
-                      <Text style={styles.soldierNameTable}>{weapon.assignedTo.soldierName}</Text>
-                    )}
-                    {weapon.status === 'available' && (
-                      <Text style={styles.availableTextTable}>זמין</Text>
-                    )}
-                    {weapon.status === 'storage' && (
-                      <Text style={styles.storageTextTable}>אפסון</Text>
-                    )}
+                    {(weapon.status === 'assigned' || weapon.status === 'stored') && weapon.assignedTo ? (
+                      <View style={styles.soldierInfoRow}>
+                        <Ionicons name="person-outline" size={12} color={Colors.textSecondary} />
+                        <Text style={styles.soldierNameTable}>{weapon.assignedTo.soldierName}</Text>
+                      </View>
+                    ) : weapon.status === 'available' ? (
+                      <Text style={styles.availableTextTable}>מוכן להנפקה</Text>
+                    ) : null}
                   </View>
                 </View>
               </TouchableOpacity>
@@ -406,8 +423,12 @@ const WeaponInventoryListScreen: React.FC = () => {
           <Text style={styles.statLabel}>מוקצים</Text>
         </View>
         <View style={[styles.statCard, { backgroundColor: Colors.info }]}>
-          <Text style={styles.statNumber}>{stats.storage}</Text>
+          <Text style={styles.statNumber}>{stats.stored}</Text>
           <Text style={styles.statLabel}>אפסון</Text>
+        </View>
+        <View style={[styles.statCard, { backgroundColor: Colors.danger }]}>
+          <Text style={styles.statNumber}>{stats.defective}</Text>
+          <Text style={styles.statLabel}>תקול</Text>
         </View>
       </View>
 
@@ -452,11 +473,19 @@ const WeaponInventoryListScreen: React.FC = () => {
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.filterTab, activeFilter === 'storage' && styles.filterTabActive]}
-          onPress={() => applyFilter('storage')}
+          style={[styles.filterTab, activeFilter === 'stored' && styles.filterTabActive]}
+          onPress={() => applyFilter('stored')}
         >
-          <Text style={[styles.filterText, activeFilter === 'storage' && styles.filterTextActive]}>
+          <Text style={[styles.filterText, activeFilter === 'stored' && styles.filterTextActive]}>
             אפסון
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.filterTab, activeFilter === 'defective' && styles.filterTabActive]}
+          onPress={() => applyFilter('defective')}
+        >
+          <Text style={[styles.filterText, activeFilter === 'defective' && styles.filterTextActive]}>
+            תקול
           </Text>
         </TouchableOpacity>
       </View>
@@ -816,26 +845,43 @@ const styles = StyleSheet.create({
 
   weaponRowContent: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    justifyContent: 'space-between',
     padding: Spacing.md,
   },
-
+  weaponInfoMain: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  statusBadgeSmall: {
+    fontSize: FontSize.xs,
+    fontWeight: '700',
+    backgroundColor: 'rgba(0,0,0,0.05)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  soldierInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
   serialNumberTable: {
     fontSize: FontSize.base,
     fontWeight: '700',
-    color: Colors.text,
+    color: Colors.arme,
     fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    minWidth: 80,
   },
-
   weaponStatus: {
     alignItems: 'flex-end',
+    flex: 1,
   },
-
   soldierNameTable: {
-    fontSize: FontSize.base,
-    fontWeight: '600',
+    fontSize: FontSize.sm,
     color: Colors.warning,
+    fontWeight: '600',
   },
 
   availableTextTable: {

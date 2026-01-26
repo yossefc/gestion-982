@@ -1,5 +1,5 @@
 // Écran d'import en masse de numéros de série depuis Excel
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -16,6 +16,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as XLSX from 'xlsx';
 import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
 import { weaponInventoryService } from '../../services/weaponInventoryService';
+import { combatEquipmentService } from '../../services/firebaseService';
 
 interface ImportResult {
   success: number;
@@ -32,8 +33,31 @@ const BulkImportWeaponsScreen: React.FC = () => {
   const [serials, setSerials] = useState<string[]>([]);
   const [processing, setProcessing] = useState(false);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  const [categories, setCategories] = useState<string[]>([]);
+  const [loadingCategories, setLoadingCategories] = useState(true);
 
-  const categories = ['M16', 'M4', 'M203', 'נגב', 'מאג', 'אופטיקה', 'מחסנית', 'אחר'];
+  // Charger les catégories depuis l'équipement de combat qui nécessite un מסטב
+  useEffect(() => {
+    loadCategories();
+  }, []);
+
+  const loadCategories = async () => {
+    try {
+      setLoadingCategories(true);
+      const equipmentList = await combatEquipmentService.getAll();
+      // Filtrer seulement les équipements qui nécessitent un מסטב
+      const serialEquipment = equipmentList.filter((eq: any) => eq.requiresSerial === true);
+      const categoryNames = serialEquipment.map((eq: any) => eq.name);
+      // Ajouter "אחר" à la fin pour permettre une catégorie personnalisée
+      setCategories([...categoryNames, 'אחר']);
+    } catch (error) {
+      console.error('Error loading categories:', error);
+      // Fallback - catégories par défaut si erreur
+      setCategories(['M16', 'M4', 'אחר']);
+    } finally {
+      setLoadingCategories(false);
+    }
+  };
 
   const pickExcelFile = async () => {
     try {
@@ -76,11 +100,11 @@ const BulkImportWeaponsScreen: React.FC = () => {
 
           // Skip headers et lignes vides
           if (value &&
-              value !== '' &&
-              value.toLowerCase() !== 'מסטב' &&
-              value.toLowerCase() !== 'serial' &&
-              value.toLowerCase() !== 'serial number' &&
-              value.toLowerCase() !== 'מספר סידורי') {
+            value !== '' &&
+            value.toLowerCase() !== 'מסטב' &&
+            value.toLowerCase() !== 'serial' &&
+            value.toLowerCase() !== 'serial number' &&
+            value.toLowerCase() !== 'מספר סידורי') {
             extractedSerials.push(value);
           }
         }

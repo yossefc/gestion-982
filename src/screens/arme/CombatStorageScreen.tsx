@@ -15,6 +15,7 @@ import SignatureCanvas from 'react-native-signature-canvas';
 import { RootStackParamList, Soldier, AssignmentItem } from '../../types';
 import { soldierService } from '../../services/firebaseService';
 import { assignmentService } from '../../services/assignmentService';
+import { transactionalAssignmentService } from '../../services/transactionalAssignmentService';
 import { weaponInventoryService } from '../../services/weaponInventoryService';
 import { useAuth } from '../../contexts/AuthContext';
 import { Colors, Shadows } from '../../theme/Colors';
@@ -61,7 +62,7 @@ const CombatStorageScreen: React.FC = () => {
 
       const [soldierData, currentItems] = await Promise.all([
         soldierService.getById(soldierId),
-        assignmentService.calculateCurrentHoldings(soldierId, 'combat'),
+        transactionalAssignmentService.getCurrentHoldings(soldierId, 'combat'),
       ]);
 
       console.log(`[CombatStorage] Soldier: ${soldierData?.name}`);
@@ -69,20 +70,23 @@ const CombatStorageScreen: React.FC = () => {
 
       setSoldier(soldierData);
 
-      // Convertir les items en StorageItems
-      const storageItems: StorageItem[] = currentItems.map(item => {
-        const serialsArray = item.serial
-          ? item.serial.split(',').map(s => s.trim())
-          : [];
+      // Convertir les items en StorageItems (uniquement ceux qui ne sont PAS déjà stockés)
+      const storageItems: StorageItem[] = currentItems
+        .filter((item: any) => item.status !== 'stored')
+        .map((item: any) => {
+          const serialsArray = item.serials || [];
 
-        return {
-          ...item,
-          selected: false,
-          storageQuantity: 0,
-          availableSerials: serialsArray,
-          selectedSerials: [],
-        };
-      });
+          return {
+            equipmentId: item.equipmentId,
+            equipmentName: item.equipmentName,
+            quantity: item.quantity,
+            serial: (item.serials || []).join(','),
+            selected: false,
+            storageQuantity: 0,
+            availableSerials: serialsArray,
+            selectedSerials: [],
+          };
+        });
 
       setItems(storageItems);
     } catch (error) {
@@ -204,6 +208,17 @@ const CombatStorageScreen: React.FC = () => {
       return;
     }
 
+    // Validation: s'il y a des serials disponibles, il faut en sélectionner autant que la quantité
+    for (const item of selectedItems) {
+      if (item.availableSerials.length > 0 && item.selectedSerials.length !== item.storageQuantity) {
+        Alert.alert(
+          'שגיאה',
+          `נא לבחור ${item.storageQuantity} מסטבים עבור ${item.equipmentName}`
+        );
+        return;
+      }
+    }
+
     Alert.alert(
       'אפסון ציוד',
       `האם אתה בטוח שברצונך לאפסן ${selectedItems.length} פריטים?`,
@@ -229,55 +244,52 @@ const CombatStorageScreen: React.FC = () => {
                 return itemData;
               });
 
-              const assignmentData: any = {
+              // Create transactional storage assignment with requestId
+              console.log('[CombatStorage] Creating transactional storage assignment...');
+
+              const requestId = `combat_storage_${soldierId}_${Date.now()}`;
+
+              const assignmentId = await transactionalAssignmentService.storageEquipment(
                 soldierId,
-                soldierName: soldier?.name || '',
-                soldierPersonalNumber: soldier?.personalNumber || '',
-                type: 'combat' as const,
-                action: 'storage' as const,
-                items: storageItems,
-                status: 'אופסן' as const,
-                assignedBy: user?.id || '',
-              };
+                soldier?.name || '',
+                soldier?.personalNumber || '',
+                'combat',
+                storageItems,
+                user?.id || '',
+                requestId
+              );
 
-              if (soldier?.phone) assignmentData.soldierPhone = soldier.phone;
-              if (soldier?.company) assignmentData.soldierCompany = soldier.company;
-              if (user?.name) assignmentData.assignedByName = user.name;
-              if (user?.email) assignmentData.assignedByEmail = user.email;
+              console.log('[CombatStorage] Transactional storage assignment created:', assignmentId);
 
-              const assignmentId = await assignmentService.create(assignmentData, signature || undefined);
-              console.log('Combat storage assignment created:', assignmentId);
-
-              // Mettre à jour weapons_inventory - passer en status 'storage' AVEC les infos du soldat
+              // Mettre à jour weapons_inventory - passer en status 'storage'
               console.log('[CombatStorage] Updating weapons_inventory to storage status...');
 
+              const updatePromises = [];
               for (const item of selectedItems) {
-                if (item.selectedSerials && item.selectedSerials.length > 0) {
-                  for (const serial of item.selectedSerials) {
-                    if (serial.trim()) {
-                      try {
-                        const weapon = await weaponInventoryService.getWeaponBySerialNumber(serial.trim());
+                for (const serial of item.selectedSerials) {
+                  const serialToUpdate = serial.trim();
+                  if (!serialToUpdate) continue;
 
-                        if (weapon) {
-                          console.log(`[CombatStorage] Moving weapon ${weapon.serialNumber} to storage`);
-
-                          // Utiliser la nouvelle fonction pour mettre en storage AVEC infos soldat
-                          await weaponInventoryService.moveWeaponToStorageWithSoldier(weapon.id, {
-                            soldierId: soldier!.id,
-                            soldierName: soldier!.name,
-                            soldierPersonalNumber: soldier!.personalNumber,
-                          });
-
-                          console.log(`[CombatStorage] ✅ Weapon ${weapon.serialNumber} moved to storage`);
-                        } else {
-                          console.warn(`[CombatStorage] Weapon not found for serial: ${serial}`);
-                        }
-                      } catch (error) {
-                        console.error(`[CombatStorage] Error updating weapon ${serial}:`, error);
+                  updatePromises.push((async () => {
+                    try {
+                      const weapon = await weaponInventoryService.getWeaponBySerialNumber(serialToUpdate);
+                      if (weapon) {
+                        await weaponInventoryService.moveWeaponToStorageWithSoldier(weapon.id, {
+                          soldierId: soldier!.id,
+                          soldierName: soldier!.name,
+                          soldierPersonalNumber: soldier!.personalNumber,
+                        });
+                        console.log(`[CombatStorage] ✅ Weapon ${serialToUpdate} moved to storage`);
                       }
+                    } catch (err) {
+                      console.error(`[CombatStorage] Failed to update weapon ${serialToUpdate}:`, err);
                     }
-                  }
+                  })());
                 }
+              }
+
+              if (updatePromises.length > 0) {
+                await Promise.all(updatePromises);
               }
 
               // Message WhatsApp

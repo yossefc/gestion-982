@@ -14,7 +14,7 @@ import {
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { Mana } from '../../types';
 import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
-import { getAllManot, addMana, DEFAULT_MANOT } from '../../services/equipmentService';
+import { manaService, DEFAULT_MANOT } from '../../services/firebaseService';
 
 const ManotListScreen: React.FC = () => {
   const navigation = useNavigation<any>();
@@ -30,7 +30,7 @@ const ManotListScreen: React.FC = () => {
 
   const loadManot = async () => {
     try {
-      const data = await getAllManot();
+      const data = await manaService.getAll();
 
       if (data.length === 0) {
         Alert.alert(
@@ -43,7 +43,7 @@ const ManotListScreen: React.FC = () => {
               onPress: async () => {
                 try {
                   for (const mana of DEFAULT_MANOT) {
-                    await addMana(mana);
+                    await manaService.create(mana);
                   }
                   loadManot();
                 } catch (error) {

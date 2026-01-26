@@ -19,9 +19,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import SignatureCanvas from 'react-native-signature-canvas';
 import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
-import { clothingEquipmentService } from '../../services/clothingEquipmentService';
+import { clothingEquipmentService } from '../../services/firebaseService';
 import { assignmentService } from '../../services/assignmentService';
+import { transactionalAssignmentService } from '../../services/transactionalAssignmentService';
 import { useAuth } from '../../contexts/AuthContext';
+import { openWhatsAppChat } from '../../services/whatsappService';
 
 interface Equipment {
   id: string;
@@ -65,8 +67,8 @@ const ClothingSignatureScreen: React.FC = () => {
       const equipmentData = await clothingEquipmentService.getAll();
       setEquipment(equipmentData);
 
-      // Charger ce que le soldat a actuellement pour pré-remplir
-      const currentHoldings = await assignmentService.calculateCurrentHoldings(soldier.id, 'clothing');
+      // Charger ce que le soldat a actuellement pour pré-remplir depuis soldier_holdings
+      const currentHoldings = await transactionalAssignmentService.getCurrentHoldings(soldier.id, 'clothing');
 
       if (currentHoldings && currentHoldings.length > 0) {
         const preSelected = new Map<string, SelectedItem>();
@@ -153,6 +155,10 @@ const ClothingSignatureScreen: React.FC = () => {
     setSignatureData(null);
   };
 
+  const handleConfirmSignature = () => {
+    signatureRef.current?.readSignature();
+  };
+
   const validateAndSubmit = () => {
     if (selectedItems.size === 0) {
       Alert.alert('שגיאה', 'יש לבחור לפחות פריט אחד');
@@ -194,28 +200,63 @@ const ClothingSignatureScreen: React.FC = () => {
 
       console.log('[ClothingSignature] Items to save:', items);
 
-      // Create assignment with correct field names
-      // La signature est automatiquement uploadée par createAssignment
-      const assignmentId = await assignmentService.create({
+      // Create transactional assignment with requestId
+      console.log('[ClothingSignature] Creating transactional assignment...');
+
+      const requestId = `clothing_issue_${soldier.id}_${Date.now()}`;
+
+      const assignmentId = await transactionalAssignmentService.issueEquipment({
         soldierId: soldier.id,
         soldierName: soldier.name,
         soldierPersonalNumber: soldier.personalNumber,
         soldierPhone: soldier.phone,
         soldierCompany: soldier.company,
         type: 'clothing',
-        action: 'issue',
         items,
-        status: 'נופק לחייל',
-        assignedBy: user?.uid || '',
-        assignedByName: user?.displayName || user?.email || '',
-        assignedByEmail: user?.email || '',
-      }, signatureData);
+        signature: signatureData,
+        assignedBy: user?.id || '',
+        requestId,
+      });
 
       console.log('[ClothingSignature] Assignment created successfully with ID:', assignmentId);
 
-      Alert.alert('הצלחה', 'ההחתמה בוצעה בהצלחה', [
-        { text: 'אישור', onPress: () => navigation.goBack() }
-      ]);
+      // Generate WhatsApp message
+      let whatsappMessage = `שלום ${soldier.name},\n\nההחתמה בוצעה בהצלחה.\n\n`;
+      whatsappMessage += 'ציוד שהוחתם:\n';
+      for (const item of Array.from(selectedItems.values())) {
+        whatsappMessage += `• ${item.equipment.name} - כמות: ${item.quantity}`;
+        if (item.serial) {
+          whatsappMessage += ` (מסטב: ${item.serial})`;
+        }
+        whatsappMessage += '\n';
+      }
+      whatsappMessage += `\nהציוד רשום על שמך ובאחריותך.\nתודה,\nגדוד 982`;
+
+      // Show success with WhatsApp option
+      if (soldier.phone) {
+        Alert.alert(
+          'הצלחה',
+          'ההחתמה בוצעה בהצלחה',
+          [
+            { text: 'סגור', onPress: () => navigation.goBack(), style: 'cancel' },
+            {
+              text: 'שלח WhatsApp',
+              onPress: async () => {
+                try {
+                  await openWhatsAppChat(soldier.phone, whatsappMessage);
+                } catch (e) {
+                  console.error('WhatsApp error:', e);
+                }
+                navigation.goBack();
+              },
+            },
+          ]
+        );
+      } else {
+        Alert.alert('הצלחה', 'ההחתמה בוצעה בהצלחה', [
+          { text: 'אישור', onPress: () => navigation.goBack() }
+        ]);
+      }
     } catch (error) {
       console.error('[ClothingSignature] Error saving:', error);
       Alert.alert('שגיאה', 'לא ניתן לשמור את ההחתמה: ' + (error as Error).message);
@@ -245,7 +286,7 @@ const ClothingSignatureScreen: React.FC = () => {
         </TouchableOpacity>
 
         <View style={styles.headerTitleContainer}>
-          <Text style={styles.headerTitle}>החתמת ביגוד</Text>
+          <Text style={styles.headerTitle}>החתמת אפנאות</Text>
           <Text style={styles.headerSubtitle}>{soldier.name}</Text>
         </View>
 
@@ -368,8 +409,26 @@ const ClothingSignatureScreen: React.FC = () => {
           </>
         ) : (
           <>
+            {/* Summary at signature step */}
+            <View style={styles.summaryCard}>
+              <Text style={styles.summaryTitle}>סיכום הציוד:</Text>
+              {Array.from(selectedItems.values()).map((item, idx) => (
+                <View key={idx} style={{ marginTop: 4 }}>
+                  <Text style={styles.summaryText}>
+                    • {item.equipment.name} x {item.quantity}
+                  </Text>
+                  {item.serial && (
+                    <Text style={[styles.summaryText, { fontSize: 12, color: '#666', marginLeft: 16 }]}>
+                      מסטב: {item.serial}
+                    </Text>
+                  )}
+                </View>
+              ))}
+            </View>
+
             {/* Signature Section */}
             <Text style={styles.sectionTitle}>חתימת החייל</Text>
+            <Text style={styles.signatureInstruction}>אנא חתום באזור המסומן למטה</Text>
 
             <View style={styles.signatureContainer}>
               <View style={styles.signatureWrapper}>
@@ -383,23 +442,46 @@ const ClothingSignatureScreen: React.FC = () => {
                   clearText="נקה"
                   confirmText="אישור"
                   webStyle={`
-                    .m-signature-pad { box-shadow: none; border: none; }
-                    .m-signature-pad--body { border: none; }
-                    .m-signature-pad--footer { display: none; }
+                    .m-signature-pad {
+                      box-shadow: none;
+                      border: 2px dashed #E5E7EB;
+                      border-radius: 8px;
+                    }
+                    .m-signature-pad--body {
+                      border: none;
+                    }
+                    .m-signature-pad--footer {
+                      display: none;
+                    }
+                    canvas {
+                      touch-action: none;
+                    }
                   `}
-                  backgroundColor={Colors.backgroundCard}
-                  penColor={Colors.text}
+                  backgroundColor="#FFFFFF"
+                  penColor="#000000"
+                  minWidth={3}
+                  maxWidth={5}
                   style={styles.signatureCanvas}
                 />
               </View>
 
-              <TouchableOpacity
-                style={styles.clearSignatureButton}
-                onPress={handleClearSignature}
-              >
-                <Ionicons name="trash-outline" size={20} color={Colors.danger} />
-                <Text style={styles.clearSignatureText}>נקה חתימה</Text>
-              </TouchableOpacity>
+              <View style={styles.excludeSignatureActions}>
+                <TouchableOpacity
+                  style={styles.clearSignatureButton}
+                  onPress={handleClearSignature}
+                >
+                  <Ionicons name="trash-outline" size={20} color={Colors.danger} />
+                  <Text style={styles.clearSignatureText}>נקה חתימה</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.confirmSignatureButton}
+                  onPress={handleConfirmSignature}
+                >
+                  <Ionicons name="create-outline" size={20} color={Colors.textWhite} />
+                  <Text style={styles.confirmSignatureText}>קלוט חתימה</Text>
+                </TouchableOpacity>
+              </View>
             </View>
 
             {/* Action Buttons */}
@@ -515,6 +597,14 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.md,
     marginTop: Spacing.lg,
     textAlign: 'right',
+  },
+
+  signatureInstruction: {
+    fontSize: FontSize.md,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: Spacing.md,
+    fontStyle: 'italic',
   },
 
   // Soldier Card
@@ -740,6 +830,12 @@ const styles = StyleSheet.create({
     height: 250,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    borderColor: Colors.border,
+    borderRadius: BorderRadius.md,
+    margin: 1,
   },
 
   signatureCanvas: {
@@ -757,6 +853,31 @@ const styles = StyleSheet.create({
   clearSignatureText: {
     fontSize: FontSize.md,
     color: Colors.danger,
+  },
+
+  excludeSignatureActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    padding: Spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+  },
+
+  confirmSignatureButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: Spacing.sm,
+    backgroundColor: Colors.info,
+    borderRadius: BorderRadius.md,
+    paddingHorizontal: Spacing.md,
+    gap: Spacing.xs,
+  },
+
+  confirmSignatureText: {
+    fontSize: FontSize.md,
+    color: Colors.textWhite,
+    fontWeight: '600',
   },
 
   // Action Buttons

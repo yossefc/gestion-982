@@ -26,13 +26,13 @@ export const OfflineBanner: React.FC = () => {
 
 const styles = StyleSheet.create({
   banner: {
-    backgroundColor: Colors.status.warning,
+    backgroundColor: Colors.warning,
     paddingVertical: 10,
     paddingHorizontal: 15,
     alignItems: 'center',
   },
   text: {
-    color: Colors.text.white,
+    color: Colors.textWhite,
     fontSize: 14,
     fontWeight: '600',
   },

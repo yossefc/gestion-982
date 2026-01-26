@@ -14,16 +14,20 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { deleteField } from 'firebase/firestore';
 import { RootStackParamList, Soldier } from '../../types';
 import { soldierService } from '../../services/firebaseService';
+import { assignmentService } from '../../services/assignmentService';
+import { transactionalAssignmentService } from '../../services/transactionalAssignmentService';
 import { weaponInventoryService } from '../../services/weaponInventoryService';
 import { Colors, Shadows } from '../../theme/Colors';
 
 type CombatRetrieveRouteProp = RouteProp<RootStackParamList, 'CombatRetrieve'>;
 
-interface StoredWeapon {
-  id: string;
+interface StoredItem {
+  id: string; // equipmentId (pour soldier_holdings)
+  weaponId?: string; // weaponId (pour weapons_inventory - doc ID)
   category: string;
   serialNumber: string;
   selected: boolean;
+  type: 'weapon' | 'general';
 }
 
 const CombatRetrieveScreen: React.FC = () => {
@@ -33,7 +37,7 @@ const CombatRetrieveScreen: React.FC = () => {
 
   const [loading, setLoading] = useState(true);
   const [soldier, setSoldier] = useState<Soldier | null>(null);
-  const [storedWeapons, setStoredWeapons] = useState<StoredWeapon[]>([]);
+  const [storedItems, setStoredItems] = useState<StoredItem[]>([]);
   const [processing, setProcessing] = useState(false);
 
   useEffect(() => {
@@ -49,24 +53,70 @@ const CombatRetrieveScreen: React.FC = () => {
     try {
       setLoading(true);
 
-      const [soldierData, weapons] = await Promise.all([
+      const [soldierData, weapons, holdings] = await Promise.all([
         soldierService.getById(soldierId),
         weaponInventoryService.getWeaponsBySoldier(soldierId),
+        transactionalAssignmentService.getCurrentHoldings(soldierId, 'combat'),
       ]);
 
       setSoldier(soldierData);
 
-      // Filtrer uniquement les armes en storage
-      const weaponsInStorage = weapons.filter(w => w.status === 'storage');
+      const items: StoredItem[] = [];
 
-      setStoredWeapons(
-        weaponsInStorage.map(w => ({
-          id: w.id,
+      // 1. Ajouter les armes stockées (supporte 'stored' et l'ancien 'storage')
+      const weaponsInStorage = weapons.filter(w => (w.status as any) === 'stored' || (w.status as any) === 'storage');
+      weaponsInStorage.forEach(w => {
+        // Find matching holding to get correct equipmentId
+        const matchingHolding = holdings.find(h =>
+          ((h.status as any) === 'stored' || (h.status as any) === 'storage') &&
+          h.serials && h.serials.some(s => s === w.serialNumber)
+        );
+
+        // Fallback: match by name if serial match fails
+        const effectiveHolding = matchingHolding || holdings.find(h =>
+          ((h.status as any) === 'stored' || (h.status as any) === 'storage') &&
+          h.equipmentName === w.category
+        );
+
+        items.push({
+          id: effectiveHolding ? effectiveHolding.equipmentId : w.id, // Prefer equipmentId, fallback to weaponId
+          weaponId: w.id,
           category: w.category,
           serialNumber: w.serialNumber,
           selected: false,
-        }))
-      );
+          type: 'weapon',
+        });
+      });
+
+      // 2. Ajouter les autres items stockés via soldier_holdings
+      const otherStored = holdings.filter(h => h.status === 'stored');
+      otherStored.forEach(h => {
+        // Éviter les doublons si c'est déjà listé en temps qu'arme
+        h.serials.forEach(serial => {
+          if (!items.find(it => it.serialNumber === serial)) {
+            items.push({
+              id: h.equipmentId,
+              category: h.equipmentName,
+              serialNumber: serial,
+              selected: false,
+              type: 'general',
+            });
+          }
+        });
+
+        // Items sans serial
+        if (h.serials.length === 0) {
+          items.push({
+            id: h.equipmentId,
+            category: h.equipmentName,
+            serialNumber: '',
+            selected: false,
+            type: 'general',
+          });
+        }
+      });
+
+      setStoredItems(items);
     } catch (error) {
       console.error('Error loading data:', error);
       Alert.alert('שגיאה', 'נכשל בטעינת הנתונים');
@@ -75,23 +125,23 @@ const CombatRetrieveScreen: React.FC = () => {
     }
   };
 
-  const toggleWeapon = (weaponId: string) => {
-    setStoredWeapons(prev =>
-      prev.map(w => (w.id === weaponId ? { ...w, selected: !w.selected } : w))
+  const toggleItem = (id: string, serial: string) => {
+    setStoredItems(prev =>
+      prev.map(it => (it.id === id && it.serialNumber === serial ? { ...it, selected: !it.selected } : it))
     );
   };
 
   const handleRetrieve = async () => {
-    const selectedWeapons = storedWeapons.filter(w => w.selected);
+    const selectedItems = storedItems.filter(it => it.selected);
 
-    if (selectedWeapons.length === 0) {
-      Alert.alert('שגיאה', 'אנא בחר לפחות נשק אחד');
+    if (selectedItems.length === 0) {
+      Alert.alert('שגיאה', 'אנא בחר לפחות פריט אחד');
       return;
     }
 
     Alert.alert(
       'החזרה מאפסון',
-      `האם להחזיר ${selectedWeapons.length} נשקים לחייל?`,
+      `האם להחזיר ${selectedItems.length} פריטים לחייל?`,
       [
         { text: 'ביטול', style: 'cancel' },
         {
@@ -99,22 +149,54 @@ const CombatRetrieveScreen: React.FC = () => {
           onPress: async () => {
             setProcessing(true);
             try {
-              for (const weapon of selectedWeapons) {
-                // Changer le statut de storage à assigned et supprimer storageDate
-                await weaponInventoryService.updateWeapon(weapon.id, {
-                  status: 'assigned',
-                  storageDate: deleteField() as any,
-                });
+              // 1. Pour les armes, mettre à jour le weapon inventory
+              for (const item of selectedItems) {
+                if (item.type === 'weapon' && item.weaponId) {
+                  await weaponInventoryService.updateWeapon(item.weaponId, {
+                    status: 'assigned',
+                    storageDate: deleteField() as any,
+                  });
+                }
               }
+
+              // 2. Transaction pour mettre à jour les holdings (status stored -> active)
+              console.log('[CombatRetrieve] Creating transactional retrieve assignment...');
+              const requestId = `combat_retrieve_${soldierId}_${Date.now()}`;
+
+              // Grouper par equipmentId pour l'assignment
+              const groups = new Map<string, { name: string, qty: number, serials: string[] }>();
+              selectedItems.forEach(it => {
+                const group = groups.get(it.id) || { name: it.category, qty: 0, serials: [] };
+                group.qty += 1;
+                if (it.serialNumber) group.serials.push(it.serialNumber);
+                groups.set(it.id, group);
+              });
+
+              const retrieveItems = Array.from(groups.entries()).map(([id, data]) => ({
+                equipmentId: id,
+                equipmentName: data.name,
+                quantity: data.qty,
+                serial: data.serials.join(','),
+              }));
+
+              await transactionalAssignmentService.retrieveEquipment(
+                soldierId,
+                soldier?.name || '',
+                soldier?.personalNumber || '',
+                'combat',
+                retrieveItems,
+                'system', // retrievedBy
+                requestId
+              );
 
               Alert.alert(
                 'הצלחה',
-                `${selectedWeapons.length} נשקים הוחזרו לחייל`,
+                `${selectedItems.length} פריטים הוחזרו לחייל`,
                 [{ text: 'אישור', onPress: () => navigation.goBack() }]
               );
             } catch (error) {
-              console.error('Error retrieving weapons:', error);
-              Alert.alert('שגיאה', 'נכשל בהחזרת הנשקים');
+              console.error('Error retrieving items:', error);
+              Alert.alert('שגיאה', 'נכשל בהחזרת הפריטים');
             } finally {
               setProcessing(false);
             }
@@ -180,47 +262,47 @@ const CombatRetrieveScreen: React.FC = () => {
         <View style={styles.instructionsCard}>
           <Text style={styles.instructionsTitle}>📋 הנחיות</Text>
           <Text style={styles.instructionsText}>
-            בחר את הנשקים להחזרה לחייל מהאפסון.{'\n'}
-            הנשקים יחזרו למצב "מוקצה" לחייל.
+            בחר את הפריטים להחזרה לחייל מהאפסון.{'\n'}
+            הפריטים יחזרו למצב "פעיל" אצל החייל.
           </Text>
         </View>
 
         <Text style={styles.sectionTitle}>
-          נשקים באפסון ({storedWeapons.length})
+          פריטים באפסון ({storedItems.length})
         </Text>
 
-        {storedWeapons.length === 0 ? (
+        {storedItems.length === 0 ? (
           <View style={styles.emptyCard}>
-            <Text style={styles.emptyText}>אין נשקים באפסון</Text>
+            <Text style={styles.emptyText}>אין פריטים באפסון</Text>
             <Text style={styles.emptySubtext}>
-              החייל לא הפקיד ציוד בנשקייה
+              החייל לא הפקיד ציוד באפסון
             </Text>
           </View>
         ) : (
           <View style={styles.weaponsList}>
-            {storedWeapons.map(weapon => (
+            {storedItems.map(item => (
               <TouchableOpacity
-                key={weapon.id}
+                key={`${item.id}-${item.serialNumber}`}
                 style={[
                   styles.weaponCard,
-                  weapon.selected && styles.weaponCardSelected,
+                  item.selected && styles.weaponCardSelected,
                 ]}
-                onPress={() => toggleWeapon(weapon.id)}
+                onPress={() => toggleItem(item.id, item.serialNumber)}
                 disabled={processing}
               >
                 <View style={styles.checkbox}>
-                  {weapon.selected && <Text style={styles.checkmark}>✓</Text>}
+                  {item.selected && <Text style={styles.checkmark}>✓</Text>}
                 </View>
                 <View style={styles.weaponInfo}>
-                  <Text style={styles.weaponCategory}>{weapon.category}</Text>
-                  <Text style={styles.weaponSerial}>{weapon.serialNumber}</Text>
+                  <Text style={styles.weaponCategory}>{item.category}</Text>
+                  <Text style={styles.weaponSerial}>{item.serialNumber}</Text>
                 </View>
               </TouchableOpacity>
             ))}
           </View>
         )}
 
-        {storedWeapons.some(w => w.selected) && (
+        {storedItems.some(it => it.selected) && (
           <TouchableOpacity
             style={[
               styles.retrieveButton,
@@ -233,7 +315,7 @@ const CombatRetrieveScreen: React.FC = () => {
               <ActivityIndicator color="#fff" />
             ) : (
               <Text style={styles.retrieveButtonText}>
-                📤 החזר ({storedWeapons.filter(w => w.selected).length})
+                📤 החזר ({storedItems.filter(it => it.selected).length})
               </Text>
             )}
           </TouchableOpacity>

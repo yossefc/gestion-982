@@ -33,7 +33,7 @@ export const PrimaryButton: React.FC<ButtonProps> = ({
       accessibilityRole="button"
     >
       {loading ? (
-        <ActivityIndicator color={Colors.text.white} />
+        <ActivityIndicator color={Colors.textWhite} />
       ) : (
         <Text style={styles.primaryText}>{title}</Text>
       )}
@@ -61,7 +61,7 @@ export const SecondaryButton: React.FC<ButtonProps> = ({
       accessibilityRole="button"
     >
       {loading ? (
-        <ActivityIndicator color={Colors.status.info} />
+        <ActivityIndicator color={Colors.info} />
       ) : (
         <Text style={styles.secondaryText}>{title}</Text>
       )}
@@ -71,7 +71,7 @@ export const SecondaryButton: React.FC<ButtonProps> = ({
 
 const styles = StyleSheet.create({
   primaryButton: {
-    backgroundColor: Colors.status.success,
+    backgroundColor: Colors.success,
     borderRadius: 12,
     paddingVertical: 16,
     paddingHorizontal: 24,
@@ -86,7 +86,7 @@ const styles = StyleSheet.create({
   primaryText: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: Colors.text.white,
+    color: Colors.textWhite,
   },
   secondaryButton: {
     backgroundColor: 'transparent',
@@ -97,7 +97,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     minHeight: 52,
     borderWidth: 2,
-    borderColor: Colors.status.info,
+    borderColor: Colors.info,
   },
   disabledSecondary: {
     opacity: 0.5,
@@ -105,7 +105,7 @@ const styles = StyleSheet.create({
   secondaryText: {
     fontSize: 18,
     fontWeight: '600',
-    color: Colors.status.info,
+    color: Colors.info,
   },
 });
 

@@ -17,11 +17,7 @@ import {
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
 import { RootStackParamList, SubEquipment } from '../../types';
-import {
-  addCombatEquipment,
-  getCombatEquipmentById,
-  updateCombatEquipment,
-} from '../../services/equipmentService';
+import { combatEquipmentService } from '../../services/firebaseService';
 
 type AddCombatEquipmentRouteProp = RouteProp<RootStackParamList, 'AddCombatEquipment'>;
 
@@ -61,7 +57,7 @@ const AddCombatEquipmentScreen: React.FC = () => {
 
   const loadEquipment = async () => {
     try {
-      const equipment = await getCombatEquipmentById(equipmentId!);
+      const equipment = await combatEquipmentService.getById(equipmentId!);
       if (equipment) {
         setName(equipment.name);
         setCategory(equipment.category);
@@ -119,12 +115,12 @@ const AddCombatEquipmentScreen: React.FC = () => {
       };
 
       if (isEditMode && equipmentId) {
-        await updateCombatEquipment(equipmentId, equipmentData);
+        await combatEquipmentService.update(equipmentId, equipmentData);
         Alert.alert('הצלחה', 'הציוד עודכן בהצלחה', [
           { text: 'אישור', onPress: () => navigation.goBack() },
         ]);
       } else {
-        await addCombatEquipment(equipmentData);
+        await combatEquipmentService.create(equipmentData);
         Alert.alert('הצלחה', 'הציוד נוסף בהצלחה', [
           { text: 'אישור', onPress: () => navigation.goBack() },
         ]);
