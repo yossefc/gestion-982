@@ -1,0 +1,23 @@
+{
+  "name": "gestion-982-printer-service",
+  "version": "1.0.0",
+  "description": "Service d'impression centralisé pour l'application Gestion 982",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "keywords": ["printer", "firebase", "automation"],
+  "author": "Gestion 982",
+  "license": "MIT",
+  "dependencies": {
+    "firebase-admin": "^12.0.0",
+    "pdf-to-printer": "^5.6.0",
+    "axios": "^1.6.0",
+    "dotenv": "^16.4.0",
+    "fs-extra": "^11.2.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.0"
+  }
+}
