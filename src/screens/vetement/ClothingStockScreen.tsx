@@ -62,7 +62,7 @@ const ClothingStockScreen: React.FC = () => {
     if (stock.yamach === 0) {
       return { color: Colors.textLight, text: 'לא הוגדר', icon: 'help-circle' };
     }
-    const percentage = (stock.available / stock.yamach) * 100;
+    const percentage = Math.max(0, (stock.available / stock.yamach) * 100);
     if (percentage > 50) {
       return { color: '#10B981', text: 'תקין', icon: 'checkmark-circle' };
     } else if (percentage > 20) {
@@ -147,7 +147,7 @@ const ClothingStockScreen: React.FC = () => {
                 ]}
               >
                 <Text style={[styles.subCellText, styles.subCellPercent]}>
-                  {Math.round((company.quantity / stock.totalAssigned) * 100)}%
+                  {stock.totalAssigned > 0 ? Math.max(0, Math.round((company.quantity / stock.totalAssigned) * 100)) : 0}%
                 </Text>
                 <Text style={[styles.subCellText, styles.subCellQty, styles.subCellBold]}>
                   {company.quantity}
@@ -196,7 +196,7 @@ const ClothingStockScreen: React.FC = () => {
           <Ionicons name="arrow-forward" size={22} color="#FFF" />
         </TouchableOpacity>
 
-        <Text style={styles.headerTitle}>מלאי ביגוד</Text>
+        <Text style={styles.headerTitle}>מלאי אפנאות</Text>
 
         <TouchableOpacity style={styles.headerButton} onPress={loadStocks}>
           <Ionicons name="refresh" size={22} color="#FFF" />

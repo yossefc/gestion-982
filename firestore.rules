@@ -2,95 +2,146 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper: vérifier si l'utilisateur est authentifié
+    // ============================================
+    // HELPER FUNCTIONS
+    // ============================================
+
     function isAuthenticated() {
       return request.auth != null;
     }
 
-    // Helper: vérifier le rôle (via custom claims)
     function hasRole(role) {
       return isAuthenticated() && request.auth.token.role == role;
     }
 
-    // ==========================================
-    // RÈGLES TEMPORAIRES POUR DÉVELOPPEMENT
-    // ==========================================
-    // TODO: Remplacer par les règles RBAC ci-dessous en production
-
-    match /{document=**} {
-      allow read, write: if isAuthenticated();
+    function isAdmin() {
+      return hasRole('admin');
     }
 
-    // ==========================================
-    // RÈGLES RBAC (À ACTIVER EN PRODUCTION)
-    // ==========================================
-    // Décommenter ces règles et commenter la règle temporaire ci-dessus
-
-    /*
-    // Collection: users
-    match /users/{userId} {
-      // Les admins peuvent lire/modifier tous les utilisateurs
-      allow read: if hasRole('admin');
-      allow write: if hasRole('admin');
-
-      // Chaque utilisateur peut lire ses propres données
-      allow read: if isAuthenticated() && request.auth.uid == userId;
+    function canAccessArme() {
+      return hasRole('admin') || hasRole('both') || hasRole('arme');
     }
 
-    // Collection: soldiers
+    function canAccessVetement() {
+      return hasRole('admin') || hasRole('both') || hasRole('vetement');
+    }
+
+    // ============================================
+    // SOLDIERS
+    // ============================================
+
     match /soldiers/{soldierId} {
-      // Tous les utilisateurs authentifiés peuvent lire
       allow read: if isAuthenticated();
-
-      // Seuls admin et both peuvent créer/modifier
-      allow create, update: if hasRole('admin') || hasRole('both') || hasRole('arme') || hasRole('vetement');
-
-      // Seuls les admins peuvent supprimer
-      allow delete: if hasRole('admin');
+      allow create, update: if isAuthenticated();
+      allow delete: if isAdmin();
     }
 
-    // Collection: equipment_combat
-    match /equipment_combat/{equipmentId} {
-      // Lecture: admin, both, arme
-      allow read: if hasRole('admin') || hasRole('both') || hasRole('arme');
+    // ============================================
+    // USERS
+    // ============================================
 
-      // Écriture: admin, both, arme
-      allow write: if hasRole('admin') || hasRole('both') || hasRole('arme');
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+      allow update: if isAdmin() || request.auth.uid == userId;
+      allow delete: if isAdmin();
     }
 
-    // Collection: equipment_clothing
-    match /equipment_clothing/{equipmentId} {
-      // Lecture: admin, both, vetement
-      allow read: if hasRole('admin') || hasRole('both') || hasRole('vetement');
+    // ============================================
+    // EQUIPMENT CATALOGS (MODERN)
+    // ============================================
 
-      // Écriture: admin, both, vetement
-      allow write: if hasRole('admin') || hasRole('both') || hasRole('vetement');
+    // Combat Equipment - vérification nameKey + categoryKey côté client
+    match /combatEquipment/{equipmentId} {
+      allow read: if canAccessArme();
+      allow create: if canAccessArme() &&
+                       request.resource.data.keys().hasAll(['name', 'nameKey', 'category', 'categoryKey', 'hasSubEquipment']);
+      allow update, delete: if canAccessArme();
     }
 
-    // Collection: manot
+    // Clothing Equipment - vérification nameKey côté client
+    match /clothingEquipment/{equipmentId} {
+      allow read: if canAccessVetement();
+      allow create: if canAccessVetement() &&
+                       request.resource.data.keys().hasAll(['name', 'nameKey']);
+      allow update, delete: if canAccessVetement();
+    }
+
+    // Manot (packages)
     match /manot/{manaId} {
-      // Lecture: admin, both, arme
-      allow read: if hasRole('admin') || hasRole('both') || hasRole('arme');
-
-      // Écriture: admin, both, arme
-      allow write: if hasRole('admin') || hasRole('both') || hasRole('arme');
+      allow read: if canAccessArme();
+      allow create, update, delete: if canAccessArme();
     }
 
-    // Collection: assignments
+    // ============================================
+    // ASSIGNMENTS (Historique immuable)
+    // ============================================
+
     match /assignments/{assignmentId} {
-      // Tous les utilisateurs authentifiés peuvent lire les attributions
       allow read: if isAuthenticated();
 
-      // Création: admin, both, arme (pour combat), vetement (pour clothing)
-      allow create: if isAuthenticated();
+      // Create: Authentifié + champs requis
+      allow create: if isAuthenticated() &&
+                       request.resource.data.timestamp is timestamp &&
+                       request.resource.data.keys().hasAll(['soldierId', 'type', 'action', 'items', 'status']);
 
-      // Mise à jour: admin, both, ou l'utilisateur qui a créé
-      allow update: if hasRole('admin') || hasRole('both') ||
-                       resource.data.assignedBy == request.auth.uid;
+      // Update: Admin ou créateur (pour corrections)
+      allow update: if isAdmin() || resource.data.assignedBy == request.auth.uid;
 
-      // Suppression: admin uniquement
-      allow delete: if hasRole('admin');
+      // Delete: Admin seulement
+      allow delete: if isAdmin();
     }
-    */
+
+    // ============================================
+    // SOLDIER HOLDINGS (État courant)
+    // ============================================
+
+    match /soldier_holdings/{holdingId} {
+      allow read: if isAuthenticated();
+
+      // Write: Authentifié (géré par transactions côté serveur)
+      allow create, update: if isAuthenticated() &&
+                               request.resource.data.keys().hasAll(['soldierId', 'type', 'items', 'outstandingCount', 'status', 'lastUpdated']);
+
+      allow delete: if isAdmin();
+    }
+
+    // ============================================
+    // WEAPON INVENTORY
+    // ============================================
+
+    match /weapons_inventory/{weaponId} {
+      allow read: if canAccessArme();
+      allow create, update, delete: if canAccessArme();
+    }
+
+    // ============================================
+    // LOGS (Audit trail - immutable)
+    // ============================================
+
+    match /logs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAuthenticated();
+      allow update, delete: if false; // Logs are immutable
+    }
+
+    // ============================================
+    // LEGACY COLLECTIONS (BLOQUÉS - À SUPPRIMER)
+    // ============================================
+
+    match /equipment_combat/{id} {
+      allow read: if isAuthenticated();
+      allow write: if false; // DEPRECATED - use combatEquipment
+    }
+
+    match /equipment_clothing/{id} {
+      allow read: if isAuthenticated();
+      allow write: if false; // DEPRECATED - use clothingEquipment
+    }
+
+    match /soldier_equipment/{id} {
+      allow read: if isAuthenticated();
+      allow write: if false; // DEPRECATED - use soldier_holdings
+    }
   }
 }

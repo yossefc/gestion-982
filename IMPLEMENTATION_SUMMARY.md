@@ -36,7 +36,7 @@ Services implémentés:
 
 ### 3. 📱 Nouveaux Écrans Créés
 
-#### Module Vêtement (ביגוד)
+#### Module Vêtement (אפנאות)
 - ✅ **ClothingSignatureScreen.tsx**
   - Signature tactile avec react-native-signature-canvas
   - Sauvegarde Firebase complète

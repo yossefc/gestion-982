@@ -54,7 +54,7 @@ npm start
 - Export PDF
 
 ### ✅ Module Vêtement (אפסנאות)
-- Gestion ביגוד
+- Gestion אפנאות
 - Signature électronique
 - Retours équipement
 - Dashboard statistiques

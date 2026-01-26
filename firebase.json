@@ -5,10 +5,29 @@
   },
   "storage": {
     "rules": "storage.rules"
+  },
+  "hosting": {
+    "public": "web-printer-service",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**",
+      "**/*.md",
+      "**/*.bat"
+    ],
+    "rewrites": [
+      {
+        "source": "/",
+        "destination": "/printer.html"
+      },
+      {
+        "source": "/printer",
+        "destination": "/printer.html"
+      },
+      {
+        "source": "**",
+        "destination": "/printer.html"
+      }
+    ]
   }
 }
-
-
-
-
-
