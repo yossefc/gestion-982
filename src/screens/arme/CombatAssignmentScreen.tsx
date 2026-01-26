@@ -20,13 +20,16 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import SignatureCanvas from 'react-native-signature-canvas';
+import * as Print from 'expo-print';
 import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
-import { getAllCombatEquipment } from '../../services/equipmentService';
-import { manaService } from '../../services/firebaseService';
+import { combatEquipmentService, manaService } from '../../services/firebaseService';
 import { assignmentService } from '../../services/assignmentService';
+import { transactionalAssignmentService } from '../../services/transactionalAssignmentService';
 import { weaponInventoryService } from '../../services/weaponInventoryService';
+import { printQueueService } from '../../services/printQueueService';
 import { useAuth } from '../../contexts/AuthContext';
-import { Mana, WeaponInventoryItem } from '../../types';
+import { Mana, WeaponInventoryItem, Assignment } from '../../types';
+import { openWhatsAppChat } from '../../services/whatsappService';
 
 interface Equipment {
   id: string;
@@ -71,6 +74,7 @@ const CombatAssignmentScreen: React.FC = () => {
   const [serialPickerVisible, setSerialPickerVisible] = useState(false);
   const [currentSerialField, setCurrentSerialField] = useState<{ equipmentId: string; index: number; equipmentName: string } | null>(null);
   const [serialSearchText, setSerialSearchText] = useState('');
+  const [selectedPrinter, setSelectedPrinter] = useState<Print.Printer | null>(null);
 
   useEffect(() => {
     loadEquipment();
@@ -79,20 +83,25 @@ const CombatAssignmentScreen: React.FC = () => {
   const loadEquipment = async () => {
     try {
       setLoading(true);
-      const [equipmentData, manotData, weaponsData, existingData] = await Promise.all([
-        getAllCombatEquipment(),
+      const [equipmentData, manotData, currentItems] = await Promise.all([
+        combatEquipmentService.getAll(),
         manaService.getAll(),
-        weaponInventoryService.getAvailableWeapons(),
-        assignmentService.calculateCurrentHoldings(soldier.id, 'combat'),
+        transactionalAssignmentService.getCurrentHoldings(soldier.id, 'combat'),
       ]);
       console.log('Loaded equipment:', equipmentData.length, 'items');
       console.log('Loaded manot:', manotData.length, 'items');
+      // The original code had weaponsData and existingData here.
+      // The instruction snippet removed weaponsData from the destructuring,
+      // but kept a console.log for it. To maintain functionality and avoid errors,
+      // I'm keeping the weaponInventoryService call and its corresponding variable.
+      // The instruction specifically asked to replace assignmentService.calculateCurrentHoldings.
+      const weaponsData = await weaponInventoryService.getAvailableWeapons(); // Re-adding this to keep functionality
       console.log('Loaded available weapons:', weaponsData.length, 'items');
-      console.log('Existing assignments:', existingData.length, 'items');
+      console.log('Current items:', currentItems.length, 'items'); // Changed from 'Existing assignments' to 'Current items'
       setEquipment(equipmentData);
       setManot(manotData);
       setAvailableWeapons(weaponsData);
-      setExistingAssignments(existingData);
+      setExistingAssignments(currentItems);
     } catch (error) {
       console.error('Error loading data:', error);
       Alert.alert('שגיאה', 'לא ניתן לטעון את הנתונים');
@@ -243,6 +252,311 @@ const CombatAssignmentScreen: React.FC = () => {
     setSignatureData(null);
   };
 
+  const handleConfirmSignature = () => {
+    signatureRef.current?.readSignature();
+  };
+
+  const selectPrinter = async () => {
+    try {
+      const printer = await Print.selectPrinterAsync();
+      setSelectedPrinter(printer);
+      return printer;
+    } catch (error) {
+      console.error('[CombatAssignment] Error selecting printer:', error);
+      return null;
+    }
+  };
+
+  const sendToPrintQueue = async (assignmentData: {
+    soldierName: string;
+    soldierPersonalNumber: string;
+    soldierPhone?: string;
+    soldierCompany?: string;
+    items: any[];
+    signature: string;
+    timestamp: Date;
+  }) => {
+    try {
+      console.log('[CombatAssignment] Sending document to print queue...');
+
+      // Générer le HTML (réutilise la fonction existante)
+      const html = generatePDFHTML(assignmentData);
+
+      // Créer le PDF en base64
+      const { uri, base64 } = await Print.printToFileAsync({
+        html,
+        base64: true,
+      });
+
+      if (!base64) {
+        throw new Error('Failed to generate PDF base64');
+      }
+
+      // Ajouter à la file d'attente Firebase
+      const jobId = await printQueueService.addPrintJob(base64, {
+        soldierName: assignmentData.soldierName,
+        soldierPersonalNumber: assignmentData.soldierPersonalNumber,
+        documentType: 'combat',
+        createdBy: user?.id || 'unknown',
+        createdByName: user?.displayName || user?.email || 'Unknown',
+        metadata: {
+          itemsCount: assignmentData.items.length,
+          company: assignmentData.soldierCompany,
+        },
+      });
+
+      console.log('[CombatAssignment] Document added to print queue:', jobId);
+      return jobId;
+    } catch (error) {
+      console.error('[CombatAssignment] Error sending to print queue:', error);
+      throw error;
+    }
+  };
+
+  // Fonction helper pour générer le HTML
+  const generatePDFHTML = (assignmentData: {
+    soldierName: string;
+    soldierPersonalNumber: string;
+    soldierPhone?: string;
+    soldierCompany?: string;
+    items: any[];
+    signature: string;
+    timestamp: Date;
+  }) => {
+    const dateStr = assignmentData.timestamp.toLocaleString('he-IL', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+
+    const dateOnly = assignmentData.timestamp.toLocaleDateString('he-IL', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+
+    const timeOnly = assignmentData.timestamp.toLocaleTimeString('he-IL', {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+
+    const operatorText = user?.displayName || user?.email || '';
+
+    const itemsRows = assignmentData.items
+      .map(
+        item => `
+      <tr>
+        <td style="padding: 8px; border: 1px solid #ccc; text-align: right;">${item.equipmentName}</td>
+        <td style="padding: 8px; border: 1px solid #ccc; text-align: center;">${item.quantity}</td>
+        <td style="padding: 8px; border: 1px solid #ccc; text-align: right;">${item.serial || ''}</td>
+      </tr>
+    `
+      )
+      .join('');
+
+    return `
+<!DOCTYPE html>
+<html dir="rtl" lang="he">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    @page {
+      size: A4;
+      margin: 20mm;
+    }
+    body {
+      font-family: Arial, sans-serif;
+      direction: rtl;
+      text-align: right;
+      margin: 0;
+      padding: 20px;
+      font-size: 14px;
+    }
+    h1 {
+      text-align: center;
+      font-size: 24px;
+      margin-bottom: 5px;
+      color: #2c3e50;
+    }
+    h2 {
+      text-align: center;
+      font-size: 16px;
+      margin-top: 0;
+      margin-bottom: 10px;
+      color: #7f8c8d;
+    }
+    .date-box {
+      background-color: #3498db;
+      color: white;
+      padding: 12px;
+      text-align: center;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      font-size: 16px;
+      font-weight: bold;
+    }
+    .date-box .date {
+      font-size: 18px;
+      margin-bottom: 5px;
+    }
+    .date-box .time {
+      font-size: 14px;
+      opacity: 0.9;
+    }
+    .soldier-info {
+      border: 2px solid #2c3e50;
+      padding: 15px;
+      margin-bottom: 20px;
+      border-radius: 5px;
+      background-color: #f9f9f9;
+    }
+    .soldier-info p {
+      margin: 8px 0;
+      font-size: 14px;
+    }
+    .soldier-info strong {
+      font-weight: bold;
+      color: #2c3e50;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 20px 0;
+    }
+    th {
+      background-color: #ecf0f1;
+      padding: 10px;
+      border: 1px solid #bdc3c7;
+      font-weight: bold;
+      text-align: right;
+    }
+    td {
+      padding: 8px;
+      border: 1px solid #ccc;
+    }
+    .signature-section {
+      margin-top: 30px;
+      text-align: right;
+    }
+    .signature-section strong {
+      display: block;
+      margin-bottom: 10px;
+      font-size: 14px;
+    }
+    .footer {
+      margin-top: 40px;
+      text-align: center;
+      font-size: 11px;
+      color: #7f8c8d;
+      border-top: 1px solid #ccc;
+      padding-top: 10px;
+    }
+    .meta-info {
+      margin-top: 20px;
+      font-size: 13px;
+      color: #555;
+    }
+  </style>
+</head>
+<body>
+  <h1>טופס מסירת ציוד לחימה</h1>
+  <h2>גדוד 982</h2>
+
+  <div class="date-box">
+    <div class="date">📅 ${dateOnly}</div>
+    <div class="time">🕐 שעה: ${timeOnly}</div>
+  </div>
+
+  <div class="soldier-info">
+    <p><strong>שם חייל:</strong> ${assignmentData.soldierName}</p>
+    <p><strong>מספר אישי:</strong> ${assignmentData.soldierPersonalNumber}</p>
+    ${assignmentData.soldierCompany ? `<p><strong>פלוגה:</strong> ${assignmentData.soldierCompany}</p>` : ''}
+    ${assignmentData.soldierPhone ? `<p><strong>טלפון:</strong> ${assignmentData.soldierPhone}</p>` : ''}
+  </div>
+
+  <h3 style="text-align: right; margin-top: 20px; margin-bottom: 10px;">פירוט ציוד:</h3>
+
+  <table>
+    <thead>
+      <tr>
+        <th>שם ציוד</th>
+        <th style="width: 80px;">כמות</th>
+        <th style="width: 120px;">מסטב</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${itemsRows}
+    </tbody>
+  </table>
+
+  <div class="meta-info">
+    <p><strong>תאריך ושעה:</strong> ${dateStr}</p>
+    ${operatorText ? `<p><strong>בוצע על ידי:</strong> ${operatorText}</p>` : ''}
+  </div>
+
+  <div class="signature-section">
+    <strong>חתימת מקבל:</strong>
+    <img src="${assignmentData.signature}" style="max-width: 200px; max-height: 80px; border: 1px solid #ccc;" />
+  </div>
+
+  <div class="footer">
+    <p>מסמך זה נוצר אוטומטית באמצעות מערכת ניהול ציוד גדוד 982</p>
+  </div>
+</body>
+</html>
+    `;
+  };
+
+  const generateAndPrintPDF = async (assignmentData: {
+    soldierName: string;
+    soldierPersonalNumber: string;
+    soldierPhone?: string;
+    soldierCompany?: string;
+    items: any[];
+    signature: string;
+    timestamp: Date;
+  }, askForPrinter: boolean = false) => {
+    try {
+      // Si demandé, permettre la sélection d'une imprimante
+      let printerToUse = selectedPrinter;
+      if (askForPrinter && Platform.OS === 'ios') {
+        const newPrinter = await selectPrinter();
+        if (newPrinter) {
+          printerToUse = newPrinter;
+        }
+      }
+
+      const html = generatePDFHTML(assignmentData);
+
+      // Préparer les options d'impression
+      const printOptions: any = {
+        html,
+        orientation: Print.Orientation.portrait,
+      };
+
+      // Si une imprimante est sélectionnée (iOS uniquement), l'utiliser
+      if (printerToUse && Platform.OS === 'ios') {
+        printOptions.printerUrl = printerToUse.url;
+        console.log('[CombatAssignment] Using selected printer:', printerToUse.name);
+      }
+
+      // Imprimer le PDF
+      // Sur iOS: Si printerUrl est fourni, imprime directement. Sinon, ouvre le sélecteur.
+      // Sur Android: Ouvre toujours le dialogue d'impression système
+      // Sur Web: Ouvre window.print()
+      await Print.printAsync(printOptions);
+
+      console.log('[CombatAssignment] Document sent to printer successfully');
+    } catch (error) {
+      console.error('[CombatAssignment] Error printing PDF:', error);
+      // Ne pas bloquer si l'impression échoue
+      Alert.alert('שים לב', 'לא ניתן להדפיס את המסמך, אך ההחתמה נשמרה בהצלחה');
+    }
+  };
+
   const validateAndContinue = () => {
     if (selectedItems.size === 0) {
       Alert.alert('שגיאה', 'יש לבחור לפחות פריט אחד');
@@ -303,24 +617,24 @@ const CombatAssignmentScreen: React.FC = () => {
       console.log('[CombatAssignment] Items prepared:', items.length);
       console.log('[CombatAssignment] Items with serials:', items.filter(i => i.serial).map(i => `${i.equipmentName}: ${i.serial}`));
 
-      // Create assignment
-      console.log('[CombatAssignment] Creating assignment...');
-      const assignmentId = await assignmentService.create({
+      // Create assignment using transactional service with requestId
+      console.log('[CombatAssignment] Creating transactional assignment...');
+
+      const requestId = `combat_issue_${soldier.id}_${Date.now()}`;
+
+      const assignmentId = await transactionalAssignmentService.issueEquipment({
         soldierId: soldier.id,
         soldierName: soldier.name,
         soldierPersonalNumber: soldier.personalNumber,
         soldierPhone: soldier.phone,
         soldierCompany: soldier.company,
         type: 'combat',
-        action: 'issue',
         items,
         signature: signatureData,
-        status: 'נופק לחייל',
         assignedBy: user?.id || '',
-        assignedByName: user?.name || user?.email || '',
-        assignedByEmail: user?.email || '',
+        requestId,
       });
-      console.log('[CombatAssignment] Assignment created:', assignmentId);
+      console.log('[CombatAssignment] Transactional assignment created:', assignmentId);
 
       // Update weapon inventory status for each weapon with serial number
       const weaponUpdatePromises: Promise<void>[] = [];
@@ -360,9 +674,98 @@ const CombatAssignmentScreen: React.FC = () => {
       }
 
       console.log('[CombatAssignment] Save completed successfully');
-      Alert.alert('הצלחה', 'ההחתמה בוצעה בהצלחה', [
-        { text: 'אישור', onPress: () => navigation.goBack() }
-      ]);
+
+      // Générer et imprimer le PDF automatiquement (Local) - STAND BY
+      /*
+      const printPromise = generateAndPrintPDF({
+        soldierName: soldier.name,
+        soldierPersonalNumber: soldier.personalNumber,
+        soldierPhone: soldier.phone,
+        soldierCompany: soldier.company,
+        items,
+        signature: signatureData,
+        timestamp: new Date(),
+      }, false);
+      */
+
+      // Envoyer à la file d'attente (Web)
+      const queuePromise = sendToPrintQueue({
+        soldierName: soldier.name,
+        soldierPersonalNumber: soldier.personalNumber,
+        soldierPhone: soldier.phone,
+        soldierCompany: soldier.company,
+        items,
+        signature: signatureData,
+        timestamp: new Date(),
+      });
+
+      // await Promise.all([printPromise, queuePromise]);
+      await queuePromise;
+
+      // Generate WhatsApp message
+      let whatsappMessage = `שלום ${soldier.name},\n\nההחתמה בוצעה בהצלחה.\n\n`;
+      whatsappMessage += 'ציוד שהוחתם:\n';
+      for (const item of Array.from(selectedItems.values())) {
+        whatsappMessage += `• ${item.equipment.name} - כמות: ${item.quantity}`;
+        if (item.serials && item.serials.length > 0 && item.serials.some(s => s.trim())) {
+          whatsappMessage += ` (מסטב: ${item.serials.filter(s => s.trim()).join(', ')})`;
+        }
+        whatsappMessage += '\n';
+      }
+      whatsappMessage += `\nהציוד רשום על שמך ובאחריותך.\nתודה,\nגדוד 982`;
+
+      // Store assignment data for potential reprint
+      const assignmentForPrint = {
+        soldierName: soldier.name,
+        soldierPersonalNumber: soldier.personalNumber,
+        soldierPhone: soldier.phone,
+        soldierCompany: soldier.company,
+        items,
+        signature: signatureData,
+        timestamp: new Date(),
+      };
+
+      // Show success with WhatsApp and Print options
+      const successButtons: any[] = [
+        { text: 'סגור', onPress: () => navigation.goBack(), style: 'cancel' },
+        {
+          text: 'הדפס שוב',
+          onPress: async () => {
+            await generateAndPrintPDF(assignmentForPrint, false);
+          },
+        },
+      ];
+
+      // Ajouter option pour changer d'imprimante (iOS uniquement)
+      if (Platform.OS === 'ios') {
+        successButtons.push({
+          text: 'שנה מדפסת',
+          onPress: async () => {
+            await generateAndPrintPDF(assignmentForPrint, true);
+          },
+        });
+      }
+
+      // Ajouter option WhatsApp si numéro disponible
+      if (soldier.phone) {
+        successButtons.push({
+          text: 'שלח WhatsApp',
+          onPress: async () => {
+            try {
+              await openWhatsAppChat(soldier.phone, whatsappMessage);
+            } catch (e) {
+              console.error('WhatsApp error:', e);
+            }
+            navigation.goBack();
+          },
+        });
+      }
+
+      Alert.alert(
+        'הצלחה',
+        'ההחתמה בוצעה בהצלחה והמסמך נשלח למדפסת',
+        successButtons
+      );
     } catch (error: any) {
       console.error('[CombatAssignment] Error saving:', error);
       console.error('[CombatAssignment] Error details:', {
@@ -444,6 +847,11 @@ const CombatAssignmentScreen: React.FC = () => {
                   <View style={styles.existingEquipmentHeader2}>
                     <Text style={styles.existingEquipmentQuantity}>x{item.quantity}</Text>
                     <Text style={styles.existingEquipmentName}>{item.equipmentName}</Text>
+                    {item.status === 'stored' && (
+                      <View style={styles.storedBadge}>
+                        <Text style={styles.storedBadgeText}>באפסון</Text>
+                      </View>
+                    )}
                   </View>
                   {item.serial && (
                     <View style={styles.existingEquipmentSerialContainer}>
@@ -547,216 +955,225 @@ const CombatAssignmentScreen: React.FC = () => {
             {/* Equipment by Category */}
             {((selectionMode === 'manual') || (selectionMode === 'mana' && selectedMana)) && (
               <>
-            {/* Show info based on mode */}
-            {selectionMode === 'manual' && selectedMana && (
-              <View style={styles.manualModeInfo}>
-                <Ionicons name="information-circle" size={20} color={Colors.info} />
-                <Text style={styles.manualModeInfoText}>
-                  מצב ידני: בחר ציוד נוסף או ערוך את הבחירה
-                </Text>
-              </View>
-            )}
-            {selectedItems.size > 0 && (
-              <View style={styles.selectedSummary}>
-                <Text style={styles.selectedSummaryText}>
-                  {selectedItems.size} פריטים נבחרו
-                  {selectedMana && selectionMode === 'mana' ? ' מהמנה' : ''}
-                </Text>
-                {selectionMode === 'mana' && selectedMana && (
-                  <TouchableOpacity
-                    style={styles.addMoreButton}
-                    onPress={() => {
-                      setSelectionMode('manual');
-                      // Keep the current selection but switch to manual mode
-                    }}
-                  >
-                    <Ionicons name="add-circle-outline" size={20} color={Colors.arme} />
-                    <Text style={styles.addMoreButtonText}>הוסף ציוד נוסף</Text>
-                  </TouchableOpacity>
+                {/* Show info based on mode */}
+                {selectionMode === 'manual' && selectedMana && (
+                  <View style={styles.manualModeInfo}>
+                    <Ionicons name="information-circle" size={20} color={Colors.info} />
+                    <Text style={styles.manualModeInfoText}>
+                      מצב ידני: בחר ציוד נוסף או ערוך את הבחירה
+                    </Text>
+                  </View>
                 )}
-              </View>
-            )}
-            {Object.entries(groupedEquipment).map(([category, items]) => {
-              // In manual mode, show all items
-              // In mana mode with selection, show only selected items
-              const displayItems = (selectionMode === 'mana' && selectedMana)
-                ? items.filter(eq => selectedItems.has(eq.id))
-                : items;
+                {selectedItems.size > 0 && (
+                  <View style={styles.selectedSummary}>
+                    <Text style={styles.selectedSummaryText}>
+                      {selectedItems.size} פריטים נבחרו
+                      {selectedMana && selectionMode === 'mana' ? ' מהמנה' : ''}
+                    </Text>
+                    {selectionMode === 'mana' && selectedMana && (
+                      <TouchableOpacity
+                        style={styles.addMoreButton}
+                        onPress={() => {
+                          setSelectionMode('manual');
+                          // Keep the current selection but switch to manual mode
+                        }}
+                      >
+                        <Ionicons name="add-circle-outline" size={20} color={Colors.arme} />
+                        <Text style={styles.addMoreButtonText}>הוסף ציוד נוסף</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                )}
+                {Object.entries(groupedEquipment).map(([category, items]) => {
+                  // In manual mode, show all items
+                  // In mana mode with selection, show only selected items
+                  const displayItems = (selectionMode === 'mana' && selectedMana)
+                    ? items.filter(eq => selectedItems.has(eq.id))
+                    : items;
 
-              // Skip empty categories
-              if (displayItems.length === 0) return null;
+                  // Skip empty categories
+                  if (displayItems.length === 0) return null;
 
-              return (
-              <View key={category}>
-                <Text style={styles.categoryTitle}>{category}</Text>
-                <View style={styles.equipmentList}>
-                  {displayItems.map((eq) => {
-                    const isSelected = selectedItems.has(eq.id);
-                    const item = selectedItems.get(eq.id);
-                    const isExpanded = expandedItems.has(eq.id);
+                  return (
+                    <View key={category}>
+                      <Text style={styles.categoryTitle}>{category}</Text>
+                      <View style={styles.equipmentList}>
+                        {displayItems.map((eq) => {
+                          const isSelected = selectedItems.has(eq.id);
+                          const item = selectedItems.get(eq.id);
+                          const isExpanded = expandedItems.has(eq.id);
 
-                    return (
-                      <View key={eq.id} style={styles.equipmentCard}>
-                        <TouchableOpacity
-                          style={styles.equipmentRow}
-                          onPress={() => toggleItem(eq)}
-                          activeOpacity={0.7}
-                        >
-                          <View style={[
-                            styles.checkbox,
-                            isSelected && styles.checkboxSelected,
-                          ]}>
-                            {isSelected && (
-                              <Ionicons name="checkmark" size={16} color={Colors.textWhite} />
-                            )}
-                          </View>
-                          <View style={styles.equipmentInfo}>
-                            <Text style={styles.equipmentName}>{eq.name}</Text>
-                            {eq.hasSubEquipment && (
-                              <Text style={styles.subEquipmentHint}>
-                                {eq.subEquipment?.length || 0} רכיבים נלווים
-                              </Text>
-                            )}
-                          </View>
-                          {eq.hasSubEquipment && isSelected && (
-                            <TouchableOpacity
-                              style={styles.expandButton}
-                              onPress={() => toggleExpanded(eq.id)}
-                            >
-                              <Ionicons
-                                name={isExpanded ? 'chevron-up' : 'chevron-down'}
-                                size={20}
-                                color={Colors.textSecondary}
-                              />
-                            </TouchableOpacity>
-                          )}
-                        </TouchableOpacity>
-
-                        {isSelected && (
-                          <View style={styles.itemDetails}>
-                            {/* Quantity */}
-                            <View style={styles.quantityRow}>
-                              <Text style={styles.quantityLabel}>כמות:</Text>
-                              <View style={styles.quantityControls}>
-                                <TouchableOpacity
-                                  style={styles.quantityButton}
-                                  onPress={() => updateQuantity(eq.id, -1)}
-                                >
-                                  <Ionicons name="remove" size={20} color={Colors.danger} />
-                                </TouchableOpacity>
-                                <Text style={styles.quantityValue}>{item?.quantity}</Text>
-                                <TouchableOpacity
-                                  style={styles.quantityButton}
-                                  onPress={() => updateQuantity(eq.id, 1)}
-                                >
-                                  <Ionicons name="add" size={20} color={Colors.success} />
-                                </TouchableOpacity>
-                              </View>
-                            </View>
-
-                            {/* Serial Numbers */}
-                            {eq.requiresSerial && item?.serials && (
-                              <View style={styles.serialsContainer}>
-                                <Text style={styles.serialsTitle}>
-                                  מספרים סידוריים (מסטב): *
-                                </Text>
-                                {item.serials.map((serial, idx) => {
-                                  // Get available serials for this equipment category
-                                  const equipmentName = item.equipment.name;
-
-                                  // Get already selected serials for this equipment (to prevent duplicates in same form)
-                                  const alreadySelectedSerials = item.serials.filter((s, i) => i !== idx && s.trim() !== '');
-
-                                  // Filter available weapons (only status='available' weapons from inventory)
-                                  // availableWeapons already filters out assigned weapons to ANY soldier
-                                  const allAvailableSerials = availableWeapons
-                                    .filter(weapon => {
-                                      // Match category
-                                      const categoryMatch = weapon.category.toLowerCase() === equipmentName.toLowerCase();
-                                      // Not already selected in this form
-                                      const notSelected = !alreadySelectedSerials.includes(weapon.serialNumber);
-                                      return categoryMatch && notSelected;
-                                    })
-                                    .map(w => w.serialNumber);
-
-                                  return (
-                                    <View key={idx} style={styles.serialRow}>
-                                      <Text style={styles.serialLabel}>
-                                        {item.quantity > 1 ? `יחידה ${idx + 1}:` : 'מסטב:'}
-                                      </Text>
-
-                                      {/* Serial Selector Button */}
-                                      <TouchableOpacity
-                                        style={styles.serialPickerButton}
-                                        onPress={() => {
-                                          if (allAvailableSerials.length === 0) {
-                                            Alert.alert('שגיאה', `אין ${equipmentName} זמינים במלאי`);
-                                            return;
-                                          }
-                                          openSerialPicker(eq.id, idx, equipmentName, serial);
-                                        }}
-                                      >
-                                        <Ionicons name="barcode-outline" size={20} color={Colors.textSecondary} />
-                                        <Text style={[styles.serialPickerText, !serial && styles.serialPickerPlaceholder]}>
-                                          {serial || `בחר מסטב (${allAvailableSerials.length} זמינים)`}
-                                        </Text>
-                                        <Ionicons name="chevron-down" size={20} color={Colors.textSecondary} />
-                                      </TouchableOpacity>
-
-                                      {/* Info: Available count */}
-                                      {allAvailableSerials.length === 0 && (
-                                        <Text style={styles.serialWarning}>
-                                          ⚠️ אין {equipmentName} זמינים במלאי
-                                        </Text>
-                                      )}
-                                    </View>
-                                  );
-                                })}
-                              </View>
-                            )}
-
-                            {/* Sub Equipment */}
-                            {eq.hasSubEquipment && isExpanded && eq.subEquipment && (
-                              <View style={styles.subEquipmentList}>
-                                <Text style={styles.subEquipmentTitle}>רכיבים נלווים:</Text>
-                                {eq.subEquipment.map((sub) => (
+                          return (
+                            <View key={eq.id} style={styles.equipmentCard}>
+                              <TouchableOpacity
+                                style={styles.equipmentRow}
+                                onPress={() => toggleItem(eq)}
+                                activeOpacity={0.7}
+                              >
+                                <View style={[
+                                  styles.checkbox,
+                                  isSelected && styles.checkboxSelected,
+                                ]}>
+                                  {isSelected && (
+                                    <Ionicons name="checkmark" size={16} color={Colors.textWhite} />
+                                  )}
+                                </View>
+                                <View style={styles.equipmentInfo}>
+                                  <Text style={styles.equipmentName}>{eq.name}</Text>
+                                  {eq.hasSubEquipment && (
+                                    <Text style={styles.subEquipmentHint}>
+                                      {eq.subEquipment?.length || 0} רכיבים נלווים
+                                    </Text>
+                                  )}
+                                </View>
+                                {eq.hasSubEquipment && isSelected && (
                                   <TouchableOpacity
-                                    key={sub.id}
-                                    style={styles.subEquipmentItem}
-                                    onPress={() => toggleSubItem(eq.id, sub.id)}
+                                    style={styles.expandButton}
+                                    onPress={() => toggleExpanded(eq.id)}
                                   >
-                                    <View style={[
-                                      styles.subCheckbox,
-                                      item?.subItems?.includes(sub.id) && styles.subCheckboxSelected,
-                                    ]}>
-                                      {item?.subItems?.includes(sub.id) && (
-                                        <Ionicons name="checkmark" size={12} color={Colors.textWhite} />
-                                      )}
-                                    </View>
-                                    <Text style={styles.subEquipmentName}>{sub.name}</Text>
+                                    <Ionicons
+                                      name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                                      size={20}
+                                      color={Colors.textSecondary}
+                                    />
                                   </TouchableOpacity>
-                                ))}
-                              </View>
-                            )}
-                          </View>
-                        )}
+                                )}
+                              </TouchableOpacity>
+
+                              {isSelected && (
+                                <View style={styles.itemDetails}>
+                                  {/* Quantity */}
+                                  <View style={styles.quantityRow}>
+                                    <Text style={styles.quantityLabel}>כמות:</Text>
+                                    <View style={styles.quantityControls}>
+                                      <TouchableOpacity
+                                        style={styles.quantityButton}
+                                        onPress={() => updateQuantity(eq.id, -1)}
+                                      >
+                                        <Ionicons name="remove" size={20} color={Colors.danger} />
+                                      </TouchableOpacity>
+                                      <Text style={styles.quantityValue}>{item?.quantity}</Text>
+                                      <TouchableOpacity
+                                        style={styles.quantityButton}
+                                        onPress={() => updateQuantity(eq.id, 1)}
+                                      >
+                                        <Ionicons name="add" size={20} color={Colors.success} />
+                                      </TouchableOpacity>
+                                    </View>
+                                  </View>
+
+                                  {/* Serial Numbers */}
+                                  {eq.requiresSerial && item?.serials && (
+                                    <View style={styles.serialsContainer}>
+                                      <Text style={styles.serialsTitle}>
+                                        מספרים סידוריים (מסטב): *
+                                      </Text>
+                                      {item.serials.map((serial, idx) => {
+                                        // Get available serials for this equipment category
+                                        const equipmentName = item.equipment.name;
+
+                                        // Get already selected serials for this equipment (to prevent duplicates in same form)
+                                        const alreadySelectedSerials = (item.serials || []).filter((s, i) => i !== idx && s.trim() !== '');
+
+                                        // Filter available weapons (only status='available' weapons from inventory)
+                                        // availableWeapons already filters out assigned weapons to ANY soldier
+                                        const allAvailableSerials = availableWeapons
+                                          .filter(weapon => {
+                                            // Match category
+                                            const categoryMatch = weapon.category.toLowerCase() === equipmentName.toLowerCase();
+                                            // Not already selected in this form
+                                            const notSelected = !alreadySelectedSerials.includes(weapon.serialNumber);
+                                            return categoryMatch && notSelected;
+                                          })
+                                          .map(w => w.serialNumber);
+
+                                        return (
+                                          <View key={idx} style={styles.serialRow}>
+                                            <Text style={styles.serialLabel}>
+                                              {item.quantity > 1 ? `יחידה ${idx + 1}:` : 'מסטב:'}
+                                            </Text>
+
+                                            {/* Serial Selector Button */}
+                                            <TouchableOpacity
+                                              style={styles.serialPickerButton}
+                                              onPress={() => {
+                                                if (allAvailableSerials.length === 0) {
+                                                  Alert.alert('שגיאה', `אין ${equipmentName} זמינים במלאי`);
+                                                  return;
+                                                }
+                                                openSerialPicker(eq.id, idx, equipmentName, serial);
+                                              }}
+                                            >
+                                              <Ionicons name="barcode-outline" size={20} color={Colors.textSecondary} />
+                                              <Text style={[styles.serialPickerText, !serial && styles.serialPickerPlaceholder]}>
+                                                {serial || `בחר מסטב (${allAvailableSerials.length} זמינים)`}
+                                              </Text>
+                                              <Ionicons name="chevron-down" size={20} color={Colors.textSecondary} />
+                                            </TouchableOpacity>
+
+                                            {/* Info: Available count */}
+                                            {allAvailableSerials.length === 0 && (
+                                              <Text style={styles.serialWarning}>
+                                                ⚠️ אין {equipmentName} זמינים במלאי
+                                              </Text>
+                                            )}
+                                          </View>
+                                        );
+                                      })}
+                                    </View>
+                                  )}
+
+                                  {/* Sub Equipment */}
+                                  {eq.hasSubEquipment && isExpanded && eq.subEquipment && (
+                                    <View style={styles.subEquipmentList}>
+                                      <Text style={styles.subEquipmentTitle}>רכיבים נלווים:</Text>
+                                      {eq.subEquipment.map((sub) => (
+                                        <TouchableOpacity
+                                          key={sub.id}
+                                          style={styles.subEquipmentItem}
+                                          onPress={() => toggleSubItem(eq.id, sub.id)}
+                                        >
+                                          <View style={[
+                                            styles.subCheckbox,
+                                            item?.subItems?.includes(sub.id) && styles.subCheckboxSelected,
+                                          ]}>
+                                            {item?.subItems?.includes(sub.id) && (
+                                              <Ionicons name="checkmark" size={12} color={Colors.textWhite} />
+                                            )}
+                                          </View>
+                                          <Text style={styles.subEquipmentName}>{sub.name}</Text>
+                                        </TouchableOpacity>
+                                      ))}
+                                    </View>
+                                  )}
+                                </View>
+                              )}
+                            </View>
+                          );
+                        })}
                       </View>
-                    );
-                  })}
-                </View>
-              </View>
-            );
-            })}
+                    </View>
+                  );
+                })}
               </>
             )}
 
             {/* Summary */}
             {selectedItems.size > 0 && (
               <View style={styles.summaryCard}>
-                <Text style={styles.summaryTitle}>סיכום</Text>
-                <Text style={styles.summaryText}>
-                  {selectedItems.size} פריטים נבחרו
-                </Text>
+                <Text style={styles.summaryTitle}>סיכום פריטים:</Text>
+                {Array.from(selectedItems.values()).map((item, idx) => (
+                  <View key={idx} style={styles.summaryItem}>
+                    <Text style={styles.summaryItemText}>
+                      • {item.equipment.name} x {item.quantity}
+                    </Text>
+                    {item.serials && item.serials.some(s => s.trim()) && (
+                      <Text style={styles.summaryItemSerial}>
+                        מסטב: {item.serials.filter(s => s.trim()).join(', ')}
+                      </Text>
+                    )}
+                  </View>
+                ))}
               </View>
             )}
 
@@ -775,6 +1192,23 @@ const CombatAssignmentScreen: React.FC = () => {
           </>
         ) : (
           <>
+            {/* Summary at signature step */}
+            <View style={styles.summaryCard}>
+              <Text style={styles.summaryTitle}>סיכום הציוד:</Text>
+              {Array.from(selectedItems.values()).map((item, idx) => (
+                <View key={idx} style={styles.summaryItem}>
+                  <Text style={styles.summaryItemText}>
+                    • {item.equipment.name} x {item.quantity}
+                  </Text>
+                  {item.serials && item.serials.some(s => s.trim()) && (
+                    <Text style={styles.summaryItemSerial}>
+                      מסטב: {item.serials.filter(s => s.trim()).join(', ')}
+                    </Text>
+                  )}
+                </View>
+              ))}
+            </View>
+
             {/* Signature */}
             <Text style={styles.sectionTitle}>חתימת החייל</Text>
 
@@ -800,13 +1234,23 @@ const CombatAssignmentScreen: React.FC = () => {
                 />
               </View>
 
-              <TouchableOpacity
-                style={styles.clearSignatureButton}
-                onPress={handleClearSignature}
-              >
-                <Ionicons name="trash-outline" size={20} color={Colors.danger} />
-                <Text style={styles.clearSignatureText}>נקה חתימה</Text>
-              </TouchableOpacity>
+              <View style={styles.excludeSignatureActions}>
+                <TouchableOpacity
+                  style={styles.clearSignatureButton}
+                  onPress={handleClearSignature}
+                >
+                  <Ionicons name="trash-outline" size={20} color={Colors.danger} />
+                  <Text style={styles.clearSignatureText}>נקה חתימה</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.confirmSignatureButton}
+                  onPress={handleConfirmSignature}
+                >
+                  <Ionicons name="create-outline" size={20} color={Colors.textWhite} />
+                  <Text style={styles.confirmSignatureText}>קלוט חתימה</Text>
+                </TouchableOpacity>
+              </View>
             </View>
 
             {/* Action Buttons */}
@@ -1292,6 +1736,18 @@ const styles = StyleSheet.create({
   },
 
   // Selected Summary
+  storedBadge: {
+    backgroundColor: Colors.info + '20',
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
+    borderRadius: BorderRadius.sm,
+    marginRight: Spacing.sm,
+  },
+  storedBadgeText: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: Colors.info,
+  },
   selectedSummary: {
     backgroundColor: Colors.armeLight,
     borderRadius: BorderRadius.md,
@@ -1665,6 +2121,23 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
 
+  summaryItem: {
+    marginTop: Spacing.sm,
+  },
+
+  summaryItemText: {
+    fontSize: FontSize.base,
+    color: Colors.armeDark,
+    textAlign: 'right',
+  },
+
+  summaryItemSerial: {
+    fontSize: FontSize.sm,
+    color: Colors.textSecondary,
+    textAlign: 'right',
+    marginLeft: Spacing.md,
+  },
+
   // Buttons
   continueButton: {
     backgroundColor: Colors.arme,
@@ -1717,6 +2190,31 @@ const styles = StyleSheet.create({
   clearSignatureText: {
     fontSize: FontSize.md,
     color: Colors.danger,
+  },
+
+  excludeSignatureActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    padding: Spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+  },
+
+  confirmSignatureButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: Spacing.sm,
+    backgroundColor: Colors.info,
+    borderRadius: BorderRadius.md,
+    paddingHorizontal: Spacing.md,
+    gap: Spacing.xs,
+  },
+
+  confirmSignatureText: {
+    fontSize: FontSize.md,
+    color: Colors.textWhite,
+    fontWeight: '600',
   },
 
   // Action Buttons
