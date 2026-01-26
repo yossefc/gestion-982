@@ -3,12 +3,13 @@ import { Assignment, AssignmentItem, CombatEquipment, Soldier, WeaponInventoryIt
 import { assignmentService } from './assignmentService';
 import { combatEquipmentService } from './firebaseService';
 import { soldierService } from './soldierService';
+import { transactionalAssignmentService } from './transactionalAssignmentService';
 import { weaponInventoryService } from './weaponInventoryService';
 
 export interface CompanyDistribution {
   company: string;
   issued: number;
-  storage: number;
+  stored: number;
   soldiers: number;
 }
 
@@ -17,8 +18,9 @@ export interface EquipmentStock {
   equipmentName: string;
   category: string;
   available: number; // En stock magasin (non assigné)
-  storage: number;   // En stock magasin mais assigné à un soldat (Afson)
+  stored: number;    // En stock magasin mais assigné à un soldat (Afson)
   issued: number;    // Chez le soldat (Signed)
+  defective: number; // Arme défectueuse (תקול)
   total: number;     // Somme de tout
   byCompany: CompanyDistribution[];
 }
@@ -31,11 +33,11 @@ export const getAllEquipmentStocks = async (): Promise<EquipmentStock[]> => {
     console.log('[getAllEquipmentStocks] Début du calcul global...');
 
     // 1. Charger toutes les données nécessaires en parallèle
-    const [allSoldiers, allWeapons, allGear, allAssignments] = await Promise.all([
+    const [allSoldiers, allWeapons, allGear, allHoldings] = await Promise.all([
       soldierService.getAll(),
       weaponInventoryService.getAllWeapons(),
       combatEquipmentService.getAll(),
-      assignmentService.getAssignmentsByType('combat')
+      transactionalAssignmentService.getAllHoldings('combat')
     ]);
 
     const soldierMap = new Map<string, Soldier>(allSoldiers.map((s: Soldier) => [s.id, s]));
@@ -46,9 +48,7 @@ export const getAllEquipmentStocks = async (): Promise<EquipmentStock[]> => {
 
     // --- A. TRAITEMENT DES ARMES (Serial-controlled) ---
     allWeapons.forEach((weapon: WeaponInventoryItem) => {
-      // Pour les armes, on groupe par Catégorie (ex: M16) ou Nom? 
-      // Généralement on veut voir "M16 : X dispo, Y en storage, Z chez soldats"
-      const equipmentId = `WEAPON_${weapon.category}`; // On groupe par catégorie d'arme
+      const equipmentId = `WEAPON_${weapon.category}`;
       let stock = stockMap.get(equipmentId);
 
       if (!stock) {
@@ -57,8 +57,9 @@ export const getAllEquipmentStocks = async (): Promise<EquipmentStock[]> => {
           equipmentName: weapon.category,
           category: 'נשק',
           available: 0,
-          storage: 0,
+          stored: 0,
           issued: 0,
+          defective: 0,
           total: 0,
           byCompany: []
         };
@@ -69,6 +70,8 @@ export const getAllEquipmentStocks = async (): Promise<EquipmentStock[]> => {
 
       if (weapon.status === 'available') {
         stock.available += 1;
+      } else if (weapon.status === 'defective') {
+        stock.defective += 1;
       } else {
         const soldier = weapon.assignedTo ? soldierMap.get(weapon.assignedTo.soldierId) : null;
         const companyName = soldier?.company || 'לא ידוע';
@@ -76,69 +79,39 @@ export const getAllEquipmentStocks = async (): Promise<EquipmentStock[]> => {
         // Trouver ou créer la distrib par compagnie
         let companyDist = stock.byCompany.find(c => c.company === companyName);
         if (!companyDist) {
-          companyDist = { company: companyName, issued: 0, storage: 0, soldiers: 0 };
+          companyDist = { company: companyName, issued: 0, stored: 0, soldiers: 0 };
           stock.byCompany.push(companyDist);
         }
 
-        if (weapon.status === 'storage') {
-          stock.storage += 1;
-          companyDist.storage += 1;
+        if (weapon.status === 'stored') {
+          stock.stored += 1;
+          companyDist.stored += 1;
         } else if (weapon.status === 'assigned') {
           stock.issued += 1;
           companyDist.issued += 1;
         }
-
-        // On compte les soldats uniques par compagnie qui ont cette catégorie d'arme
-        // (Approximation: on incrémente si c'est la première fois qu'on voit ce soldat pour cet équipement/compagnie)
-        // Pour être exact, il faudrait un Set par equipmentId-company
       }
     });
 
     // --- B. TRAITEMENT DU MATÉRIEL (Quantity-based) ---
-    // On va utiliser les assignments pour déterminer ce qui est 'issued' vs 'storage'
-    // Pour chaque soldat, on calcule son solde actuel PAR ÉQUIPEMENT ET PAR STATUT
+    // On va utiliser les holdings pré-calculés dans soldier_holdings
 
-    // Groupement des assignments par [soldierId][equipmentId] pour trouver le dernier statut
-    const soldierGearStatus = new Map<string, Map<string, { issued: number; storage: number }>>();
+    // Groupement des holdings par [soldierId][equipmentId]
+    const soldierGearStatus = new Map<string, Map<string, { issued: number; stored: number }>>();
 
-    // Trier les assignments par date (ancien -> récent)
-    const sortedAssignments = [...allAssignments].sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
-
-    sortedAssignments.forEach(asm => {
-      const sId = asm.soldierId;
+    allHoldings.forEach(holding => {
+      const sId = holding.soldierId;
       if (!soldierGearStatus.has(sId)) soldierGearStatus.set(sId, new Map());
       const gearMap = soldierGearStatus.get(sId)!;
 
-      asm.items.forEach(item => {
-        // Ignorer les armes déjà traitées via weapons_inventory si on peut les identifier (souvent via serial)
-        // Mais ici on traite tout le matériel de combat générique
-        if (!gearMap.has(item.equipmentId)) gearMap.set(item.equipmentId, { issued: 0, storage: 0 });
+      (holding.items || []).forEach((item: any) => {
+        if (!gearMap.has(item.equipmentId)) gearMap.set(item.equipmentId, { issued: 0, stored: 0 });
         const counts = gearMap.get(item.equipmentId)!;
 
-        const action = asm.action || (asm.status === 'נופק לחייל' ? 'issue' : 'return');
-
-        if (action === 'issue' || action === 'add') {
+        if (item.status === 'stored') {
+          counts.stored += item.quantity;
+        } else {
           counts.issued += item.quantity;
-        } else if (action === 'return' || action === 'credit') {
-          // On retire d'abord du storage (priorité au retour de ce qui est stocké?) 
-          // ou proportionnellement? Généralement on retire de 'issued'.
-          if (counts.storage >= item.quantity) {
-            counts.storage -= item.quantity;
-          } else {
-            const remaining = item.quantity - counts.storage;
-            counts.storage = 0;
-            counts.issued = Math.max(0, counts.issued - remaining);
-          }
-        } else if (action === 'storage') {
-          // Transfert Issued -> Storage
-          const toStore = Math.min(counts.issued, item.quantity);
-          counts.issued -= toStore;
-          counts.storage += toStore;
-        } else if (action === 'retrieve') {
-          // Transfert Storage -> Issued
-          const toRetrieve = Math.min(counts.storage, item.quantity);
-          counts.storage -= toRetrieve;
-          counts.issued += toRetrieve;
         }
       });
     });
@@ -149,7 +122,7 @@ export const getAllEquipmentStocks = async (): Promise<EquipmentStock[]> => {
       const companyName = soldier?.company || 'לא ידוע';
 
       for (const [eId, counts] of gearMap.entries()) {
-        if (counts.issued <= 0 && counts.storage <= 0) continue;
+        if (counts.issued <= 0 && counts.stored <= 0) continue;
 
         let stock = stockMap.get(eId);
         if (!stock) {
@@ -158,9 +131,10 @@ export const getAllEquipmentStocks = async (): Promise<EquipmentStock[]> => {
             equipmentId: eId,
             equipmentName: gearInfo?.name || 'ציוד לא ידוע',
             category: gearInfo?.category || 'ציוד כללי',
-            available: 0, // On ne connaît pas le stock magasin pour le gear générique sans champ Yamach
-            storage: 0,
+            available: 0,
+            stored: 0,
             issued: 0,
+            defective: 0,
             total: 0,
             byCompany: []
           };
@@ -168,22 +142,35 @@ export const getAllEquipmentStocks = async (): Promise<EquipmentStock[]> => {
         }
 
         stock.issued += counts.issued;
-        stock.storage += counts.storage;
-        stock.total += (counts.issued + counts.storage);
+        stock.stored += counts.stored;
+        stock.total += (counts.issued + counts.stored);
 
         let companyDist = stock.byCompany.find(c => c.company === companyName);
         if (!companyDist) {
-          companyDist = { company: companyName, issued: 0, storage: 0, soldiers: 0 };
+          companyDist = { company: companyName, issued: 0, stored: 0, soldiers: 0 };
           stock.byCompany.push(companyDist);
         }
         companyDist.issued += counts.issued;
-        companyDist.storage += counts.storage;
+        companyDist.stored += counts.stored;
         companyDist.soldiers += 1;
       }
     }
 
-    // Convertir en tableau et trier
-    return Array.from(stockMap.values()).sort((a, b) => {
+    // Convertir en tableau, appliquer Math.max(0) pour éviter les négatifs, et trier
+    return Array.from(stockMap.values()).map(stock => ({
+      ...stock,
+      available: Math.max(0, stock.available),
+      stored: Math.max(0, stock.stored),
+      issued: Math.max(0, stock.issued),
+      defective: Math.max(0, stock.defective),
+      total: Math.max(0, stock.total),
+      byCompany: stock.byCompany.map(company => ({
+        ...company,
+        issued: Math.max(0, company.issued),
+        stored: Math.max(0, company.stored),
+        soldiers: Math.max(0, company.soldiers),
+      }))
+    })).sort((a, b) => {
       const catCompare = a.category.localeCompare(b.category, 'he');
       if (catCompare !== 0) return catCompare;
       return a.equipmentName.localeCompare(b.equipmentName, 'he');
@@ -198,4 +185,3 @@ export const getAllEquipmentStocks = async (): Promise<EquipmentStock[]> => {
 export const combatStockService = {
   getAllEquipmentStocks,
 };
-

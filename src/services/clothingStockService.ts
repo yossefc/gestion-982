@@ -3,11 +3,12 @@
  * Calcule les stocks par compagnie et les quantités restantes
  */
 
-import { db } from './firebaseService';
-import { collection, getDocs, query, where } from 'firebase/firestore';
-import { assignmentService } from './assignmentService';
+import { getFirestore, collection, getDocs, query, where } from 'firebase/firestore';
+import { app } from '../config/firebase';
+const db = getFirestore(app);
 import { clothingEquipmentService } from './clothingEquipmentService';
 import { soldierService } from './soldierService';
+import { transactionalAssignmentService } from './transactionalAssignmentService';
 
 export interface CompanyDistribution {
   company: string;
@@ -37,25 +38,26 @@ export const getEquipmentStock = async (equipmentId: string): Promise<EquipmentS
 
     const yamach = equipment.yamach || 0;
 
-    // Récupérer tous les soldats qui ont actuellement cet équipement
-    const soldiersWithHoldings = await assignmentService.getSoldiersWithCurrentHoldings('clothing');
+    // Récupérer tous les holdings actuels directement depuis soldier_holdings
+    const allHoldings = await transactionalAssignmentService.getAllHoldings('clothing');
 
     // Calculer la distribution par compagnie
     const companyMap = new Map<string, { quantity: number; soldiers: Set<string> }>();
     let totalAssigned = 0;
 
-    for (const soldier of soldiersWithHoldings) {
-      const holdings = await assignmentService.calculateCurrentHoldings(soldier.soldierId, 'clothing');
+    // Récupérer tous les soldats (un seul appel pour mapper les compagnies)
+    const allSoldiers = await soldierService.getAll();
+    const soldierMap = new Map(allSoldiers.map((s: any) => [s.id, s]));
 
-      const item = holdings.find((h: any) => h.equipmentId === equipmentId);
+    for (const holding of allHoldings) {
+      const item = (holding.items || []).find((h: any) => h.equipmentId === equipmentId);
       if (item && item.quantity > 0) {
-        // Récupérer la compagnie du soldat
-        const soldierData = await soldierService.getById(soldier.soldierId);
+        const soldierData = soldierMap.get(holding.soldierId);
         const company = soldierData?.company || 'לא ידוע';
 
         const existing = companyMap.get(company) || { quantity: 0, soldiers: new Set() };
         existing.quantity += item.quantity;
-        existing.soldiers.add(soldier.soldierId);
+        existing.soldiers.add(holding.soldierId);
         companyMap.set(company, existing);
 
         totalAssigned += item.quantity;
@@ -92,15 +94,8 @@ export const getAllEquipmentStocks = async (): Promise<EquipmentStock[]> => {
   try {
     const allEquipment = await clothingEquipmentService.getAll();
 
-    // Récupérer tous les soldats avec leurs holdings une seule fois
-    const soldiersWithHoldings = await assignmentService.getSoldiersWithCurrentHoldings('clothing');
-
-    // Créer une map de tous les holdings par soldat
-    const holdingsCache = new Map<string, any[]>();
-    for (const soldier of soldiersWithHoldings) {
-      const holdings = await assignmentService.calculateCurrentHoldings(soldier.soldierId, 'clothing');
-      holdingsCache.set(soldier.soldierId, holdings);
-    }
+    // Récupérer tous les holdings actuels directement depuis soldier_holdings
+    const allHoldings = await transactionalAssignmentService.getAllHoldings('clothing');
 
     // Récupérer tous les soldats pour avoir leurs compagnies
     const allSoldiers = await soldierService.getAll();
@@ -114,15 +109,15 @@ export const getAllEquipmentStocks = async (): Promise<EquipmentStock[]> => {
       let totalAssigned = 0;
 
       // Pour chaque soldat, vérifier s'il a cet équipement
-      for (const [soldierId, holdings] of holdingsCache.entries()) {
-        const item = holdings.find((h: any) => h.equipmentId === equipment.id);
+      for (const holding of allHoldings) {
+        const item = (holding.items || []).find((h: any) => h.equipmentId === equipment.id);
         if (item && item.quantity > 0) {
-          const soldierData = soldierMap.get(soldierId);
+          const soldierData = soldierMap.get(holding.soldierId);
           const company = soldierData?.company || 'לא ידוע';
 
           const existing = companyMap.get(company) || { quantity: 0, soldiers: new Set() };
           existing.quantity += item.quantity;
-          existing.soldiers.add(soldierId);
+          existing.soldiers.add(holding.soldierId);
           companyMap.set(company, existing);
 
           totalAssigned += item.quantity;
@@ -192,13 +187,17 @@ export const getStockSummaryByCompany = async (): Promise<{
       for (const companyDist of stock.byCompany) {
         const existing = companyMap.get(companyDist.company) || {
           totalItems: 0,
-          soldiers: new Set(),
-          equipments: new Set(),
+          soldiers: new Set<string>(), // Track unique soldiers if possible, but here we only have the COUNT from byCompany
+          equipments: new Set<string>(),
         };
 
         existing.totalItems += companyDist.quantity;
         existing.equipments.add(stock.equipmentId);
-        // Note: on ne peut pas facilement ajouter les soldats sans refaire les calculs
+
+        // Since we don't have soldier IDs here (only the count from byCompany),
+        // we can't accurately get the TOTAL unique soldiers without revisiting the holdings.
+        // For now, let's just make it a number and sum it (which might overcount if same soldier has diff items)
+        // OR we just leave it at 0 if we can't be accurate.
 
         companyMap.set(companyDist.company, existing);
       }
@@ -208,7 +207,7 @@ export const getStockSummaryByCompany = async (): Promise<{
       .map(([company, data]) => ({
         company,
         totalItems: data.totalItems,
-        totalSoldiers: 0, // À calculer séparément si nécessaire
+        totalSoldiers: 0, // This would require deeper data to be accurate
         equipmentCount: data.equipments.size,
       }))
       .sort((a, b) => b.totalItems - a.totalItems);

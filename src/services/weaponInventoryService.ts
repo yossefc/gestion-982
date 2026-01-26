@@ -258,7 +258,7 @@ export const getStorageWeapons = async (): Promise<WeaponInventoryItem[]> => {
   try {
     const q = query(
       collection(db, COLLECTION),
-      where('status', '==', 'storage')
+      where('status', '==', 'stored')
     );
     const snapshot = await getDocs(q);
     const weapons = snapshot.docs.map((doc) => {
@@ -363,10 +363,10 @@ export const getWeaponsBySoldier = async (soldierId: string): Promise<WeaponInve
     );
     const assignedSnapshot = await getDocs(assignedQuery);
 
-    // Récupérer les armes en storage
+    // Récupérer les armes en storage (support both old and new status)
     const storageQuery = query(
       collection(db, COLLECTION),
-      where('status', '==', 'storage'),
+      where('status', 'in', ['stored', 'storage']),
       where('assignedTo.soldierId', '==', soldierId)
     );
     const storageSnapshot = await getDocs(storageQuery);
@@ -408,7 +408,7 @@ export const getSoldiersWithStoredWeapons = async (): Promise<Array<{
   try {
     const q = query(
       collection(db, COLLECTION),
-      where('status', '==', 'storage')
+      where('status', 'in', ['stored', 'storage'])
     );
     const snapshot = await getDocs(q);
 
@@ -510,7 +510,7 @@ export const moveWeaponToStorageWithSoldier = async (
 ): Promise<void> => {
   try {
     await updateWeapon(weaponId, {
-      status: 'storage', // En stock mais réservé/stocké pour ce soldat
+      status: 'stored', // En stock mais réservé/stocké pour ce soldat
       assignedTo: {
         ...soldier,
         assignedDate: new Date(),
@@ -529,7 +529,7 @@ export const moveWeaponToStorageWithSoldier = async (
 export const moveWeaponToStorage = async (weaponId: string): Promise<void> => {
   try {
     await updateWeapon(weaponId, {
-      status: 'storage',
+      status: 'stored',
       assignedTo: deleteField() as any,
       storageDate: new Date(),
     });
@@ -563,13 +563,15 @@ export const getInventoryStats = async (): Promise<{
   total: number;
   available: number;
   assigned: number;
-  storage: number;
+  stored: number;
+  defective: number;
   byCategory: {
     category: string;
     total: number;
     available: number;
     assigned: number;
-    storage: number;
+    stored: number;
+    defective: number;
   }[];
 }> => {
   try {
@@ -579,20 +581,22 @@ export const getInventoryStats = async (): Promise<{
       total: allWeapons.length,
       available: allWeapons.filter((w) => w.status === 'available').length,
       assigned: allWeapons.filter((w) => w.status === 'assigned').length,
-      storage: allWeapons.filter((w) => w.status === 'storage').length,
+      stored: allWeapons.filter((w) => w.status === 'stored').length,
+      defective: allWeapons.filter((w) => w.status === 'defective').length,
       byCategory: [] as {
         category: string;
         total: number;
         available: number;
         assigned: number;
-        storage: number;
+        stored: number;
+        defective: number;
       }[],
     };
 
     // Grouper par catégorie
     const categoryMap = new Map<
       string,
-      { total: number; available: number; assigned: number; storage: number }
+      { total: number; available: number; assigned: number; stored: number; defective: number }
     >();
 
     allWeapons.forEach((weapon) => {
@@ -601,7 +605,8 @@ export const getInventoryStats = async (): Promise<{
           total: 0,
           available: 0,
           assigned: 0,
-          storage: 0,
+          stored: 0,
+          defective: 0,
         });
       }
 
@@ -609,7 +614,8 @@ export const getInventoryStats = async (): Promise<{
       cat.total++;
       if (weapon.status === 'available') cat.available++;
       if (weapon.status === 'assigned') cat.assigned++;
-      if (weapon.status === 'storage') cat.storage++;
+      if (weapon.status === 'stored') cat.stored++;
+      if (weapon.status === 'defective') cat.defective++;
     });
 
     stats.byCategory = Array.from(categoryMap.entries()).map(([category, counts]) => ({

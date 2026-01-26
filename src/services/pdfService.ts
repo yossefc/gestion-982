@@ -50,7 +50,7 @@ export async function generateAssignmentPDF(
 function generateAssignmentHTML(assignment: Assignment): string {
   const titleText = assignment.type === 'combat'
     ? 'טופס מסירת ציוד לחימה'
-    : 'טופס מסירת ביגוד וציוד אישי';
+    : 'טופס מסירת אפנאות וציוד אישי';
 
   // S'assurer que timestamp est un Date object
   const timestamp = assignment.timestamp instanceof Date

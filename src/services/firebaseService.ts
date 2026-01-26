@@ -32,6 +32,8 @@ import {
   DashboardStats,
   SoldierHoldings,
   HoldingItem,
+  RspAssignment,
+  RspEquipment,
 } from '../types';
 import { mapFirebaseError, createAppError, ErrorCodes, logError } from './errors';
 import { buildSoldierSearchKey, buildNameLower, normalizeText } from '../utils/normalize';
@@ -60,6 +62,13 @@ function removeUndefinedFields<T extends Record<string, any>>(obj: T): Partial<T
   });
   return cleaned;
 }
+
+// ============================================
+// CACHE EN MÉMOIRE POUR LES SOLDATS
+// ============================================
+let soldiersCache: Soldier[] | null = null;
+let soldiersCacheTime: number = 0;
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
 // ============================================
 // SOLDIERS
@@ -99,6 +108,10 @@ export const soldierService = {
         performedBy: auth.currentUser?.uid || 'unknown',
         performedByName: auth.currentUser?.displayName || auth.currentUser?.email || 'Unknown',
       });
+
+      // Invalider le cache
+      soldiersCache = null;
+      soldiersCacheTime = 0;
 
       return docRef.id;
     } catch (error) {
@@ -152,9 +165,16 @@ export const soldierService = {
     }
   },
 
-  // Obtenir tous les soldats (paginé par défaut)
-  async getAll(limitCount: number = 50): Promise<Soldier[]> {
+  // Obtenir tous les soldats (avec cache en mémoire)
+  async getAll(limitCount: number = 1000, forceRefresh: boolean = false): Promise<Soldier[]> {
     try {
+      const now = Date.now();
+
+      // Utiliser le cache si disponible et pas expiré
+      if (!forceRefresh && soldiersCache && (now - soldiersCacheTime) < CACHE_DURATION) {
+        return soldiersCache;
+      }
+
       const querySnapshot = await getDocs(
         query(
           collection(db, COLLECTIONS.SOLDIERS),
@@ -163,15 +183,27 @@ export const soldierService = {
         )
       );
 
-      return querySnapshot.docs.map(doc => ({
+      const soldiers = querySnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data(),
         createdAt: doc.data().createdAt?.toDate(),
       })) as Soldier[];
+
+      // Mettre à jour le cache
+      soldiersCache = soldiers;
+      soldiersCacheTime = now;
+
+      return soldiers;
     } catch (error) {
       logError('soldierService.getAll', error);
       throw mapFirebaseError(error);
     }
+  },
+
+  // Invalider le cache (après création/modification/suppression)
+  invalidateCache(): void {
+    soldiersCache = null;
+    soldiersCacheTime = 0;
   },
 
   // Recherche performante côté serveur avec pagination
@@ -184,7 +216,7 @@ export const soldierService = {
     }
   ): Promise<{ soldiers: Soldier[]; lastDoc: QueryDocumentSnapshot<DocumentData> | null }> {
     try {
-      const limitCount = options?.limitCount || 50;
+      const limitCount = options?.limitCount || 1000;
 
       // Si pas de terme de recherche, retourner liste paginée
       if (!searchTerm || searchTerm.trim() === '') {
@@ -300,6 +332,10 @@ export const soldierService = {
         performedBy: auth.currentUser?.uid || 'unknown',
         performedByName: auth.currentUser?.displayName || auth.currentUser?.email || 'Unknown',
       });
+
+      // Invalider le cache
+      soldiersCache = null;
+      soldiersCacheTime = 0;
     } catch (error) {
       logError('soldierService.update', error);
       throw mapFirebaseError(error);
@@ -323,6 +359,10 @@ export const soldierService = {
         performedBy: auth.currentUser?.uid || 'unknown',
         performedByName: auth.currentUser?.displayName || auth.currentUser?.email || 'Unknown',
       });
+
+      // Invalider le cache
+      soldiersCache = null;
+      soldiersCacheTime = 0;
     } catch (error) {
       logError('soldierService.delete', error);
       throw mapFirebaseError(error);
@@ -361,10 +401,28 @@ export const combatEquipmentService = {
   // Créer un équipement
   async create(equipmentData: Omit<CombatEquipment, 'id'>): Promise<CombatEquipment> {
     try {
+      // Générer les clés normalisées pour vérifier les doublons
+      const nameKey = normalizeText(equipmentData.name);
+      const categoryKey = normalizeText(equipmentData.category);
+
+      // Vérifier si un équipement avec le même nom ET catégorie existe déjà
+      const existingQuery = query(
+        collection(db, COLLECTIONS.COMBAT_EQUIPMENT),
+        where('nameKey', '==', nameKey),
+        where('categoryKey', '==', categoryKey)
+      );
+      const existingDocs = await getDocs(existingQuery);
+
+      if (!existingDocs.empty) {
+        throw new Error(`Equipment "${equipmentData.name}" in category "${equipmentData.category}" already exists`);
+      }
+
       // Nettoyer les valeurs undefined (Firestore ne les accepte pas)
       const cleanData: any = {
         name: equipmentData.name,
+        nameKey,
         category: equipmentData.category,
+        categoryKey,
         hasSubEquipment: equipmentData.hasSubEquipment || false,
         requiresSerial: (equipmentData as any).requiresSerial || false,
       };
@@ -471,9 +529,24 @@ export const clothingEquipmentService = {
   // Créer un équipement
   async create(equipmentData: Omit<ClothingEquipment, 'id'>): Promise<ClothingEquipment> {
     try {
+      // Générer la clé normalisée pour vérifier les doublons
+      const nameKey = normalizeText(equipmentData.name);
+
+      // Vérifier si un équipement avec le même nom existe déjà
+      const existingQuery = query(
+        collection(db, COLLECTIONS.CLOTHING_EQUIPMENT),
+        where('nameKey', '==', nameKey)
+      );
+      const existingDocs = await getDocs(existingQuery);
+
+      if (!existingDocs.empty) {
+        throw new Error(`Equipment "${equipmentData.name}" already exists`);
+      }
+
       // Nettoyer les valeurs undefined (Firestore ne les accepte pas)
       const cleanData: any = {
         name: equipmentData.name,
+        nameKey,
       };
 
       // Ajouter seulement les champs définis
@@ -1293,3 +1366,249 @@ export const pdfStorageService = {
     }
   },
 };
+
+// ============================================
+// RSP EQUIPMENT (ציוד רס"פ)
+// ============================================
+
+export const rspEquipmentService = {
+  // Créer un équipement RSP
+  async create(equipmentData: Omit<RspEquipment, 'id' | 'createdAt'>): Promise<string> {
+    try {
+      const cleanData = removeUndefinedFields({
+        ...equipmentData,
+        createdAt: Timestamp.now(),
+      });
+      const docRef = await addDoc(collection(db, 'rsp_equipment'), cleanData);
+      return docRef.id;
+    } catch (error) {
+      console.error('Error creating RSP equipment:', error);
+      throw error;
+    }
+  },
+
+  // Obtenir tous les équipements RSP
+  async getAll(): Promise<RspEquipment[]> {
+    try {
+      const querySnapshot = await getDocs(collection(db, 'rsp_equipment'));
+      return querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        createdAt: doc.data().createdAt?.toDate(),
+      })) as RspEquipment[];
+    } catch (error) {
+      console.error('Error getting RSP equipment:', error);
+      throw error;
+    }
+  },
+
+  // Mettre à jour un équipement RSP
+  async update(id: string, data: Partial<RspEquipment>): Promise<void> {
+    try {
+      const docRef = doc(db, 'rsp_equipment', id);
+      const cleanData = removeUndefinedFields(data);
+      await updateDoc(docRef, cleanData);
+    } catch (error) {
+      console.error('Error updating RSP equipment:', error);
+      throw error;
+    }
+  },
+
+  // Supprimer un équipement RSP
+  async delete(id: string): Promise<void> {
+    try {
+      await deleteDoc(doc(db, 'rsp_equipment', id));
+    } catch (error) {
+      console.error('Error deleting RSP equipment:', error);
+      throw error;
+    }
+  }
+};
+
+// ============================================
+// RSP ASSIGNMENTS (החתמות רס"פ)
+// ============================================
+
+export const rspAssignmentService = {
+  // Créer ou mettre à jour une attribution (avec agrégation)
+  async updateQuantity(
+    data: {
+      soldierId: string;
+      soldierName: string;
+      company: string;
+      equipmentId: string;
+      equipmentName: string;
+      quantityChange: number; // Positif pour ajout, négatif pour retrait
+      action: 'add' | 'remove';
+      notes?: string;
+    }
+  ): Promise<void> {
+    try {
+      // Clé unique pour trouver l'attribution existante (RSP + Équipement)
+      // On utilise une requête car l'ID n'est pas forcément déterministe ici, ou on pourrait le forcer
+      // Forçons l'ID pour simplicité: rsp_{soldierId}_{equipmentId}
+      const assignmentId = `rsp_${data.soldierId}_${data.equipmentId}`;
+      const docRef = doc(db, 'rsp_assignments', assignmentId);
+      const docSnap = await getDoc(docRef);
+
+      const historyItem = {
+        date: Timestamp.now(),
+        quantityChange: data.quantityChange,
+        action: data.action,
+        notes: data.notes || ''
+      };
+
+      if (docSnap.exists()) {
+        const current = docSnap.data();
+        const newQuantity = (current.quantity || 0) + data.quantityChange;
+
+        // Logique de statut
+        let newStatus = current.status;
+        if (newQuantity <= 0) newStatus = 'credited';
+        else newStatus = 'signed';
+
+        await updateDoc(docRef, {
+          quantity: newQuantity,
+          status: newStatus,
+          lastSignatureDate: Timestamp.now(),
+          updatedAt: Timestamp.now(),
+          // Ajouter à l'historique (arrayUnion pourrait être utilisé mais on veut garder l'ordre)
+          history: [...(current.history || []), historyItem]
+        });
+      } else {
+        // Création nouvelle attribution
+        if (data.quantityChange <= 0) {
+          throw new Error("Impossible de créer une attribution avec une quantité négative");
+        }
+
+        const newAssignment = {
+          soldierId: data.soldierId,
+          soldierName: data.soldierName,
+          company: data.company,
+          equipmentId: data.equipmentId,
+          equipmentName: data.equipmentName,
+          quantity: data.quantityChange,
+          status: 'signed',
+          lastSignatureDate: Timestamp.now(),
+          history: [historyItem],
+          createdAt: Timestamp.now(),
+          updatedAt: Timestamp.now(),
+        };
+
+        await setDoc(docRef, newAssignment);
+      }
+    } catch (error) {
+      console.error('Error updating RSP quantity:', error);
+      throw error;
+    }
+  },
+
+  // Obtenir toutes les attributions
+  async getAll(): Promise<RspAssignment[]> {
+    try {
+      const q = query(
+        collection(db, 'rsp_assignments'),
+        orderBy('updatedAt', 'desc')
+      );
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        lastSignatureDate: doc.data().lastSignatureDate?.toDate(),
+        createdAt: doc.data().createdAt?.toDate(),
+        updatedAt: doc.data().updatedAt?.toDate(),
+      })) as RspAssignment[];
+    } catch (error) {
+      console.error('Error getting RSP assignments:', error);
+      throw error;
+    }
+  },
+
+  // Obtenir par soldat (RSP)
+  async getBySoldier(soldierId: string): Promise<RspAssignment[]> {
+    try {
+      const q = query(
+        collection(db, 'rsp_assignments'),
+        where('soldierId', '==', soldierId)
+      );
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        lastSignatureDate: doc.data().lastSignatureDate?.toDate(),
+        createdAt: doc.data().createdAt?.toDate(),
+        updatedAt: doc.data().updatedAt?.toDate(),
+      })) as RspAssignment[];
+    } catch (error) {
+      console.error('Error getting RSP assignments by soldier:', error);
+      throw error;
+    }
+  },
+
+  // Obtenir les équipements détenus par un soldat pour l'inventaire
+  async getHoldingsBySoldierId(soldierId: string): Promise<RspAssignment[]> {
+    return this.getBySoldier(soldierId);
+  }
+};
+
+// =============== DEFAULT DATA CONSTANTS ===============
+
+/**
+ * Équipements de combat par défaut
+ * Utilisés pour initialiser le système la première fois
+ */
+export const DEFAULT_COMBAT_EQUIPMENT: Omit<CombatEquipment, 'id'>[] = [
+  {
+    name: 'M16', category: 'נשק', hasSubEquipment: true, subEquipments: [
+      { id: '1', name: 'מחסנית' },
+      { id: '2', name: 'רצועה' },
+      { id: '3', name: 'כלי טעינה' },
+    ]
+  },
+  { name: 'M203', category: 'נשק', hasSubEquipment: true, subEquipments: [] },
+  { name: 'קלע', category: 'נשק', hasSubEquipment: false, subEquipments: [] },
+  { name: 'נגב', category: 'נשק', hasSubEquipment: true, subEquipments: [] },
+  { name: 'מאג', category: 'נשק', hasSubEquipment: true, subEquipments: [] },
+  { name: 'אופטיקה', category: 'אביזרים', hasSubEquipment: false, subEquipments: [] },
+  { name: 'לייזר', category: 'אביזרים', hasSubEquipment: false, subEquipments: [] },
+  { name: 'פנס', category: 'אביזרים', hasSubEquipment: false, subEquipments: [] },
+  { name: 'אפוד', category: 'ציוד לוחם', hasSubEquipment: false, subEquipments: [] },
+  { name: 'קסדה', category: 'ציוד לוחם', hasSubEquipment: false, subEquipments: [] },
+  { name: 'וסט קרמי', category: 'ציוד לוחם', hasSubEquipment: false, subEquipments: [] },
+  { name: 'משקפי לילה', category: 'אופטיקה', hasSubEquipment: false, subEquipments: [] },
+];
+
+/**
+ * Manot (מנות) par défaut
+ * Utilisées pour initialiser le système la première fois
+ */
+export const DEFAULT_MANOT: Omit<Mana, 'id'>[] = [
+  {
+    name: 'מנת מפקד',
+    type: 'מנה',
+    equipments: [
+      { equipmentId: '', equipmentName: 'M16', quantity: 1 },
+      { equipmentId: '', equipmentName: 'אופטיקה', quantity: 1 },
+      { equipmentId: '', equipmentName: 'אפוד', quantity: 1 },
+      { equipmentId: '', equipmentName: 'קסדה', quantity: 1 },
+    ]
+  },
+  {
+    name: 'מנת לוחם',
+    type: 'מנה',
+    equipments: [
+      { equipmentId: '', equipmentName: 'M16', quantity: 1 },
+      { equipmentId: '', equipmentName: 'אפוד', quantity: 1 },
+      { equipmentId: '', equipmentName: 'קסדה', quantity: 1 },
+    ]
+  },
+  {
+    name: 'מנת רימונאי',
+    type: 'מנה',
+    equipments: [
+      { equipmentId: '', equipmentName: 'M203', quantity: 1 },
+      { equipmentId: '', equipmentName: 'אפוד', quantity: 1 },
+      { equipmentId: '', equipmentName: 'קסדה', quantity: 1 },
+    ]
+  },
+];

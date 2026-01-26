@@ -27,16 +27,57 @@ export interface Soldier {
   // Champs de recherche normalisés (générés automatiquement)
   searchKey?: string;      // Clé de recherche (name + personalNumber + phone + company)
   nameLower?: string;      // Nom en lowercase pour tri
+  isRsp?: boolean;         // Est un רס"פ (Company Sergeant)
 }
 
+// ... existing types ...
+
+// ============================================
+// GESTION RSP (רס"פים)
+// ============================================
+
+// Équipement spécial RSP
+export interface RspEquipment {
+  id: string;
+  name: string;
+  category: string;
+  quantity?: number; // Stock total (YAMAH)
+  createdAt: Date;
+}
+
+// Attribution RSP
+export interface RspAssignment {
+  id: string;
+  soldierId: string;        // RSP soldier ID
+  soldierName: string;
+  company: string;          // פלוגה
+  equipmentId: string;
+  equipmentName: string;
+  quantity: number;         // Quantité totale agrégée
+  status: 'signed' | 'credited' | 'gap'; // הוחתם/זוכה/פער
+  lastSignatureDate: Date;
+  notes?: string;
+  history: {                // Log des changements
+    date: Date;
+    quantityChange: number;
+    action: 'add' | 'remove';
+  }[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// ... existing code ...
+
 // Statut équipement
-export type EquipmentStatus = 'נופק לחייל' | 'לא חתום' | 'זוכה' | 'הופקד' | 'אופסן' | '';
+export type EquipmentStatus = 'נופק לחייל' | 'לא חתום' | 'זוכה' | 'הופקד' | 'אופסן' | 'תקול' | '';
 
 // Équipement combat (מנות וציוד)
 export interface CombatEquipment {
   id: string;
   name: string;           // שם הציוד
+  nameKey?: string;       // Nom normalisé pour unicité
   category: string;       // קטגוריה
+  categoryKey?: string;   // Catégorie normalisée
   serial?: string;        // מסטב
   hasSubEquipment: boolean;
   subEquipments?: SubEquipment[];
@@ -49,10 +90,11 @@ export interface SubEquipment {
   serial?: string;
 }
 
-// Équipement vêtement (ביגוד)
+// Équipement vêtement (אפנאות)
 export interface ClothingEquipment {
   id: string;
   name: string;
+  nameKey?: string;       // Nom normalisé pour unicité
   yamach?: number;        // ימח - quantité totale
 }
 
@@ -114,9 +156,13 @@ export type RootStackParamList = {
   Login: undefined;
   Home: undefined;
   // Module commun
-  SoldierSearch: { mode: 'combat' | 'clothing' };
+  SoldierSearch: {
+    mode: 'signature' | 'return' | 'storage' | 'retrieve' | 'rsp_issue' | 'rsp_credit';
+    type?: 'combat' | 'clothing'
+  };
   SoldierDetails: { soldierId: string };
   AddSoldier: undefined;
+  EditSoldier: { soldier: Soldier };
   // Module Arme
   ArmeHome: undefined;
   ManotList: undefined;
@@ -147,6 +193,7 @@ export type RootStackParamList = {
   UserManagement: undefined;
   HoldingsRecalculate: undefined;
   DatabaseDebug: undefined;
+  Migration: undefined;
   // Signature
   SignatureScreen: {
     soldierId: string;
@@ -154,14 +201,22 @@ export type RootStackParamList = {
     type: 'combat' | 'clothing';
     items: AssignmentItem[];
   };
+  RspMigration: undefined;
+  SoldierHistory: undefined;
+  // Module RSP
+  RspHome: undefined;
+  RspEquipment: undefined;
+  RspAssignment: undefined;
+  RspTable: undefined;
+  RspReadOnly: undefined;
 };
 
-// Holdings (équipement actuellement détenu par un soldat)
 export interface HoldingItem {
   equipmentId: string;
   equipmentName: string;
   quantity: number;
   serials: string[];  // Liste des numéros de série possédés
+  status?: 'assigned' | 'stored'; // 'assigned' = en main, 'stored' = en אפסון
 }
 
 export interface SoldierHoldings {
@@ -202,7 +257,7 @@ export interface DashboardStats {
 // ============================================
 
 // Statut d'une arme dans l'inventaire
-export type WeaponStatus = 'available' | 'assigned' | 'storage';
+export type WeaponStatus = 'available' | 'assigned' | 'stored' | 'defective';
 
 // Item d'inventaire d'arme
 export interface WeaponInventoryItem {

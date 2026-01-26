@@ -43,7 +43,7 @@ export async function exportAssignmentsToCSV(assignments: Assignment[]): Promise
     soldierId: a.soldierId,
     soldierName: a.soldierName,
     soldierPersonalNumber: a.soldierPersonalNumber,
-    type: a.type === 'combat' ? 'ציוד לחימה' : 'ביגוד',
+    type: a.type === 'combat' ? 'ציוד לחימה' : 'אפנאות',
     status: a.status,
     timestamp: new Date(a.timestamp).toLocaleDateString('he-IL'),
     itemsCount: a.items.length,

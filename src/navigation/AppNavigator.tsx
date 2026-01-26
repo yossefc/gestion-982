@@ -13,6 +13,7 @@ import LoginScreen from '../screens/auth/LoginScreen';
 import HomeScreen from '../screens/common/HomeScreen';
 import SoldierSearchScreen from '../screens/common/SoldierSearchScreen';
 import AddSoldierScreen from '../screens/common/AddSoldierScreen';
+import EditSoldierScreen from '../screens/common/EditSoldierScreen';
 import VetementHomeScreen from '../screens/vetement/VetementHomeScreen';
 import ClothingSignatureScreen from '../screens/vetement/ClothingSignatureScreen';
 import ClothingDashboardScreen from '../screens/vetement/ClothingDashboardScreen';
@@ -38,6 +39,14 @@ import WeaponStorageScreen from '../screens/arme/WeaponStorageScreen';
 import AdminPanelScreen from '../screens/admin/AdminPanelScreen';
 import UserManagementScreen from '../screens/admin/UserManagementScreen';
 import DatabaseDebugScreen from '../screens/admin/DatabaseDebugScreen';
+import MigrationScreen from '../screens/admin/MigrationScreen';
+import RspMigrationScreen from '../screens/admin/RspMigrationScreen';
+import SoldierHistoryScreen from '../screens/admin/SoldierHistoryScreen';
+import RspHomeScreen from '../screens/arme/RspHomeScreen';
+import RspEquipmentScreen from '../screens/arme/RspEquipmentScreen';
+import RspAssignmentScreen from '../screens/arme/RspAssignmentScreen';
+import RspTableScreen from '../screens/arme/RspTableScreen';
+import RspReadOnlyScreen from '../screens/arme/RspReadOnlyScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -59,7 +68,7 @@ const AppNavigator: React.FC = () => {
         screenOptions={{
           headerShown: false,
           animation: 'slide_from_left',
-          contentStyle: { backgroundColor: Colors.background.primary },
+          contentStyle: { backgroundColor: Colors.background },
         }}
       >
         {!user ? (
@@ -74,6 +83,7 @@ const AppNavigator: React.FC = () => {
             {/* Écrans communs */}
             <Stack.Screen name="SoldierSearch" component={SoldierSearchScreen} />
             <Stack.Screen name="AddSoldier" component={AddSoldierScreen} />
+            <Stack.Screen name="EditSoldier" component={EditSoldierScreen} />
 
             {/* Module Vêtement */}
             <Stack.Screen name="VetementHome" component={VetementHomeScreen} />
@@ -105,6 +115,16 @@ const AppNavigator: React.FC = () => {
             <Stack.Screen name="AdminPanel" component={AdminPanelScreen} />
             <Stack.Screen name="UserManagement" component={UserManagementScreen} />
             <Stack.Screen name="DatabaseDebug" component={DatabaseDebugScreen} />
+            <Stack.Screen name="Migration" component={MigrationScreen} />
+            <Stack.Screen name="RspMigration" component={RspMigrationScreen} />
+            <Stack.Screen name="SoldierHistory" component={SoldierHistoryScreen} />
+
+            {/* Module RSP */}
+            <Stack.Screen name="RspHome" component={RspHomeScreen} />
+            <Stack.Screen name="RspEquipment" component={RspEquipmentScreen} />
+            <Stack.Screen name="RspAssignment" component={RspAssignmentScreen} />
+            <Stack.Screen name="RspTable" component={RspTableScreen} />
+            <Stack.Screen name="RspReadOnly" component={RspReadOnlyScreen} />
 
             {/* Signature commune */}
             <Stack.Screen name="SignatureScreen" component={ClothingSignatureScreen} />
@@ -120,7 +140,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: Colors.background.primary,
+    backgroundColor: Colors.background,
   },
 });
 
