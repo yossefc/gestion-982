@@ -1,5 +1,5 @@
 // Contexte d'authentification pour gérer l'état de connexion
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, ReactNode } from 'react';
 import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
@@ -62,7 +62,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           } else {
             // Utilisateur Firebase sans données Firestore - plus nécessaire si on utilise signUp correctement
             // mais on le garde par sécurité pour les comptes existants
-            console.log(`Creating Firestore profile for user: ${fbUser.email}`);
 
             const defaultUserData = {
               email: fbUser.email || '',
@@ -81,7 +80,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             });
           }
         } catch (error) {
-          console.error('Error fetching user data:', error);
+          // Error fetching user data
         }
       } else {
         setUser(null);
@@ -147,13 +146,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       await firebaseSignOut(auth);
     } catch (error) {
-      console.error('Error signing out:', error);
       throw error;
     }
   };
 
   // Vérifier les permissions selon le rôle
-  const hasPermission = (module: 'arme' | 'vetement' | 'admin'): boolean => {
+  const hasPermission = useCallback((module: 'arme' | 'vetement' | 'admin'): boolean => {
     if (!user) return false;
 
     switch (user.role) {
@@ -168,9 +166,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       default:
         return false;
     }
-  };
+  }, [user]);
 
-  const value = {
+  const value = useMemo(() => ({
     user,
     firebaseUser,
     loading,
@@ -180,7 +178,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     signUp,
     signOut,
     hasPermission,
-  };
+  }), [user, firebaseUser, loading, signIn, signUp, signOut, hasPermission]);
 
   return (
     <AuthContext.Provider value={value}>

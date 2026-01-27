@@ -3,7 +3,7 @@
  * Design militaire moderne - équilibré et plaisant
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -70,7 +70,7 @@ const HomeScreen: React.FC = () => {
   const canAccessVetement = userRole === 'admin' || userRole === 'both' || userRole === 'vetement';
   const canAccessAdmin = userRole === 'admin';
 
-  const getRoleConfig = () => {
+  const roleConfig = useMemo(() => {
     const config: Record<string, { label: string; color: string }> = {
       admin: { label: 'מנהל מערכת', color: '#6366F1' },
       both: { label: 'הרשאה מלאה', color: '#10B981' },
@@ -78,12 +78,22 @@ const HomeScreen: React.FC = () => {
       vetement: { label: 'אפנאות', color: '#3B82F6' },
     };
     return config[userRole || ''] || { label: 'משתמש', color: '#64748B' };
-  };
-
-  const roleConfig = getRoleConfig();
+  }, [userRole]);
 
   // Couleurs pour les compagnies
-  const companyColors = ['#10B981', '#3B82F6', '#F59E0B', '#8B5CF6', '#EC4899', '#14B8A6'];
+  const companyColors = useMemo(() => ['#10B981', '#3B82F6', '#F59E0B', '#8B5CF6', '#EC4899', '#14B8A6'], []);
+
+  // Liste des compagnies préparée
+  const companiesList = useMemo(() => {
+    return Object.entries(stats.byCompany)
+      .sort(([a], [b]) => a.localeCompare(b, 'he'))
+      .map(([company, count], index) => ({
+        company,
+        count,
+        color: companyColors[index % companyColors.length],
+        percentage: stats.totalSoldiers > 0 ? (count / stats.totalSoldiers) * 100 : 0,
+      }));
+  }, [stats.byCompany, stats.totalSoldiers, companyColors]);
 
   if (loading) {
     return (
@@ -153,32 +163,25 @@ const HomeScreen: React.FC = () => {
         </View>
 
         <View style={styles.companiesCard}>
-          {Object.entries(stats.byCompany)
-            .sort(([a], [b]) => a.localeCompare(b, 'he'))
-            .map(([company, count], index) => {
-              const color = companyColors[index % companyColors.length];
-              const percentage = stats.totalSoldiers > 0 ? (count / stats.totalSoldiers) * 100 : 0;
-
-              return (
-                <View key={company} style={styles.companyItem}>
-                  <View style={styles.companyInfo}>
-                    <View style={[styles.companyDot, { backgroundColor: color }]} />
-                    <Text style={styles.companyName}>{company}</Text>
-                  </View>
-                  <View style={styles.companyStats}>
-                    <View style={styles.companyBarContainer}>
-                      <View
-                        style={[
-                          styles.companyBar,
-                          { width: `${percentage}%`, backgroundColor: color + '40' }
-                        ]}
-                      />
-                    </View>
-                    <Text style={styles.companyCount}>{count}</Text>
-                  </View>
+          {companiesList.map(({ company, count, color, percentage }) => (
+            <View key={company} style={styles.companyItem}>
+              <View style={styles.companyInfo}>
+                <View style={[styles.companyDot, { backgroundColor: color }]} />
+                <Text style={styles.companyName}>{company}</Text>
+              </View>
+              <View style={styles.companyStats}>
+                <View style={styles.companyBarContainer}>
+                  <View
+                    style={[
+                      styles.companyBar,
+                      { width: `${percentage}%`, backgroundColor: color + '40' }
+                    ]}
+                  />
                 </View>
-              );
-            })}
+                <Text style={styles.companyCount}>{count}</Text>
+              </View>
+            </View>
+          ))}
         </View>
 
         {/* Modules */}

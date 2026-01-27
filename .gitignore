@@ -51,7 +51,10 @@ serviceAccountKey.json
 
 # Temp/debug files
 .firebase/
-push_details.txt
-push_error.txt
+push_*.txt
 nul
+*-export*.json
 firestore-export*.json
+
+# Scripts archives
+scripts/archived/

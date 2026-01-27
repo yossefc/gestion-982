@@ -22,6 +22,7 @@ import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Co
 import { clothingEquipmentService } from '../../services/firebaseService';
 import { assignmentService } from '../../services/assignmentService';
 import { transactionalAssignmentService } from '../../services/transactionalAssignmentService';
+import { clothingStockService, EquipmentStock } from '../../services/clothingStockService';
 import { useAuth } from '../../contexts/AuthContext';
 import { openWhatsAppChat } from '../../services/whatsappService';
 
@@ -54,6 +55,7 @@ const ClothingSignatureScreen: React.FC = () => {
   const [signatureData, setSignatureData] = useState<string | null>(null);
   const [scrollEnabled, setScrollEnabled] = useState(true);
   const [showSignature, setShowSignature] = useState(false);
+  const [stockData, setStockData] = useState<Map<string, EquipmentStock>>(new Map());
 
   useEffect(() => {
     if (!authLoading) {
@@ -66,6 +68,12 @@ const ClothingSignatureScreen: React.FC = () => {
       setLoading(true);
       const equipmentData = await clothingEquipmentService.getAll();
       setEquipment(equipmentData);
+
+      // Charger les stocks disponibles
+      const stocks = await clothingStockService.getAllEquipmentStocks();
+      const stockMap = new Map<string, EquipmentStock>();
+      stocks.forEach(stock => stockMap.set(stock.equipmentId, stock));
+      setStockData(stockMap);
 
       // Charger ce que le soldat a actuellement pour pré-remplir depuis soldier_holdings
       const currentHoldings = await transactionalAssignmentService.getCurrentHoldings(soldier.id, 'clothing');
@@ -336,9 +344,22 @@ const ClothingSignatureScreen: React.FC = () => {
                       </View>
                       <View style={styles.equipmentInfo}>
                         <Text style={styles.equipmentName}>{eq.name}</Text>
-                        {eq.yamach !== undefined && eq.yamach !== null && (
-                          <Text style={styles.equipmentYamach}>ימ״ח: {eq.yamach}</Text>
-                        )}
+                        {(() => {
+                          const stock = stockData.get(eq.id);
+                          const currentSelection = item?.quantity || 0;
+                          const originalAvailable = stock?.available ?? (eq.yamach || 0);
+                          const remainingAfterSelection = isSelected
+                            ? originalAvailable - currentSelection
+                            : originalAvailable;
+                          return (
+                            <Text style={[
+                              styles.equipmentYamach,
+                              remainingAfterSelection < 0 && { color: '#EF4444' }
+                            ]}>
+                              נותר: {remainingAfterSelection} (ימ״ח: {stock?.yamach ?? eq.yamach ?? 0})
+                            </Text>
+                          );
+                        })()}
                       </View>
                     </TouchableOpacity>
 

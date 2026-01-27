@@ -22,8 +22,6 @@ export async function downloadPdf(
     const cacheDir = FileSystem.cacheDirectory || '';
     const fileUri = `${cacheDir}${fileName}`;
 
-    console.log('Downloading PDF from:', pdfUrl);
-    console.log('Saving to:', fileUri);
 
     // Télécharger le fichier
     const downloadResult = await FileSystem.downloadAsync(pdfUrl, fileUri);
@@ -32,10 +30,8 @@ export async function downloadPdf(
       throw new Error(`Failed to download PDF: ${downloadResult.status}`);
     }
 
-    console.log('PDF downloaded successfully:', downloadResult.uri);
     return downloadResult.uri;
   } catch (error) {
-    console.error('Error downloading PDF:', error);
     throw error;
   }
 }
@@ -67,7 +63,6 @@ export async function sharePdf(
       return;
     }
 
-    console.log('Sharing PDF from:', fileUri);
 
     // Partager le fichier
     await Sharing.shareAsync(fileUri, {
@@ -76,9 +71,7 @@ export async function sharePdf(
       UTI: 'com.adobe.pdf', // iOS Universal Type Identifier
     });
 
-    console.log('PDF shared successfully');
   } catch (error) {
-    console.error('Error sharing PDF:', error);
     Alert.alert(
       'שגיאה',
       'נכשל בשיתוף הקובץ. אנא נסה שנית.'
@@ -110,7 +103,6 @@ export async function downloadAndSharePdf(
 
     return true;
   } catch (error) {
-    console.error('Error in downloadAndSharePdf:', error);
     return false;
   }
 }
@@ -140,7 +132,6 @@ export async function openWhatsAppChat(
     // URL WhatsApp (fonctionne sur iOS et Android)
     const whatsappUrl = `whatsapp://send?phone=${cleanNumber}&text=${encodedMessage}`;
 
-    console.log('Opening WhatsApp URL:', whatsappUrl);
 
     // Ouvrir WhatsApp
     const { Linking } = require('react-native');
@@ -156,7 +147,6 @@ export async function openWhatsAppChat(
 
     await Linking.openURL(whatsappUrl);
   } catch (error) {
-    console.error('Error opening WhatsApp:', error);
     Alert.alert(
       'שגיאה',
       'נכשל בפתיחת WhatsApp. אנא ודא שהאפליקציה מותקנת.'
@@ -190,11 +180,9 @@ export async function cleanupOldPdfs(daysOld: number = 7): Promise<void> {
         const fileAge = now - info.modificationTime;
         if (fileAge > maxAge) {
           await FileSystem.deleteAsync(fileUri);
-          console.log(`Deleted old PDF: ${file}`);
         }
       }
     }
   } catch (error) {
-    console.error('Error cleaning up old PDFs:', error);
   }
 }

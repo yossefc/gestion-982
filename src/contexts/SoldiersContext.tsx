@@ -3,7 +3,7 @@
  * Évite de recharger les soldats à chaque écran
  */
 
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
 import { soldierService } from '../services/firebaseService';
 
 export interface Soldier {
@@ -50,12 +50,9 @@ export const SoldiersProvider: React.FC<SoldiersProviderProps> = ({ children }) 
     try {
       setLoading(true);
       setError(null);
-      console.log('📥 Chargement des soldats depuis Firestore...');
       const data = await soldierService.getAll();
       setSoldiers(data);
-      console.log(`✓ ${data.length} soldats chargés en cache`);
     } catch (err) {
-      console.error('Erreur lors du chargement des soldats:', err);
       setError('Impossible de charger les soldats');
     } finally {
       setLoading(false);
@@ -64,7 +61,6 @@ export const SoldiersProvider: React.FC<SoldiersProviderProps> = ({ children }) 
 
   // Rafraîchir les soldats (pour pull-to-refresh)
   const refreshSoldiers = useCallback(async () => {
-    console.log('🔄 Rafraîchissement du cache des soldats...');
     await loadSoldiers();
   }, [loadSoldiers]);
 
@@ -78,7 +74,6 @@ export const SoldiersProvider: React.FC<SoldiersProviderProps> = ({ children }) 
       // Ajouter et trier par nom
       const updated = [...prev, soldier];
       updated.sort((a, b) => a.name.localeCompare(b.name));
-      console.log(`➕ Soldat ajouté au cache: ${soldier.name}`);
       return updated;
     });
   }, []);
@@ -93,7 +88,6 @@ export const SoldiersProvider: React.FC<SoldiersProviderProps> = ({ children }) 
       if (updates.name) {
         updated.sort((a, b) => a.name.localeCompare(b.name));
       }
-      console.log(`✏️ Soldat mis à jour dans le cache: ${id}`);
       return updated;
     });
   }, []);
@@ -102,7 +96,6 @@ export const SoldiersProvider: React.FC<SoldiersProviderProps> = ({ children }) 
   const removeSoldier = useCallback((id: string) => {
     setSoldiers((prev) => {
       const filtered = prev.filter(s => s.id !== id);
-      console.log(`🗑️ Soldat supprimé du cache: ${id}`);
       return filtered;
     });
   }, []);
@@ -112,7 +105,7 @@ export const SoldiersProvider: React.FC<SoldiersProviderProps> = ({ children }) 
     loadSoldiers();
   }, [loadSoldiers]);
 
-  const value: SoldiersContextType = {
+  const value: SoldiersContextType = useMemo(() => ({
     soldiers,
     loading,
     error,
@@ -120,7 +113,7 @@ export const SoldiersProvider: React.FC<SoldiersProviderProps> = ({ children }) 
     addSoldier,
     updateSoldier,
     removeSoldier,
-  };
+  }), [soldiers, loading, error, refreshSoldiers, addSoldier, updateSoldier, removeSoldier]);
 
   return (
     <SoldiersContext.Provider value={value}>

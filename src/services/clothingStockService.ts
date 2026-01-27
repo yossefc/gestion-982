@@ -82,7 +82,6 @@ export const getEquipmentStock = async (equipmentId: string): Promise<EquipmentS
       byCompany,
     };
   } catch (error) {
-    console.error('Error calculating equipment stock:', error);
     throw error;
   }
 };
@@ -145,7 +144,6 @@ export const getAllEquipmentStocks = async (): Promise<EquipmentStock[]> => {
     // Trier par nom d'équipement
     return stocks.sort((a, b) => a.equipmentName.localeCompare(b.equipmentName, 'he'));
   } catch (error) {
-    console.error('Error calculating all equipment stocks:', error);
     throw error;
   }
 };
@@ -165,7 +163,6 @@ export const isQuantityAvailable = async (equipmentId: string, requestedQuantity
       stock,
     };
   } catch (error) {
-    console.error('Error checking quantity availability:', error);
     return { available: false, stock: null };
   }
 };
@@ -212,7 +209,6 @@ export const getStockSummaryByCompany = async (): Promise<{
       }))
       .sort((a, b) => b.totalItems - a.totalItems);
   } catch (error) {
-    console.error('Error getting stock summary:', error);
     throw error;
   }
 };

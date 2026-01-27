@@ -40,48 +40,12 @@ const convertDocToAssignment = (doc: any): Assignment => {
   };
 };
 
-// DEPRECATED: Cette fonction n'est plus utilisée car les IDs ne sont plus déterministes
-// Utilisez getAssignmentsBySoldier à la place
-export const getCurrentAssignment = async (
-  soldierId: string,
-  type: 'combat' | 'clothing',
-  action?: 'issue' | 'credit'
-): Promise<Assignment | null> => {
-  console.warn('getCurrentAssignment is deprecated. Use getAssignmentsBySoldier instead.');
-
-  try {
-    // Récupérer tous les assignments du soldat et retourner le plus récent
-    const assignments = await getAssignmentsBySoldier(soldierId, type);
-
-    if (assignments.length === 0) {
-      return null;
-    }
-
-    // Filtrer par action si spécifié
-    let filtered = assignments;
-    if (action) {
-      filtered = assignments.filter(a => a.action === action);
-    }
-
-    // Retourner le plus récent
-    if (filtered.length === 0) {
-      return null;
-    }
-
-    return filtered[0]; // Déjà trié par timestamp desc
-  } catch (error) {
-    console.error('Error getting current assignment:', error);
-    return null;
-  }
-};
-
 // Récupérer toutes les attributions d'un soldat
 export const getAssignmentsBySoldier = async (
   soldierId: string,
   type?: 'combat' | 'clothing'
 ): Promise<Assignment[]> => {
   try {
-    console.log(`[getAssignmentsBySoldier] Fetching assignments for soldierId: ${soldierId}, type: ${type}`);
     let q;
     if (type) {
       q = query(
@@ -99,21 +63,9 @@ export const getAssignmentsBySoldier = async (
     }
 
     const snapshot = await getDocs(q);
-    console.log(`[getAssignmentsBySoldier] Found ${snapshot.docs.length} documents`);
     const assignments = snapshot.docs.map(convertDocToAssignment);
-    console.log('[getAssignmentsBySoldier] Converted assignments:',
-      assignments.map(a => ({
-        id: a.id,
-        type: a.type,
-        action: a.action,
-        status: a.status,
-        itemsCount: a.items.length,
-        timestamp: a.timestamp
-      }))
-    );
     return assignments;
   } catch (error) {
-    console.error('Error getting assignments:', error);
     throw error;
   }
 };
@@ -131,7 +83,6 @@ export const getAssignmentsByType = async (type: 'combat' | 'clothing'): Promise
     const snapshot = await getDocs(q);
     return snapshot.docs.map(convertDocToAssignment);
   } catch (error) {
-    console.error('Error getting assignments by type:', error);
     throw error;
   }
 };
@@ -147,7 +98,6 @@ export const getAll = async (): Promise<Assignment[]> => {
     const snapshot = await getDocs(q);
     return snapshot.docs.map(convertDocToAssignment);
   } catch (error) {
-    console.error('Error getting all assignments:', error);
     throw error;
   }
 };
@@ -161,10 +111,6 @@ export const calculateCurrentHoldings = async (
   try {
     const assignments = await getAssignmentsBySoldier(soldierId, type);
 
-    console.log(`[calculateCurrentHoldings] soldierId: ${soldierId}, type: ${type}`);
-    console.log(`[calculateCurrentHoldings] Found ${assignments.length} assignments:`,
-      assignments.map(a => ({ id: a.id, action: a.action, items: a.items.length, timestamp: a.timestamp })));
-
     // Map pour accumuler les items: equipmentId -> item
     const itemsMap = new Map<string, AssignmentItem>();
 
@@ -177,14 +123,12 @@ export const calculateCurrentHoldings = async (
     sortedAssignments.forEach(assignment => {
       const action = assignment.action || 'issue'; // Par défaut 'issue' si pas d'action
 
-      console.log(`[calculateCurrentHoldings] Processing assignment ${assignment.id}, action: ${action}, items:`, assignment.items);
 
       assignment.items.forEach(item => {
         const existing = itemsMap.get(item.equipmentId);
 
         if (action === 'issue' || action === 'add') {
           // AJOUTER à l'inventaire
-          console.log(`[calculateCurrentHoldings] ADDING item ${item.equipmentId} (${item.equipmentName}), qty: ${item.quantity}`);
           if (existing) {
             existing.quantity += item.quantity;
             // Ajouter le serial s'il existe et n'est pas déjà présent
@@ -198,7 +142,6 @@ export const calculateCurrentHoldings = async (
           }
         } else if (action === 'credit' || action === 'return') {
           // RETIRER de l'inventaire
-          console.log(`[calculateCurrentHoldings] REMOVING item ${item.equipmentId} (${item.equipmentName}), qty: ${item.quantity}`);
           if (existing) {
             existing.quantity -= item.quantity;
 
@@ -222,11 +165,9 @@ export const calculateCurrentHoldings = async (
         } else if (action === 'storage') {
           // אפסון - L'équipement reste au soldat, on ne fait rien
           // Le statut est géré dans weapons_inventory, pas dans les holdings
-          console.log(`[calculateCurrentHoldings] STORAGE (no change) item ${item.equipmentId} (${item.equipmentName})`);
           // Ne rien faire - l'équipement reste dans itemsMap tel quel
         } else if (action === 'retrieve') {
           // Reprendre du storage - Ne rien faire non plus
-          console.log(`[calculateCurrentHoldings] RETRIEVE (no change) item ${item.equipmentId} (${item.equipmentName})`);
           // Ne rien faire - l'équipement reste dans itemsMap tel quel
         }
       });
@@ -234,10 +175,8 @@ export const calculateCurrentHoldings = async (
 
     // Retourner les items avec quantity > 0
     const result = Array.from(itemsMap.values()).filter(item => item.quantity > 0);
-    console.log(`[calculateCurrentHoldings] Final result: ${result.length} items`, result);
     return result;
   } catch (error) {
-    console.error('Error calculating current holdings:', error);
     throw error;
   }
 };
@@ -249,13 +188,6 @@ export const createAssignment = async (
   signatureBase64?: string
 ): Promise<string> => {
   try {
-    console.log('[createAssignment] Creating assignment:', {
-      soldierId: assignment.soldierId,
-      type: assignment.type,
-      action: assignment.action,
-      itemsCount: assignment.items.length,
-      status: assignment.status
-    });
 
     // LOGIQUE SPÉCIALE: Si c'est une החתמה (issue) et que le soldat a déjà des équipements,
     // on crée d'abord un זיכוי automatique pour "rendre" tout ce qu'il a
@@ -263,7 +195,6 @@ export const createAssignment = async (
       const currentHoldings = await calculateCurrentHoldings(assignment.soldierId, assignment.type);
 
       if (currentHoldings.length > 0) {
-        console.log('[createAssignment] Soldat a déjà des équipements, création d\'un credit automatique pour remplacer');
 
         // Créer un assignment 'credit' automatique pour tout rendre
         const creditData: any = {
@@ -286,7 +217,6 @@ export const createAssignment = async (
 
         // Créer le credit automatique
         await addDoc(collection(db, COLLECTION_NAME), creditData);
-        console.log('[createAssignment] Credit automatique créé pour remplacer les équipements existants');
       }
     }
 
@@ -326,24 +256,12 @@ export const createAssignment = async (
       data.signature = signatureBase64;
     }
 
-    console.log('[createAssignment] Data to be saved:', {
-      ...data,
-      signature: signatureBase64 ? '(base64 string)' : undefined,
-      items: data.items.map((item: any) => ({
-        equipmentId: item.equipmentId,
-        equipmentName: item.equipmentName,
-        quantity: item.quantity
-      }))
-    });
-
     // Créer un nouveau document avec ID auto-généré (permet l'historique complet)
     const docRef = await addDoc(collection(db, COLLECTION_NAME), data);
 
-    console.log(`[createAssignment] Assignment ${docRef.id} created successfully`);
 
     return docRef.id;
   } catch (error) {
-    console.error('Error creating assignment:', error);
     throw error;
   }
 };
@@ -360,7 +278,6 @@ export const updateAssignmentStatus = async (
       updatedAt: Timestamp.now(),
     });
   } catch (error) {
-    console.error('Error updating assignment status:', error);
     throw error;
   }
 };
@@ -377,7 +294,6 @@ export const updateAssignmentPdfUrl = async (
       updatedAt: Timestamp.now(),
     });
   } catch (error) {
-    console.error('Error updating assignment PDF URL:', error);
     throw error;
   }
 };
@@ -418,7 +334,6 @@ export const returnEquipment = async (
       updatedAt: Timestamp.now(),
     });
   } catch (error) {
-    console.error('Error returning equipment:', error);
     throw error;
   }
 };
@@ -484,7 +399,6 @@ export const getSoldiersWithCurrentHoldings = async (
     // Trier par nombre total décroissant
     return results.sort((a, b) => b.totalQuantity - a.totalQuantity);
   } catch (error) {
-    console.error('Error getting soldiers with current holdings:', error);
     throw error;
   }
 };
@@ -506,7 +420,6 @@ export const getAssignmentStats = async (type: 'combat' | 'clothing'): Promise<{
       returned: assignments.filter(a => a.status === 'זוכה').length,
     };
   } catch (error) {
-    console.error('Error getting assignment stats:', error);
     throw error;
   }
 };
@@ -515,7 +428,6 @@ export const getAssignmentStats = async (type: 'combat' | 'clothing'): Promise<{
  * Service object for assignment management
  */
 export const assignmentService = {
-  getCurrentAssignment,
   getAssignmentsBySoldier,
   getAssignmentsByType,
   getByType: getAssignmentsByType, // Alias for backward compatibility

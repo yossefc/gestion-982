@@ -63,7 +63,6 @@ export const printQueueService = {
     }
   ): Promise<string> {
     try {
-      console.log('[PrintQueue] Adding print job to queue...');
 
       // Keep base64 string as-is (don't convert to Uint8Array)
       let pdfBase64: string;
@@ -83,7 +82,6 @@ export const printQueueService = {
       const timestamp = Date.now();
       const fileName = `${jobData.documentType}_${jobData.soldierPersonalNumber}_${timestamp}.pdf`;
 
-      console.log('[PrintQueue] Storing PDF as base64 in Firestore...');
 
       // Créer l'entrée dans la file d'attente avec le PDF en base64
       // Note: Firestore permet 1MB par document, suffisant pour la plupart des PDFs
@@ -102,11 +100,9 @@ export const printQueueService = {
       };
 
       const docRef = await addDoc(collection(db, PRINT_QUEUE_COLLECTION), printJob);
-      console.log('[PrintQueue] Print job added to queue:', docRef.id);
 
       return docRef.id;
     } catch (error) {
-      console.error('[PrintQueue] Error adding print job:', error);
       throw error;
     }
   },
@@ -119,7 +115,6 @@ export const printQueueService = {
     callback: (job: PrintJob) => void,
     onError?: (error: Error) => void
   ): () => void {
-    console.log('[PrintQueue] Starting to listen for print jobs...');
 
     const q = query(
       collection(db, PRINT_QUEUE_COLLECTION),
@@ -139,13 +134,11 @@ export const printQueueService = {
               printedAt: change.doc.data().printedAt?.toDate(),
             } as PrintJob;
 
-            console.log('[PrintQueue] New print job detected:', job.id);
             callback(job);
           }
         });
       },
       (error) => {
-        console.error('[PrintQueue] Error listening for print jobs:', error);
         if (onError) onError(error);
       }
     );
@@ -164,9 +157,7 @@ export const printQueueService = {
         printedBy: printerId,
         printStartedAt: Timestamp.now(),
       });
-      console.log('[PrintQueue] Job marked as printing:', jobId);
     } catch (error) {
-      console.error('[PrintQueue] Error marking job as printing:', error);
       throw error;
     }
   },
@@ -181,9 +172,7 @@ export const printQueueService = {
         status: 'completed',
         printedAt: Timestamp.now(),
       });
-      console.log('[PrintQueue] Job marked as completed:', jobId);
     } catch (error) {
-      console.error('[PrintQueue] Error marking job as completed:', error);
       throw error;
     }
   },
@@ -199,9 +188,7 @@ export const printQueueService = {
         error,
         failedAt: Timestamp.now(),
       });
-      console.log('[PrintQueue] Job marked as failed:', jobId, error);
     } catch (error) {
-      console.error('[PrintQueue] Error marking job as failed:', error);
       throw error;
     }
   },
@@ -225,7 +212,6 @@ export const printQueueService = {
         printedAt: doc.data().printedAt?.toDate(),
       })) as PrintJob[];
     } catch (error) {
-      console.error('[PrintQueue] Error getting pending jobs:', error);
       throw error;
     }
   },
@@ -252,10 +238,8 @@ export const printQueueService = {
         deletedCount++;
       }
 
-      console.log('[PrintQueue] Cleaned up', deletedCount, 'old jobs');
       return deletedCount;
     } catch (error) {
-      console.error('[PrintQueue] Error cleaning up old jobs:', error);
       throw error;
     }
   },

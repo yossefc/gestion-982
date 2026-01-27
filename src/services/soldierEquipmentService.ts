@@ -78,7 +78,6 @@ export const getSoldierEquipment = async (
             createdAt: data.createdAt?.toDate() || new Date(),
         } as SoldierEquipment;
     } catch (error) {
-        console.error('Error getting soldier equipment:', error);
         throw error;
     }
 };
@@ -166,9 +165,7 @@ export const addEquipmentToSoldier = async (
             await setDoc(docRef, newDoc);
         }
 
-        console.log(`Added ${newItems.length} items to soldier ${soldierId}`);
     } catch (error) {
-        console.error('Error adding equipment to soldier:', error);
         throw error;
     }
 };
@@ -207,11 +204,9 @@ export const removeEquipmentFromSoldier = async (
             lastUpdated: Timestamp.now(),
         });
 
-        console.log(`Removed items from soldier ${soldierId}, remaining: ${updatedItems.length}`);
 
         return updatedItems;
     } catch (error) {
-        console.error('Error removing equipment from soldier:', error);
         throw error;
     }
 };
@@ -233,7 +228,6 @@ export const updatePdfUrl = async (
             lastUpdated: Timestamp.now(),
         });
     } catch (error) {
-        console.error('Error updating PDF URL:', error);
         throw error;
     }
 };
@@ -266,7 +260,6 @@ export const getAllSoldiersWithEquipment = async (
 
         return soldiers.filter(s => s.items.length > 0);
     } catch (error) {
-        console.error('Error getting all soldiers with equipment:', error);
         throw error;
     }
 };
@@ -303,7 +296,6 @@ export const getEquipmentStats = async (
             itemsByCategory,
         };
     } catch (error) {
-        console.error('Error getting equipment stats:', error);
         throw error;
     }
 };
@@ -368,7 +360,6 @@ function mergeSerials(existing?: string, newSerial?: string): string | undefined
  */
 export const migrateFromOldSystem = async (): Promise<void> => {
     try {
-        console.log('Starting migration from old assignment system...');
 
         // Récupérer tous les anciens assignments
         const oldAssignments = await getDocs(collection(db, 'assignments'));
@@ -465,13 +456,10 @@ export const migrateFromOldSystem = async (): Promise<void> => {
                     lastUpdated: Timestamp.now(),
                     createdAt: Timestamp.now(),
                 });
-                console.log(`Migrated soldier ${soldierId}: ${soldier.items.length} items`);
             }
         }
 
-        console.log('Migration completed!');
     } catch (error) {
-        console.error('Error during migration:', error);
         throw error;
     }
 };

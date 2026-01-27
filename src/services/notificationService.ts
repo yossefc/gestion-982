@@ -44,7 +44,6 @@ export const notificationService = {
   async unregisterDeviceToken(userId: string, token: string): Promise<void> {
     try {
       // TODO: Implémenter avec arrayRemove ou update manual
-      console.log('Token unregistration:', userId, token);
     } catch (error) {
       logError('notificationService.unregisterDeviceToken', error);
     }

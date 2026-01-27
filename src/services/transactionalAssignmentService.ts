@@ -229,7 +229,6 @@ export async function issueEquipment(params: IssueEquipmentParams): Promise<stri
     const assignmentSnap = await transaction.get(assignmentRef);
 
     if (assignmentSnap.exists()) {
-      console.log(`[issueEquipment] Request ${requestId} already processed. Returning existing ID.`);
       return assignmentRef.id;
     }
 
@@ -360,7 +359,6 @@ export async function returnEquipment(params: ReturnEquipmentParams): Promise<st
 
     // 4. Nettoyage automatique: si le solde est à 0, effacer les documents de signature (issue) et l'ancienne collection
     if (outstandingCount === 0) {
-      console.log(`[returnEquipment] Soldier ${soldierId} has 0 items. Cleaning issue records and extra collections...`);
       issueDocs.forEach(issueDoc => {
         transaction.delete(issueDoc.ref);
       });
@@ -532,7 +530,6 @@ export async function creditEquipment(
     });
 
     // 4. Nettoyage automatique: le crédit remet toujours à 0
-    console.log(`[creditEquipment] Cleaning issue records and extra collection for soldier ${soldierId}...`);
     issueDocs.forEach(issueDoc => {
       transaction.delete(issueDoc.ref);
     });
@@ -736,7 +733,6 @@ export async function recalculateAllSoldiersHoldings(
   let success = 0;
   let errors = 0;
 
-  console.log(`[recalculateAllSoldiersHoldings] Starting recalculation for ${total} soldiers...`);
 
   for (let i = 0; i < total; i++) {
     const soldierDoc = soldiersSnap.docs[i];
@@ -774,7 +770,6 @@ export async function recalculateAllSoldiersHoldings(
       }
       success++;
     } catch (error) {
-      console.error(`Error recalculating for soldier ${soldierId}:`, error);
       errors++;
     }
 

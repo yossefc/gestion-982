@@ -50,7 +50,6 @@ export const getAllWeapons = async (): Promise<WeaponInventoryItem[]> => {
       return a.serialNumber.localeCompare(b.serialNumber);
     });
   } catch (error) {
-    console.error('Error getting weapons:', error);
     throw error;
   }
 };
@@ -82,7 +81,6 @@ export const getWeaponById = async (id: string): Promise<WeaponInventoryItem | n
         : undefined,
     } as WeaponInventoryItem;
   } catch (error) {
-    console.error('Error getting weapon:', error);
     throw error;
   }
 };
@@ -107,7 +105,6 @@ export const addWeapon = async (
     });
     return docRef.id;
   } catch (error) {
-    console.error('Error adding weapon:', error);
     throw error;
   }
 };
@@ -137,7 +134,6 @@ export const updateWeapon = async (
           assignedDate: Timestamp.fromDate(assignedDate),
         };
       } else {
-        console.error('Invalid assignedDate:', assignedDate);
         // Utiliser la date actuelle comme fallback
         cleanUpdates.assignedTo = {
           ...cleanUpdates.assignedTo,
@@ -155,7 +151,6 @@ export const updateWeapon = async (
       } else if (storageDate instanceof Date && !isNaN(storageDate.getTime())) {
         cleanUpdates.storageDate = Timestamp.fromDate(storageDate);
       } else {
-        console.error('Invalid storageDate:', storageDate);
         cleanUpdates.storageDate = Timestamp.now();
       }
     }
@@ -165,7 +160,6 @@ export const updateWeapon = async (
       updatedAt: Timestamp.now(),
     });
   } catch (error) {
-    console.error('Error updating weapon:', error);
     throw error;
   }
 };
@@ -178,7 +172,6 @@ export const deleteWeapon = async (id: string): Promise<void> => {
     const docRef = doc(db, COLLECTION, id);
     await deleteDoc(docRef);
   } catch (error) {
-    console.error('Error deleting weapon:', error);
     throw error;
   }
 };
@@ -212,7 +205,6 @@ export const getAvailableWeapons = async (): Promise<WeaponInventoryItem[]> => {
       return a.serialNumber.localeCompare(b.serialNumber);
     });
   } catch (error) {
-    console.error('Error getting available weapons:', error);
     throw error;
   }
 };
@@ -246,7 +238,6 @@ export const getAssignedWeapons = async (): Promise<WeaponInventoryItem[]> => {
     // Trier en mémoire
     return weapons.sort((a, b) => a.category.localeCompare(b.category));
   } catch (error) {
-    console.error('Error getting assigned weapons:', error);
     throw error;
   }
 };
@@ -275,7 +266,6 @@ export const getStorageWeapons = async (): Promise<WeaponInventoryItem[]> => {
     // Trier en mémoire
     return weapons.sort((a, b) => a.category.localeCompare(b.category));
   } catch (error) {
-    console.error('Error getting storage weapons:', error);
     throw error;
   }
 };
@@ -310,7 +300,6 @@ export const getWeaponsByCategory = async (category: string): Promise<WeaponInve
     // Trier en mémoire
     return weapons.sort((a, b) => a.serialNumber.localeCompare(b.serialNumber));
   } catch (error) {
-    console.error('Error getting weapons by category:', error);
     throw error;
   }
 };
@@ -345,7 +334,6 @@ export const getWeaponBySerialNumber = async (
         : undefined,
     } as WeaponInventoryItem;
   } catch (error) {
-    console.error('Error getting weapon by serial:', error);
     throw error;
   }
 };
@@ -391,7 +379,6 @@ export const getWeaponsBySoldier = async (soldierId: string): Promise<WeaponInve
       } as WeaponInventoryItem;
     });
   } catch (error) {
-    console.error('Error getting weapons by soldier:', error);
     throw error;
   }
 };
@@ -439,7 +426,6 @@ export const getSoldiersWithStoredWeapons = async (): Promise<Array<{
       count: data.count,
     }));
   } catch (error) {
-    console.error('Error getting soldiers with stored weapons:', error);
     throw error;
   }
 };
@@ -476,7 +462,6 @@ export const assignWeaponToSoldier = async (
       storageDate: deleteField() as any,
     });
   } catch (error) {
-    console.error('Error assigning weapon:', error);
     throw error;
   }
 };
@@ -492,7 +477,6 @@ export const returnWeapon = async (weaponId: string): Promise<void> => {
       storageDate: deleteField() as any,
     });
   } catch (error) {
-    console.error('Error returning weapon:', error);
     throw error;
   }
 };
@@ -518,7 +502,6 @@ export const moveWeaponToStorageWithSoldier = async (
       storageDate: new Date(),
     });
   } catch (error) {
-    console.error('Error moving weapon to storage with soldier:', error);
     throw error;
   }
 };
@@ -534,7 +517,6 @@ export const moveWeaponToStorage = async (weaponId: string): Promise<void> => {
       storageDate: new Date(),
     });
   } catch (error) {
-    console.error('Error moving weapon to storage:', error);
     throw error;
   }
 };
@@ -549,7 +531,6 @@ export const removeWeaponFromStorage = async (weaponId: string): Promise<void> =
       storageDate: deleteField() as any,
     });
   } catch (error) {
-    console.error('Error removing weapon from storage:', error);
     throw error;
   }
 };
@@ -625,7 +606,6 @@ export const getInventoryStats = async (): Promise<{
 
     return stats;
   } catch (error) {
-    console.error('Error getting inventory stats:', error);
     throw error;
   }
 };

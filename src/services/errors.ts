@@ -13,24 +13,24 @@ export const ErrorCodes = {
   SOLDIER_DUPLICATE: 'soldier/duplicate',
   SOLDIER_NOT_FOUND: 'soldier/not-found',
   SOLDIER_INVALID_DATA: 'soldier/invalid-data',
-  
+
   // Équipement
   EQUIPMENT_NOT_FOUND: 'equipment/not-found',
   EQUIPMENT_INSUFFICIENT_STOCK: 'equipment/insufficient-stock',
-  
+
   // Attributions
   ASSIGNMENT_NOT_FOUND: 'assignment/not-found',
   ASSIGNMENT_ALREADY_SIGNED: 'assignment/already-signed',
-  
+
   // Firestore
   FIRESTORE_PERMISSION_DENIED: 'firestore/permission-denied',
   FIRESTORE_NOT_FOUND: 'firestore/not-found',
   FIRESTORE_UNAVAILABLE: 'firestore/unavailable',
-  
+
   // Réseau
   NETWORK_ERROR: 'network/error',
   NETWORK_TIMEOUT: 'network/timeout',
-  
+
   // Général
   UNKNOWN_ERROR: 'unknown/error',
 };
@@ -44,31 +44,31 @@ const errorMessages: { [key: string]: string } = {
   'auth/weak-password': 'הסיסמה חלשה מדי',
   'auth/invalid-email': 'כתובת אימייל לא תקינה',
   'auth/network-request-failed': 'שגיאת רשת - בדוק את החיבור לאינטרנט',
-  
+
   // Firebase Firestore
   'firestore/permission-denied': 'אין הרשאה לביצוע פעולה זו',
   'firestore/not-found': 'המסמך המבוקש לא נמצא',
   'firestore/unavailable': 'שירות Firestore אינו זמין כרגע',
   'firestore/deadline-exceeded': 'הפעולה ארכה זמן רב מדי - נסה שוב',
   'firestore/already-exists': 'המסמך כבר קיים במערכת',
-  
+
   // Soldats
   'soldier/duplicate': 'מספר אישי כבר קיים במערכת',
   'soldier/not-found': 'החייל לא נמצא במערכת',
   'soldier/invalid-data': 'נתוני החייל אינם תקינים',
-  
+
   // Équipement
   'equipment/not-found': 'הציוד לא נמצא במערכת',
   'equipment/insufficient-stock': 'אין מספיק ציוד במלאי',
-  
+
   // Attributions
   'assignment/not-found': 'ההקצאה לא נמצאה במערכת',
   'assignment/already-signed': 'ההקצאה כבר נחתמה',
-  
+
   // Réseau
   'network/error': 'שגיאת רשת - בדוק את החיבור לאינטרנט',
   'network/timeout': 'הפעולה ארכה זמן רב מדי - נסה שוב',
-  
+
   // Général
   'unknown/error': 'אירעה שגיאה לא צפויה',
 };
@@ -86,7 +86,7 @@ export function mapFirebaseError(error: unknown): AppError {
   if (error instanceof FirebaseError) {
     const code = error.code;
     const message = errorMessages[code] || errorMessages['unknown/error'];
-    
+
     return {
       code,
       message,
@@ -105,7 +105,7 @@ export function mapFirebaseError(error: unknown): AppError {
         technicalDetails: error.message,
       };
     }
-    
+
     return {
       code: ErrorCodes.UNKNOWN_ERROR,
       message: error.message || errorMessages['unknown/error'],
@@ -148,14 +148,6 @@ export function isAppError(error: unknown): error is AppError {
  */
 export function logError(context: string, error: unknown): void {
   const appError = mapFirebaseError(error);
-  console.error(`[${context}]`, {
-    code: appError.code,
-    message: appError.message,
-    technical: appError.technicalDetails,
-  });
+  // Error is mapped but we don't log to console anymore
 }
-
-
-
-
 

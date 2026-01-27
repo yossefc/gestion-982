@@ -441,7 +441,6 @@ export const combatEquipmentService = {
         ...cleanData,
       };
     } catch (error) {
-      console.error('Error creating combat equipment:', error);
       throw error;
     }
   },
@@ -460,7 +459,6 @@ export const combatEquipmentService = {
       }
       return null;
     } catch (error) {
-      console.error('Error getting combat equipment by ID:', error);
       throw error;
     }
   },
@@ -474,7 +472,6 @@ export const combatEquipmentService = {
         ...doc.data(),
       })) as CombatEquipment[];
     } catch (error) {
-      console.error('Error getting combat equipment:', error);
       throw error;
     }
   },
@@ -492,7 +489,6 @@ export const combatEquipmentService = {
         ...doc.data(),
       })) as CombatEquipment[];
     } catch (error) {
-      console.error('Error getting equipment by category:', error);
       throw error;
     }
   },
@@ -505,7 +501,6 @@ export const combatEquipmentService = {
       const cleanData = removeUndefinedFields(data);
       await updateDoc(docRef, cleanData);
     } catch (error) {
-      console.error('Error updating combat equipment:', error);
       throw error;
     }
   },
@@ -515,7 +510,6 @@ export const combatEquipmentService = {
     try {
       await deleteDoc(doc(db, COLLECTIONS.COMBAT_EQUIPMENT, id));
     } catch (error) {
-      console.error('Error deleting combat equipment:', error);
       throw error;
     }
   },
@@ -560,7 +554,6 @@ export const clothingEquipmentService = {
         ...cleanData,
       };
     } catch (error) {
-      console.error('Error creating clothing equipment:', error);
       throw error;
     }
   },
@@ -580,7 +573,6 @@ export const clothingEquipmentService = {
 
       return null;
     } catch (error) {
-      console.error('Error getting clothing equipment by id:', error);
       throw error;
     }
   },
@@ -594,7 +586,6 @@ export const clothingEquipmentService = {
         ...doc.data(),
       })) as ClothingEquipment[];
     } catch (error) {
-      console.error('Error getting clothing equipment:', error);
       throw error;
     }
   },
@@ -607,7 +598,6 @@ export const clothingEquipmentService = {
       const cleanData = removeUndefinedFields(data);
       await updateDoc(docRef, cleanData);
     } catch (error) {
-      console.error('Error updating clothing equipment:', error);
       throw error;
     }
   },
@@ -617,7 +607,6 @@ export const clothingEquipmentService = {
     try {
       await deleteDoc(doc(db, COLLECTIONS.CLOTHING_EQUIPMENT, id));
     } catch (error) {
-      console.error('Error deleting clothing equipment:', error);
       throw error;
     }
   },
@@ -652,7 +641,6 @@ export const assignmentService = {
         timestamp: docSnap.data().timestamp?.toDate(),
       } as Assignment;
     } catch (error) {
-      console.error('Error getting current assignment:', error);
       return null;
     }
   },
@@ -766,16 +754,13 @@ export const assignmentService = {
       if (useAdditiveMode) {
         // MODE ADDITIF: merge pour conserver et additionner
         await setDoc(docRef, cleanData, { merge: true });
-        console.log(`Assignment ${assignmentId} updated additively (merged)`);
       } else {
         // MODE REMPLACEMENT: remplace complètement le document
         await setDoc(docRef, cleanData);
-        console.log(`Assignment ${assignmentId} replaced completely`);
       }
 
       return assignmentId;
     } catch (error) {
-      console.error('Error creating assignment:', error);
       throw error;
     }
   },
@@ -795,7 +780,6 @@ export const assignmentService = {
       }
       return null;
     } catch (error) {
-      console.error('Error getting assignment:', error);
       throw error;
     }
   },
@@ -816,7 +800,6 @@ export const assignmentService = {
         timestamp: doc.data().timestamp?.toDate(),
       })) as Assignment[];
     } catch (error) {
-      console.error('Error getting soldier assignments:', error);
       throw error;
     }
   },
@@ -837,7 +820,6 @@ export const assignmentService = {
         timestamp: doc.data().timestamp?.toDate(),
       })) as Assignment[];
     } catch (error) {
-      console.error('Error getting assignments by type:', error);
       throw error;
     }
   },
@@ -848,7 +830,6 @@ export const assignmentService = {
       const docRef = doc(db, COLLECTIONS.ASSIGNMENTS, id);
       await updateDoc(docRef, data);
     } catch (error) {
-      console.error('Error updating assignment:', error);
       throw error;
     }
   },
@@ -858,7 +839,6 @@ export const assignmentService = {
     try {
       await deleteDoc(doc(db, COLLECTIONS.ASSIGNMENTS, id));
     } catch (error) {
-      console.error('Error deleting assignment:', error);
       throw error;
     }
   },
@@ -879,7 +859,6 @@ export const assignmentService = {
       const assignment = await this.getCurrentAssignment(soldierId, type, 'issue');
 
       if (!assignment || !assignment.items || assignment.items.length === 0) {
-        console.log('No assignment found or no items to remove');
         return 'CLOSED';
       }
 
@@ -913,11 +892,9 @@ export const assignmentService = {
       // Déterminer le status
       const status = updatedItems.length === 0 ? 'CLOSED' : 'OPEN';
 
-      console.log(`Assignment updated: ${updatedItems.length} items remaining (${status})`);
 
       return status;
     } catch (error) {
-      console.error('Error removing items from assignment:', error);
       throw error;
     }
   },
@@ -949,7 +926,6 @@ export const assignmentService = {
 
       return assignmentsWithItems;
     } catch (error) {
-      console.error('Error getting assignments with outstanding items:', error);
       throw error;
     }
   },
@@ -989,7 +965,6 @@ export const assignmentService = {
       // Filtrer pour ne retourner que les items avec quantité > 0
       return Array.from(holdingsMap.values()).filter(item => item.quantity > 0);
     } catch (error) {
-      console.error('Error calculating current holdings:', error);
       throw error;
     }
   },
@@ -1033,7 +1008,6 @@ export const assignmentService = {
 
       return result;
     } catch (error) {
-      console.error('Error getting soldiers with current holdings:', error);
       throw error;
     }
   },
@@ -1050,7 +1024,6 @@ export const manaService = {
       const docRef = await addDoc(collection(db, COLLECTIONS.MANOT), manaData);
       return docRef.id;
     } catch (error) {
-      console.error('Error creating mana:', error);
       throw error;
     }
   },
@@ -1069,7 +1042,6 @@ export const manaService = {
       }
       return null;
     } catch (error) {
-      console.error('Error getting mana:', error);
       throw error;
     }
   },
@@ -1083,7 +1055,6 @@ export const manaService = {
         ...doc.data(),
       })) as Mana[];
     } catch (error) {
-      console.error('Error getting manot:', error);
       throw error;
     }
   },
@@ -1094,7 +1065,6 @@ export const manaService = {
       const docRef = doc(db, COLLECTIONS.MANOT, id);
       await updateDoc(docRef, data);
     } catch (error) {
-      console.error('Error updating mana:', error);
       throw error;
     }
   },
@@ -1104,7 +1074,6 @@ export const manaService = {
     try {
       await deleteDoc(doc(db, COLLECTIONS.MANOT, id));
     } catch (error) {
-      console.error('Error deleting mana:', error);
       throw error;
     }
   },
@@ -1173,7 +1142,6 @@ export const dashboardService = {
         })),
       };
     } catch (error) {
-      console.error('Error getting clothing stats:', error);
       throw error;
     }
   },
@@ -1236,7 +1204,6 @@ export const dashboardService = {
         })),
       };
     } catch (error) {
-      console.error('Error getting combat stats:', error);
       throw error;
     }
   },
@@ -1279,7 +1246,6 @@ export const pdfStorageService = {
       const storagePath = `pdf/${type}/${subFolder}/${fileName}`;
       const storageRef = ref(storage, storagePath);
 
-      console.log('Uploading PDF to Storage (REPLACE mode):', fileName);
 
       // Convertir Uint8Array en base64
       const pdfBase64 = pdfToBase64(pdfBytes);
@@ -1291,20 +1257,17 @@ export const pdfStorageService = {
         encoding: FileSystem.EncodingType.Base64,
       });
 
-      console.log('PDF saved to temp file:', tempFileUri);
 
       // Lire le fichier comme blob avec fetch
       const response = await fetch(tempFileUri);
       const blob = await response.blob();
 
-      console.log('PDF blob created, size:', blob.size);
 
       // Upload le blob (REMPLACE le fichier existant)
       const snapshot = await uploadBytes(storageRef, blob, {
         contentType: 'application/pdf',
       });
 
-      console.log('PDF uploaded successfully (replaced):', snapshot.metadata.fullPath);
 
       // Nettoyer le fichier temporaire
       await FileSystem.deleteAsync(tempFileUri, { idempotent: true });
@@ -1313,11 +1276,9 @@ export const pdfStorageService = {
       // ATTENTION: Le token dans l'URL peut changer à chaque upload
       const downloadUrl = await getDownloadURL(snapshot.ref);
 
-      console.log('PDF download URL:', downloadUrl);
 
       return downloadUrl;
     } catch (error) {
-      console.error('Error uploading PDF:', error);
       throw error;
     }
   },
@@ -1333,9 +1294,7 @@ export const pdfStorageService = {
       const { deleteObject } = await import('firebase/storage');
       const storageRef = ref(storage, pdfUrl);
       await deleteObject(storageRef);
-      console.log('PDF deleted successfully');
     } catch (error) {
-      console.error('Error deleting PDF:', error);
       // Ne pas throw - la suppression peut échouer si le fichier n'existe pas
     }
   },
@@ -1359,9 +1318,7 @@ export const pdfStorageService = {
 
       const { deleteObject } = await import('firebase/storage');
       await deleteObject(storageRef);
-      console.log('PDF deleted successfully:', storagePath);
     } catch (error) {
-      console.error('Error deleting PDF by path:', error);
       // Ne pas throw - la suppression peut échouer si le fichier n'existe pas
     }
   },
@@ -1382,7 +1339,6 @@ export const rspEquipmentService = {
       const docRef = await addDoc(collection(db, 'rsp_equipment'), cleanData);
       return docRef.id;
     } catch (error) {
-      console.error('Error creating RSP equipment:', error);
       throw error;
     }
   },
@@ -1397,7 +1353,6 @@ export const rspEquipmentService = {
         createdAt: doc.data().createdAt?.toDate(),
       })) as RspEquipment[];
     } catch (error) {
-      console.error('Error getting RSP equipment:', error);
       throw error;
     }
   },
@@ -1409,7 +1364,6 @@ export const rspEquipmentService = {
       const cleanData = removeUndefinedFields(data);
       await updateDoc(docRef, cleanData);
     } catch (error) {
-      console.error('Error updating RSP equipment:', error);
       throw error;
     }
   },
@@ -1419,7 +1373,6 @@ export const rspEquipmentService = {
     try {
       await deleteDoc(doc(db, 'rsp_equipment', id));
     } catch (error) {
-      console.error('Error deleting RSP equipment:', error);
       throw error;
     }
   }
@@ -1498,7 +1451,6 @@ export const rspAssignmentService = {
         await setDoc(docRef, newAssignment);
       }
     } catch (error) {
-      console.error('Error updating RSP quantity:', error);
       throw error;
     }
   },
@@ -1519,7 +1471,6 @@ export const rspAssignmentService = {
         updatedAt: doc.data().updatedAt?.toDate(),
       })) as RspAssignment[];
     } catch (error) {
-      console.error('Error getting RSP assignments:', error);
       throw error;
     }
   },
@@ -1540,7 +1491,6 @@ export const rspAssignmentService = {
         updatedAt: doc.data().updatedAt?.toDate(),
       })) as RspAssignment[];
     } catch (error) {
-      console.error('Error getting RSP assignments by soldier:', error);
       throw error;
     }
   },

@@ -30,7 +30,6 @@ export interface EquipmentStock {
  */
 export const getAllEquipmentStocks = async (): Promise<EquipmentStock[]> => {
   try {
-    console.log('[getAllEquipmentStocks] Début du calcul global...');
 
     // 1. Charger toutes les données nécessaires en parallèle
     const [allSoldiers, allWeapons, allGear, allHoldings] = await Promise.all([
@@ -177,7 +176,6 @@ export const getAllEquipmentStocks = async (): Promise<EquipmentStock[]> => {
     });
 
   } catch (error) {
-    console.error('Error in getAllEquipmentStocks:', error);
     throw error;
   }
 };

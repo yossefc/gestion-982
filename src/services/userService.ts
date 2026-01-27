@@ -19,7 +19,6 @@ export const getAllUsers = async (): Promise<User[]> => {
 
     return users;
   } catch (error) {
-    console.error('Error getting users:', error);
     throw error;
   }
 };
@@ -32,7 +31,6 @@ export const getUserById = async (userId: string): Promise<User | null> => {
     const users = await getAllUsers();
     return users.find(u => u.id === userId) || null;
   } catch (error) {
-    console.error('Error getting user by ID:', error);
     throw error;
   }
 };
@@ -56,7 +54,6 @@ export const getUserByEmail = async (email: string): Promise<User | null> => {
       createdAt: doc.data().createdAt?.toDate() || new Date(),
     } as User;
   } catch (error) {
-    console.error('Error getting user by email:', error);
     throw error;
   }
 };
@@ -73,7 +70,6 @@ export const addUser = async (userData: Omit<User, 'id' | 'createdAt'>): Promise
 
     return docRef.id;
   } catch (error) {
-    console.error('Error adding user:', error);
     throw error;
   }
 };
@@ -86,7 +82,6 @@ export const updateUser = async (userId: string, updates: Partial<Omit<User, 'id
     const userRef = doc(db, USERS_COLLECTION, userId);
     await updateDoc(userRef, updates);
   } catch (error) {
-    console.error('Error updating user:', error);
     throw error;
   }
 };
@@ -99,7 +94,6 @@ export const updateUserRole = async (userId: string, role: UserRole): Promise<vo
     const userRef = doc(db, USERS_COLLECTION, userId);
     await updateDoc(userRef, { role });
   } catch (error) {
-    console.error('Error updating user role:', error);
     throw error;
   }
 };
@@ -112,7 +106,6 @@ export const deleteUser = async (userId: string): Promise<void> => {
     const userRef = doc(db, USERS_COLLECTION, userId);
     await deleteDoc(userRef);
   } catch (error) {
-    console.error('Error deleting user:', error);
     throw error;
   }
 };
@@ -133,7 +126,6 @@ export const getUsersByRole = async (role: UserRole): Promise<User[]> => {
 
     return users;
   } catch (error) {
-    console.error('Error getting users by role:', error);
     throw error;
   }
 };
@@ -146,7 +138,6 @@ export const getUserCount = async (): Promise<number> => {
     const querySnapshot = await getDocs(collection(db, USERS_COLLECTION));
     return querySnapshot.size;
   } catch (error) {
-    console.error('Error getting user count:', error);
     throw error;
   }
 };
