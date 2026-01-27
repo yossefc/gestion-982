@@ -39,72 +39,68 @@ export async function generateAssignmentPDF(
 
     return pdfBytes;
   } catch (error) {
-    console.error('Error generating PDF:', error);
     throw error;
   }
 }
 
 /**
- * Génère le HTML pour le PDF d'attribution
+ * Génère le HTML pour le PDF d'attribution - Format militaire officiel (style Topes 1003)
  */
 function generateAssignmentHTML(assignment: Assignment): string {
   const titleText = assignment.type === 'combat'
-    ? 'טופס מסירת ציוד לחימה'
-    : 'טופס מסירת אפנאות וציוד אישי';
+    ? 'טופס החתמה על ציוד לחימה'
+    : 'טופס החתמה על אפנאות וציוד אישי';
 
   // S'assurer que timestamp est un Date object
   const timestamp = assignment.timestamp instanceof Date
     ? assignment.timestamp
     : new Date(assignment.timestamp);
 
-  const dateStr = timestamp.toLocaleString('he-IL', {
+  const dateStr = timestamp.toLocaleDateString('he-IL', {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
   });
 
-  // Format additionnel: juste la date (sans heure)
-  const dateOnly = timestamp.toLocaleDateString('he-IL', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  });
-
-  const timeOnly = timestamp.toLocaleTimeString('he-IL', {
+  const timeStr = timestamp.toLocaleTimeString('he-IL', {
     hour: '2-digit',
     minute: '2-digit',
   });
 
   const operatorText = assignment.assignedByName || assignment.assignedByEmail || '';
 
-  // Limiter à 15 items
+  // Limiter à 15 items et calculer les lignes vides pour remplir le tableau
   const maxItems = 15;
   const itemsToShow = assignment.items.slice(0, maxItems);
-  const hasMoreItems = assignment.items.length > maxItems;
+  const emptyRowsCount = Math.max(0, 10 - itemsToShow.length); // Au moins 10 lignes au total
 
-  // Générer les lignes du tableau
+  // Générer les lignes du tableau avec numéro de série
   const itemsRows = itemsToShow
-    .map(
-      item => `
+    .map((item, index) => `
     <tr>
-      <td style="padding: 8px; border: 1px solid #ccc; text-align: right;">${item.equipmentName}</td>
-      <td style="padding: 8px; border: 1px solid #ccc; text-align: center;">${item.quantity}</td>
-      <td style="padding: 8px; border: 1px solid #ccc; text-align: right;">${item.serial || ''}</td>
+      <td class="cell cell-center">${index + 1}</td>
+      <td class="cell cell-right">${item.equipmentName}</td>
+      <td class="cell cell-center">${item.quantity}</td>
+      <td class="cell cell-center">${item.serial || '-'}</td>
+      <td class="cell cell-right"></td>
     </tr>
-  `
-    )
-    .join('');
+  `).join('');
 
-  const moreItemsNote = hasMoreItems
-    ? `<p style="text-align: right; color: #666; font-size: 12px; margin-top: 5px;">(+ ${assignment.items.length - maxItems} items supplémentaires)</p>`
-    : '';
+  // Lignes vides pour le formulaire
+  const emptyRows = Array(emptyRowsCount).fill(0).map((_, index) => `
+    <tr>
+      <td class="cell cell-center">${itemsToShow.length + index + 1}</td>
+      <td class="cell cell-right"></td>
+      <td class="cell cell-center"></td>
+      <td class="cell cell-center"></td>
+      <td class="cell cell-right"></td>
+    </tr>
+  `).join('');
 
   // Image signature en base64
   const signatureImg = assignment.signature
-    ? `<img src="${assignment.signature}" style="max-width: 200px; max-height: 80px; border: 1px solid #ccc;" />`
-    : '<p style="color: #c00;">(Signature non disponible)</p>';
+    ? `<img src="${assignment.signature}" class="signature-img" />`
+    : '<div class="signature-placeholder">חתימה</div>';
 
   return `
 <!DOCTYPE html>
@@ -115,147 +111,301 @@ function generateAssignmentHTML(assignment: Assignment): string {
   <style>
     @page {
       size: A4;
-      margin: 20mm;
+      margin: 10mm;
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
     }
     body {
-      font-family: Arial, sans-serif;
+      font-family: Arial, 'David', sans-serif;
       direction: rtl;
       text-align: right;
-      margin: 0;
-      padding: 20px;
-      font-size: 14px;
+      font-size: 11px;
+      line-height: 1.3;
+      padding: 5mm;
     }
-    h1 {
-      text-align: center;
-      font-size: 24px;
-      margin-bottom: 5px;
-      color: #2c3e50;
-    }
-    h2 {
-      text-align: center;
-      font-size: 16px;
-      margin-top: 0;
+    
+    /* Header */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      border: 2px solid #000;
+      padding: 8px 12px;
       margin-bottom: 10px;
-      color: #7f8c8d;
     }
-    .date-box {
-      background-color: #3498db;
-      color: white;
-      padding: 12px;
+    .header-right {
+      text-align: right;
+    }
+    .header-center {
       text-align: center;
-      border-radius: 8px;
-      margin-bottom: 20px;
-      font-size: 16px;
-      font-weight: bold;
+      flex: 1;
     }
-    .date-box .date {
+    .header-left {
+      text-align: left;
+      min-width: 80px;
+    }
+    .logo-placeholder {
+      width: 60px;
+      height: 60px;
+      border: 1px dashed #999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 9px;
+      color: #666;
+    }
+    .doc-title {
       font-size: 18px;
-      margin-bottom: 5px;
-    }
-    .date-box .time {
-      font-size: 14px;
-      opacity: 0.9;
-    }
-    .soldier-info {
-      border: 2px solid #2c3e50;
-      padding: 15px;
-      margin-bottom: 20px;
-      border-radius: 5px;
-      background-color: #f9f9f9;
-    }
-    .soldier-info p {
-      margin: 8px 0;
-      font-size: 14px;
-    }
-    .soldier-info strong {
       font-weight: bold;
-      color: #2c3e50;
+      margin-bottom: 4px;
     }
-    table {
+    .doc-subtitle {
+      font-size: 12px;
+      color: #333;
+    }
+    .voucher-number {
+      font-size: 10px;
+      margin-top: 8px;
+    }
+    
+    /* Table */
+    .items-table {
       width: 100%;
       border-collapse: collapse;
-      margin: 20px 0;
+      margin: 10px 0;
     }
-    th {
-      background-color: #ecf0f1;
-      padding: 10px;
-      border: 1px solid #bdc3c7;
+    .items-table th {
+      background-color: #e8e8e8;
+      border: 1px solid #000;
+      padding: 6px 4px;
       font-weight: bold;
-      text-align: right;
-    }
-    td {
-      padding: 8px;
-      border: 1px solid #ccc;
-    }
-    .signature-section {
-      margin-top: 30px;
-      text-align: right;
-    }
-    .signature-section strong {
-      display: block;
-      margin-bottom: 10px;
-      font-size: 14px;
-    }
-    .footer {
-      margin-top: 40px;
-      text-align: center;
       font-size: 11px;
-      color: #7f8c8d;
-      border-top: 1px solid #ccc;
-      padding-top: 10px;
+      text-align: center;
     }
-    .meta-info {
-      margin-top: 20px;
-      font-size: 13px;
-      color: #555;
+    .cell {
+      border: 1px solid #000;
+      padding: 5px 4px;
+      min-height: 22px;
+      font-size: 10px;
+    }
+    .cell-center {
+      text-align: center;
+    }
+    .cell-right {
+      text-align: right;
+    }
+    .col-num { width: 6%; }
+    .col-name { width: 30%; }
+    .col-qty { width: 10%; }
+    .col-id { width: 22%; }
+    .col-notes { width: 32%; }
+    
+    /* Signature Section */
+    .signatures-container {
+      display: flex;
+      gap: 10px;
+      margin-top: 15px;
+    }
+    .signature-box {
+      flex: 1;
+      border: 2px solid #000;
+      padding: 10px;
+    }
+    .signature-box-title {
+      font-weight: bold;
+      font-size: 12px;
+      text-align: center;
+      margin-bottom: 8px;
+      background-color: #e8e8e8;
+      padding: 4px;
+      margin: -10px -10px 8px -10px;
+    }
+    .signature-row {
+      display: flex;
+      margin-bottom: 6px;
+      align-items: center;
+    }
+    .signature-label {
+      font-weight: bold;
+      min-width: 60px;
+      font-size: 10px;
+    }
+    .signature-value {
+      flex: 1;
+      border-bottom: 1px solid #000;
+      min-height: 16px;
+      padding: 2px 4px;
+      font-size: 10px;
+    }
+    .signature-area {
+      height: 50px;
+      border: 1px dashed #999;
+      margin-top: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .signature-img {
+      max-width: 150px;
+      max-height: 45px;
+    }
+    .signature-placeholder {
+      color: #999;
+      font-size: 10px;
+    }
+    
+    /* Safety Instructions */
+    .safety-section {
+      margin-top: 15px;
+      border: 2px solid #000;
+      padding: 8px;
+    }
+    .safety-title {
+      font-weight: bold;
+      font-size: 11px;
+      text-align: center;
+      margin-bottom: 6px;
+      text-decoration: underline;
+    }
+    .safety-rules {
+      list-style: none;
+      padding: 0;
+    }
+    .safety-rules li {
+      font-size: 9px;
+      margin-bottom: 4px;
+      padding-right: 15px;
+      position: relative;
+    }
+    .safety-rules li::before {
+      content: "⚠";
+      position: absolute;
+      right: 0;
+      color: #c00;
+    }
+    
+    /* Footer */
+    .footer {
+      margin-top: 10px;
+      text-align: center;
+      font-size: 8px;
+      color: #666;
+      border-top: 1px solid #ccc;
+      padding-top: 5px;
     }
   </style>
 </head>
 <body>
-  <h1>${titleText}</h1>
-  <h2>גדוד 982</h2>
-
-  <div class="date-box">
-    <div class="date">📅 ${dateOnly}</div>
-    <div class="time">🕐 שעה: ${timeOnly}</div>
+  <!-- Header Section -->
+  <div class="header">
+    <div class="header-right">
+      <div class="logo-placeholder">לוגו גדוד</div>
+    </div>
+    <div class="header-center">
+      <div class="doc-title">${titleText}</div>
+      <div class="doc-subtitle">גדוד 982</div>
+      <div class="voucher-number">מספר שובר: _______________</div>
+    </div>
+    <div class="header-left">
+      <div style="font-size: 10px;">תאריך: ${dateStr}</div>
+      <div style="font-size: 10px; margin-top: 4px;">שעה: ${timeStr}</div>
+    </div>
   </div>
 
-  <div class="soldier-info">
-    <p><strong>שם חייל:</strong> ${assignment.soldierName}</p>
-    <p><strong>מספר אישי:</strong> ${assignment.soldierPersonalNumber}</p>
-    ${assignment.soldierCompany ? `<p><strong>פלוגה:</strong> ${assignment.soldierCompany}</p>` : ''}
-    ${assignment.soldierPhone ? `<p><strong>טלפון:</strong> ${assignment.soldierPhone}</p>` : ''}
-  </div>
-
-  <h3 style="text-align: right; margin-top: 20px; margin-bottom: 10px;">פירוט ציוד:</h3>
-
-  <table>
+  <!-- Inventory Table -->
+  <table class="items-table">
     <thead>
       <tr>
-        <th>שם ציוד</th>
-        <th style="width: 80px;">כמות</th>
-        <th style="width: 120px;">מסטב</th>
+        <th class="col-num">מס"ד</th>
+        <th class="col-name">שם פריט</th>
+        <th class="col-qty">כמות</th>
+        <th class="col-id">מספר מזהה / מסט"ב</th>
+        <th class="col-notes">הערות</th>
       </tr>
     </thead>
     <tbody>
       ${itemsRows}
+      ${emptyRows}
     </tbody>
   </table>
 
-  ${moreItemsNote}
+  <!-- Signature Section -->
+  <div class="signatures-container">
+    <!-- Right Box - Issuer Details -->
+    <div class="signature-box">
+      <div class="signature-box-title">פרטי המנפק</div>
+      <div class="signature-row">
+        <span class="signature-label">שם:</span>
+        <span class="signature-value">${operatorText}</span>
+      </div>
+      <div class="signature-row">
+        <span class="signature-label">דרגה:</span>
+        <span class="signature-value"></span>
+      </div>
+      <div class="signature-row">
+        <span class="signature-label">מ"א:</span>
+        <span class="signature-value"></span>
+      </div>
+      <div class="signature-row">
+        <span class="signature-label">תאריך:</span>
+        <span class="signature-value">${dateStr}</span>
+      </div>
+      <div class="signature-row">
+        <span class="signature-label">חתימה:</span>
+      </div>
+      <div class="signature-area">
+        <div class="signature-placeholder">חתימת המנפק</div>
+      </div>
+    </div>
 
-  <div class="meta-info">
-    <p><strong>תאריך ושעה:</strong> ${dateStr}</p>
-    ${operatorText ? `<p><strong>בוצע על ידי:</strong> ${operatorText}</p>` : ''}
+    <!-- Left Box - Receiver Details -->
+    <div class="signature-box">
+      <div class="signature-box-title">פרטי המקבל</div>
+      <div class="signature-row">
+        <span class="signature-label">שם:</span>
+        <span class="signature-value">${assignment.soldierName}</span>
+      </div>
+      <div class="signature-row">
+        <span class="signature-label">דרגה:</span>
+        <span class="signature-value"></span>
+      </div>
+      <div class="signature-row">
+        <span class="signature-label">מ"א:</span>
+        <span class="signature-value">${assignment.soldierPersonalNumber}</span>
+      </div>
+      <div class="signature-row">
+        <span class="signature-label">טלפון:</span>
+        <span class="signature-value">${assignment.soldierPhone || ''}</span>
+      </div>
+      <div class="signature-row">
+        <span class="signature-label">תאריך:</span>
+        <span class="signature-value">${dateStr}</span>
+      </div>
+      <div class="signature-row">
+        <span class="signature-label">חתימה:</span>
+      </div>
+      <div class="signature-area">
+        ${signatureImg}
+      </div>
+    </div>
   </div>
 
-  <div class="signature-section">
-    <strong>חתימת מקבל:</strong>
-    ${signatureImg}
+  <!-- Safety Instructions -->
+  <div class="safety-section">
+    <div class="safety-title">הוראות בטיחות לנושא נשק</div>
+    <ul class="safety-rules">
+      <li>חל איסור לנקות כלי נשק בחדרי שינה ובחללים סגורים (מסדרונות, אולמות, בתוך רק"ם וכו').</li>
+      <li>ניקוי נשקים יבוצע במקומות פתוחים תו"כ הקפדה שהנשקים אינם מכוונים לעבר אדם ופרוקים.</li>
+      <li>חל איסור מוחלט לשחק בנשק, לבצע שינויים וכן להחליף חלקים בנשק.</li>
+    </ul>
   </div>
 
+  <!-- Footer -->
   <div class="footer">
-    <p>מסמך זה נוצר אוטומטית באמצעות מערכת ניהול ציוד גדוד 982</p>
+    מסמך זה נוצר אוטומטית באמצעות מערכת ניהול ציוד גדוד 982 | ${dateStr} ${timeStr}
   </div>
 </body>
 </html>
