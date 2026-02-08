@@ -1,7 +1,7 @@
 // Types pour l'application Gestion 982
 
 // Rôles utilisateur
-export type UserRole = 'admin' | 'both' | 'arme' | 'vetement';
+export type UserRole = 'admin' | 'both' | 'arme' | 'vetement' | 'rsp' | 'shlishut';
 
 // Utilisateur
 export interface User {
@@ -11,6 +11,7 @@ export interface User {
   displayName?: string; // Display name (alias for name or from Firebase)
   phone?: string;
   role: UserRole;
+  company?: string;     // פלוגה - Requis pour le rôle 'rsp'
   createdAt: Date;
 }
 
@@ -22,6 +23,11 @@ export interface Soldier {
   phone?: string;          // טלפון
   company: string;         // פלוגה
   department?: string;     // מחלקה
+  status: 'pre_recruitment' | 'recruited' | 'gimelim' | 'pitzul' | 'rianun' | 'releasing_today' | 'released'; // סטטוס החייל
+  clearanceStatus?: {      // État du Zikuy (pour la libération)
+    armory: boolean;       // Zikuy Armurerie
+    logistics: boolean;    // Zikuy Logistique
+  };
   createdAt: Date;
   updatedAt?: Date;
   // Champs de recherche normalisés (générés automatiquement)
@@ -90,12 +96,19 @@ export interface SubEquipment {
   serial?: string;
 }
 
-// Équipement vêtement (אפנאות)
+// Équipement vêtement (אפסנאות)
 export interface ClothingEquipment {
   id: string;
   name: string;
   nameKey?: string;       // Nom normalisé pour unicité
   yamach?: number;        // ימח - quantité totale
+  // SUPPORT MULTIPLE SOURCES
+  sources?: {
+    name: string;
+    quantity: number;
+    location?: string;
+  }[];
+  totalQuantity?: number; // Computed total
 }
 
 // Action d'attribution
@@ -205,10 +218,15 @@ export type RootStackParamList = {
   SoldierHistory: undefined;
   // Module RSP
   RspHome: undefined;
+  RspDashboard: { company?: string };  // Dashboard lecture seule pour utilisateurs RSP
+  RspSoldierDetail: { soldierData: string };  // Détails d'un soldat RSP (JSON sérialisé)
   RspEquipment: undefined;
   RspAssignment: undefined;
   RspTable: undefined;
   RspReadOnly: undefined;
+  // Module Shlishut
+  ShlishutHome: undefined;
+  ShlishutAddSoldier: undefined;
 };
 
 export interface HoldingItem {

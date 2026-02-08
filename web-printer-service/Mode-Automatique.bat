@@ -1,15 +1,29 @@
 @echo off
-echo Ouuverture de l'imprimante automatique...
+echo ========================================
+echo   IMPRIMANTE AUTOMATIQUE GESTION 982
+echo ========================================
 echo.
-echo IMPORTANT:
-echo 1. Cela va fermer toutes les fenetres Chrome ouvertes.
-echo 2. L'impression se fera sans fenetre de confirmation.
+echo Configuration requise:
+echo 1. Definir l'imprimante par defaut dans Windows
+echo 2. Ce script va lancer Chrome en mode kiosque
+echo.
+echo L'impression se fera automatiquement sur l'imprimante par defaut.
 echo.
 timeout /t 3
 
+REM Fermer toutes les instances de Chrome
 taskkill /F /IM chrome.exe >nul 2>&1
+timeout /t 2 >nul
 
-start chrome.exe --kiosk-printing "https://gestion-982.web.app/printer.html"
+REM Lancer Chrome avec options pour impression automatique
+REM --kiosk : Mode kiosque plein ecran
+REM --kiosk-printing : imprime sans boite de dialogue
+REM --disable-print-preview : desactive l'apercu avant impression
+REM --auto-open-devtools-for-tabs : pour voir les logs (optionnel)
+start "" "chrome.exe" --kiosk --kiosk-printing --disable-print-preview --no-first-run --no-default-browser-check "https://gestion-982.web.app/printer.html"
 
-echo Termine !
+echo.
+echo Chrome lance ! Les impressions seront automatiques.
+echo Laissez cette fenetre ouverte pour surveiller.
+echo.
 pause

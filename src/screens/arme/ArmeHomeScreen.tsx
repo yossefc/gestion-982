@@ -1,6 +1,7 @@
 // Écran d'accueil du module Arme (מנות וציוד לחימה)
 // Design professionnel avec UX améliorée
-import React, { useEffect, useState, useCallback } from 'react';
+// OPTIMISÉ: Utilise le cache centralisé au lieu d'appels Firebase directs
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -10,10 +11,11 @@ import {
   ActivityIndicator,
   RefreshControl,
 } from 'react-native';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
-import { dashboardService, manaService, combatEquipmentService } from '../../services/firebaseService';
+import { AppModal, ModalType } from '../../components';
 import { useAuth } from '../../contexts/AuthContext';
+import { useData, useCombatStats, useManot, useCombatEquipment } from '../../contexts/DataContext';
 
 interface MenuItemProps {
   id: string;
@@ -28,50 +30,43 @@ interface MenuItemProps {
 const ArmeHomeScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const { user, loading: authLoading } = useAuth();
-  const [loading, setLoading] = useState(true);
+
+  // OPTIMISÉ: Utilisation du cache centralisé - plus d'appels Firebase à chaque navigation
+  const { refreshAll, isInitialized } = useData();
+  const { stats: combatStats, loading: statsLoading } = useCombatStats();
+  const { manot, loading: manotLoading } = useManot();
+  const { equipment, loading: equipmentLoading } = useCombatEquipment();
+
   const [refreshing, setRefreshing] = useState(false);
-  const [stats, setStats] = useState({
-    activeManot: 0,
-    equipmentItems: 0,
-    signed: 0,
-    pending: 0,
-  });
 
-  useFocusEffect(
-    useCallback(() => {
-      if (!authLoading && user) {
-        loadStats();
-      } else if (!authLoading) {
-        setLoading(false);
-      }
-    }, [authLoading, user])
-  );
-
-  const loadStats = async () => {
-    try {
-      const [dashboardStats, manot, equipment] = await Promise.all([
-        dashboardService.getCombatStats(),
-        manaService.getAll(),
-        combatEquipmentService.getAll(),
-      ]);
-
-      setStats({
-        activeManot: manot.length,
-        equipmentItems: equipment.length,
-        signed: dashboardStats.signedSoldiers || 0,
-        pending: dashboardStats.pendingSoldiers || 0,
-      });
-    } catch (error) {
-      console.error('Error loading stats:', error);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
+  // Calcul des stats depuis le cache
+  const stats = {
+    activeManot: manot.length,
+    equipmentItems: equipment.length,
+    signed: combatStats?.signedSoldiers || 0,
+    pending: combatStats?.pendingSoldiers || 0,
   };
 
-  const onRefresh = () => {
+  // Loading global optimisé - affiche le contenu dès que possible
+  const loading = !isInitialized || (statsLoading && manotLoading && equipmentLoading);
+
+  // AppModal state
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalType, setModalType] = useState<ModalType>('info');
+  const [modalMessage, setModalMessage] = useState('');
+  const [modalTitle, setModalTitle] = useState<string | undefined>(undefined);
+  const [modalButtons, setModalButtons] = useState<any[]>([]);
+
+  // Refresh manuel uniquement - plus de useFocusEffect qui recharge à chaque navigation
+  const onRefresh = async () => {
     setRefreshing(true);
-    loadStats();
+    try {
+      await refreshAll();
+    } catch (error) {
+      console.error('Error refreshing:', error);
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   const menuItems: MenuItemProps[] = [
@@ -117,6 +112,7 @@ const ArmeHomeScreen: React.FC = () => {
       color: Colors.warning,
       action: () => navigation.navigate('SoldierSearch', { mode: 'return', type: 'combat' }),
     },
+
     {
       id: 'storage',
       title: 'אפסון ציוד',
@@ -148,14 +144,26 @@ const ArmeHomeScreen: React.FC = () => {
       title: 'טופס 982',
       icon: '📄',
       color: '#9C27B0',
-      action: () => Alert.alert('בקרוב', 'יצירת טופס 982 תהיה זמינה בקרוב'),
+      action: () => {
+        setModalType('info');
+        setModalTitle('בקרוב');
+        setModalMessage('יצירת טופס 982 תהיה זמינה בקרוב');
+        setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+        setModalVisible(true);
+      },
     },
     {
       id: 'quick-report',
       title: 'דוחות',
       icon: '📊',
       color: '#FF5722',
-      action: () => Alert.alert('בקרוב', 'מסך דוחות יהיה זמין בקרוב'),
+      action: () => {
+        setModalType('info');
+        setModalTitle('בקרוב');
+        setModalMessage('מסך דוחות יהיה זמין בקרוב');
+        setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+        setModalVisible(true);
+      },
     },
   ];
 
@@ -268,16 +276,21 @@ const ArmeHomeScreen: React.FC = () => {
 
         <View style={styles.bottomSpacer} />
       </ScrollView>
+
+      {/* App Modal */}
+      <AppModal
+        visible={modalVisible}
+        type={modalType}
+        title={modalTitle}
+        message={modalMessage}
+        buttons={modalButtons}
+        onClose={() => setModalVisible(false)}
+      />
     </View>
   );
 };
 
-// Alert component placeholder
-const Alert = {
-  alert: (title: string, message: string) => {
-    console.log(`${title}: ${message}`);
-  },
-};
+
 
 const styles = StyleSheet.create({
   container: {

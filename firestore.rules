@@ -26,6 +26,15 @@ service cloud.firestore {
       return hasRole('admin') || hasRole('both') || hasRole('vetement');
     }
 
+    function isRsp() {
+      return hasRole('rsp');
+    }
+
+    // RSP peut lire mais pas écrire
+    function canReadAsRsp() {
+      return isAuthenticated() && (isRsp() || isAdmin());
+    }
+
     // ============================================
     // SOLDIERS
     // ============================================
@@ -113,6 +122,23 @@ service cloud.firestore {
     match /weapons_inventory/{weaponId} {
       allow read: if canAccessArme();
       allow create, update, delete: if canAccessArme();
+    }
+
+    // ============================================
+    // RSP EQUIPMENT & ASSIGNMENTS
+    // ============================================
+
+    // RSP Equipment Catalog
+    match /rsp_equipment/{equipmentId} {
+      allow read: if isAuthenticated();  // RSP et tous peuvent lire
+      allow create, update, delete: if canAccessArme();  // Seuls arme/admin peuvent modifier
+    }
+
+    // RSP Assignments (équipements assignés aux RSP)
+    match /rsp_assignments/{assignmentId} {
+      allow read: if isAuthenticated();  // RSP peut lire ses assignments
+      allow create, update: if canAccessArme();  // Seuls arme/admin peuvent modifier
+      allow delete: if isAdmin();
     }
 
     // ============================================

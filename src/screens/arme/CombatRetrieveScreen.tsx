@@ -7,7 +7,6 @@ import {
   StyleSheet,
   ScrollView,
   ActivityIndicator,
-  Alert,
   Platform,
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -18,6 +17,7 @@ import { assignmentService } from '../../services/assignmentService';
 import { transactionalAssignmentService } from '../../services/transactionalAssignmentService';
 import { weaponInventoryService } from '../../services/weaponInventoryService';
 import { Colors, Shadows } from '../../theme/Colors';
+import { AppModal, ModalType } from '../../components';
 
 type CombatRetrieveRouteProp = RouteProp<RootStackParamList, 'CombatRetrieve'>;
 
@@ -40,14 +40,12 @@ const CombatRetrieveScreen: React.FC = () => {
   const [storedItems, setStoredItems] = useState<StoredItem[]>([]);
   const [processing, setProcessing] = useState(false);
 
-  useEffect(() => {
-    if (!soldierId) {
-      Alert.alert('שגיאה', 'לא נמצא מזהה חייל');
-      navigation.goBack();
-      return;
-    }
-    loadData();
-  }, [soldierId]);
+  // AppModal state
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalType, setModalType] = useState<ModalType>('info');
+  const [modalMessage, setModalMessage] = useState('');
+  const [modalTitle, setModalTitle] = useState<string | undefined>(undefined);
+  const [modalButtons, setModalButtons] = useState<any[]>([]);
 
   const loadData = async () => {
     try {
@@ -119,92 +117,121 @@ const CombatRetrieveScreen: React.FC = () => {
       setStoredItems(items);
     } catch (error) {
       console.error('Error loading data:', error);
-      Alert.alert('שגיאה', 'נכשל בטעינת הנתונים');
+      setModalType('error');
+      setModalMessage('נכשל בטעינת הנתונים');
+      setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalVisible(true);
     } finally {
       setLoading(false);
     }
   };
 
-  const toggleItem = (id: string, serial: string) => {
-    setStoredItems(prev =>
-      prev.map(it => (it.id === id && it.serialNumber === serial ? { ...it, selected: !it.selected } : it))
-    );
-  };
-
-  const handleRetrieve = async () => {
-    const selectedItems = storedItems.filter(it => it.selected);
-
-    if (selectedItems.length === 0) {
-      Alert.alert('שגיאה', 'אנא בחר לפחות פריט אחד');
+  useEffect(() => {
+    if (!soldierId) {
+      setModalType('error');
+      setModalMessage('לא נמצא מזהה חייל');
+      setModalButtons([{
+        text: 'סגור',
+        style: 'primary',
+        onPress: () => {
+          setModalVisible(false);
+          navigation.goBack();
+        }
+      }]);
+      setModalVisible(true);
       return;
     }
+    loadData();
+  }, [soldierId]);
 
-    Alert.alert(
-      'החזרה מאפסון',
-      `האם להחזיר ${selectedItems.length} פריטים לחייל?`,
-      [
-        { text: 'ביטול', style: 'cancel' },
-        {
-          text: 'החזר',
-          onPress: async () => {
-            setProcessing(true);
-            try {
-              // 1. Pour les armes, mettre à jour le weapon inventory
-              for (const item of selectedItems) {
-                if (item.type === 'weapon' && item.weaponId) {
-                  await weaponInventoryService.updateWeapon(item.weaponId, {
-                    status: 'assigned',
-                    storageDate: deleteField() as any,
-                  });
-                }
-              }
+const toggleItem = (id: string, serial: string) => {
+  setStoredItems(prev =>
+    prev.map(it => (it.id === id && it.serialNumber === serial ? { ...it, selected: !it.selected } : it))
+  );
+};
 
-              // 2. Transaction pour mettre à jour les holdings (status stored -> active)
-              console.log('[CombatRetrieve] Creating transactional retrieve assignment...');
-              const requestId = `combat_retrieve_${soldierId}_${Date.now()}`;
+const handleRetrieve = async () => {
+  const selectedItems = storedItems.filter(it => it.selected);
 
-              // Grouper par equipmentId pour l'assignment
-              const groups = new Map<string, { name: string, qty: number, serials: string[] }>();
-              selectedItems.forEach(it => {
-                const group = groups.get(it.id) || { name: it.category, qty: 0, serials: [] };
-                group.qty += 1;
-                if (it.serialNumber) group.serials.push(it.serialNumber);
-                groups.set(it.id, group);
+  if (selectedItems.length === 0) {
+    setModalType('error');
+    setModalMessage('אנא בחר לפחות פריט אחד');
+    setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
+    setModalVisible(true);
+    return;
+  }
+
+  setModalType('confirm');
+  setModalTitle('החזרה מאפסון');
+  setModalMessage(`האם להחזיר ${selectedItems.length} פריטים לחייל?`);
+  setModalButtons([
+    { text: 'ביטול', style: 'outline', onPress: () => setModalVisible(false) },
+    {
+      text: 'החזר',
+      style: 'primary',
+      onPress: async () => {
+        setModalVisible(false);
+        setProcessing(true);
+        try {
+          // 1. Pour les armes, mettre à jour le weapon inventory
+          for (const item of selectedItems) {
+            if (item.type === 'weapon' && item.weaponId) {
+              await weaponInventoryService.updateWeapon(item.weaponId, {
+                status: 'assigned',
+                storageDate: deleteField() as any,
               });
-
-              const retrieveItems = Array.from(groups.entries()).map(([id, data]) => ({
-                equipmentId: id,
-                equipmentName: data.name,
-                quantity: data.qty,
-                serial: data.serials.join(','),
-              }));
-
-              await transactionalAssignmentService.retrieveEquipment(
-                soldierId,
-                soldier?.name || '',
-                soldier?.personalNumber || '',
-                'combat',
-                retrieveItems,
-                'system', // retrievedBy
-                requestId
-              );
-
-              Alert.alert(
-                'הצלחה',
-                `${selectedItems.length} פריטים הוחזרו לחייל`,
-                [{ text: 'אישור', onPress: () => navigation.goBack() }]
-              );
-            } catch (error) {
-              console.error('Error retrieving items:', error);
-              Alert.alert('שגיאה', 'נכשל בהחזרת הפריטים');
-            } finally {
-              setProcessing(false);
             }
-          },
-        },
-      ]
-    );
-  };
+          }
+
+          // 2. Transaction pour mettre à jour les holdings (status stored -> active)
+          console.log('[CombatRetrieve] Creating transactional retrieve assignment...');
+          const requestId = `combat_retrieve_${soldierId}_${Date.now()}`;
+
+          // Grouper par equipmentId pour l'assignment
+          const groups = new Map<string, { name: string, qty: number, serials: string[] }>();
+          selectedItems.forEach(it => {
+            const group = groups.get(it.id) || { name: it.category, qty: 0, serials: [] };
+            group.qty += 1;
+            if (it.serialNumber) group.serials.push(it.serialNumber);
+            groups.set(it.id, group);
+          });
+
+          const retrieveItems = Array.from(groups.entries()).map(([id, data]) => ({
+            equipmentId: id,
+            equipmentName: data.name,
+            quantity: data.qty,
+            serial: data.serials.join(','),
+          }));
+
+          await transactionalAssignmentService.retrieveEquipment(
+            soldierId,
+            soldier?.name || '',
+            soldier?.personalNumber || '',
+            'combat',
+            retrieveItems,
+            'system', // retrievedBy
+            requestId
+          );
+
+          setModalType('success');
+          setModalTitle('הצלחה');
+          setModalMessage(`${selectedItems.length} פריטים הוחזרו לחייל`);
+          setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => { setModalVisible(false); navigation.goBack(); } }]);
+          setModalVisible(true);
+        } catch (error) {
+          console.error('Error retrieving items:', error);
+          setModalType('error');
+          setModalMessage('נכשל בהחזרת הפריטים');
+          setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
+          setModalVisible(true);
+        } finally {
+          setProcessing(false);
+        }
+      },
+    },
+  ]);
+  setModalVisible(true);
+};
 
   if (loading) {
     return (
@@ -321,7 +348,18 @@ const CombatRetrieveScreen: React.FC = () => {
           </TouchableOpacity>
         )}
       </ScrollView>
-    </View>
+
+
+      {/* App Modal */}
+      <AppModal
+        visible={modalVisible}
+        type={modalType}
+        title={modalTitle}
+        message={modalMessage}
+        buttons={modalButtons}
+        onClose={() => setModalVisible(false)}
+      />
+    </View >
   );
 };
 

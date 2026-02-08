@@ -196,7 +196,7 @@ const ClothingStockScreen: React.FC = () => {
           <Ionicons name="arrow-forward" size={22} color="#FFF" />
         </TouchableOpacity>
 
-        <Text style={styles.headerTitle}>מלאי אפנאות</Text>
+        <Text style={styles.headerTitle}>מלאי אפסנאות</Text>
 
         <TouchableOpacity style={styles.headerButton} onPress={loadStocks}>
           <Ionicons name="refresh" size={22} color="#FFF" />

@@ -5,6 +5,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { ActivityIndicator, View, StyleSheet } from 'react-native';
 
 import { useAuth } from '../contexts/AuthContext';
+import { OfflineBanner } from '../components';
 import { RootStackParamList } from '../types';
 import { Colors } from '../theme/Colors';
 
@@ -12,7 +13,7 @@ import { Colors } from '../theme/Colors';
 import LoginScreen from '../screens/auth/LoginScreen';
 import HomeScreen from '../screens/common/HomeScreen';
 import SoldierSearchScreen from '../screens/common/SoldierSearchScreen';
-import AddSoldierScreen from '../screens/common/AddSoldierScreen';
+import CommonAddSoldierScreen from '../screens/common/AddSoldierScreen';
 import EditSoldierScreen from '../screens/common/EditSoldierScreen';
 import VetementHomeScreen from '../screens/vetement/VetementHomeScreen';
 import ClothingSignatureScreen from '../screens/vetement/ClothingSignatureScreen';
@@ -38,15 +39,23 @@ import AssignWeaponScreen from '../screens/arme/AssignWeaponScreen';
 import WeaponStorageScreen from '../screens/arme/WeaponStorageScreen';
 import AdminPanelScreen from '../screens/admin/AdminPanelScreen';
 import UserManagementScreen from '../screens/admin/UserManagementScreen';
+
 import DatabaseDebugScreen from '../screens/admin/DatabaseDebugScreen';
 import MigrationScreen from '../screens/admin/MigrationScreen';
 import RspMigrationScreen from '../screens/admin/RspMigrationScreen';
 import SoldierHistoryScreen from '../screens/admin/SoldierHistoryScreen';
+
+// Shlishut
+import ShlishutHomeScreen from '../screens/shlishut/ShlishutHomeScreen';
+
+// RSP
 import RspHomeScreen from '../screens/arme/RspHomeScreen';
 import RspEquipmentScreen from '../screens/arme/RspEquipmentScreen';
 import RspAssignmentScreen from '../screens/arme/RspAssignmentScreen';
 import RspTableScreen from '../screens/arme/RspTableScreen';
 import RspReadOnlyScreen from '../screens/arme/RspReadOnlyScreen';
+import RspDashboardScreen from '../screens/rsp/RspDashboardScreen';
+import RspSoldierDetailScreen from '../screens/rsp/RspSoldierDetailScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -63,13 +72,15 @@ const AppNavigator: React.FC = () => {
   }
 
   return (
-    <NavigationContainer>
-      <Stack.Navigator
-        screenOptions={{
-          headerShown: false,
-          animation: 'slide_from_left',
-          contentStyle: { backgroundColor: Colors.background },
-        }}
+    <View style={styles.container}>
+      <OfflineBanner />
+      <NavigationContainer>
+        <Stack.Navigator
+          screenOptions={{
+            headerShown: false,
+            animation: 'slide_from_left',
+            contentStyle: { backgroundColor: Colors.background },
+          }}
       >
         {!user ? (
           // Écrans non authentifiés
@@ -82,7 +93,7 @@ const AppNavigator: React.FC = () => {
 
             {/* Écrans communs */}
             <Stack.Screen name="SoldierSearch" component={SoldierSearchScreen} />
-            <Stack.Screen name="AddSoldier" component={AddSoldierScreen} />
+            <Stack.Screen name="AddSoldier" component={CommonAddSoldierScreen} />
             <Stack.Screen name="EditSoldier" component={EditSoldierScreen} />
 
             {/* Module Vêtement */}
@@ -114,10 +125,14 @@ const AppNavigator: React.FC = () => {
             {/* Module Admin */}
             <Stack.Screen name="AdminPanel" component={AdminPanelScreen} />
             <Stack.Screen name="UserManagement" component={UserManagementScreen} />
+
             <Stack.Screen name="DatabaseDebug" component={DatabaseDebugScreen} />
             <Stack.Screen name="Migration" component={MigrationScreen} />
             <Stack.Screen name="RspMigration" component={RspMigrationScreen} />
             <Stack.Screen name="SoldierHistory" component={SoldierHistoryScreen} />
+
+            {/* Module Shlishut */}
+            <Stack.Screen name="ShlishutHome" component={ShlishutHomeScreen} />
 
             {/* Module RSP */}
             <Stack.Screen name="RspHome" component={RspHomeScreen} />
@@ -125,17 +140,23 @@ const AppNavigator: React.FC = () => {
             <Stack.Screen name="RspAssignment" component={RspAssignmentScreen} />
             <Stack.Screen name="RspTable" component={RspTableScreen} />
             <Stack.Screen name="RspReadOnly" component={RspReadOnlyScreen} />
+            <Stack.Screen name="RspDashboard" component={RspDashboardScreen} />
+            <Stack.Screen name="RspSoldierDetail" component={RspSoldierDetailScreen} />
 
             {/* Signature commune */}
             <Stack.Screen name="SignatureScreen" component={ClothingSignatureScreen} />
           </>
         )}
       </Stack.Navigator>
-    </NavigationContainer>
+      </NavigationContainer>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',

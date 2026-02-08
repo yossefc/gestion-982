@@ -17,24 +17,24 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
-import { useSoldiers } from '../../contexts/SoldiersContext';
+import { useSoldiers } from '../../contexts/DataContext';
+import { useAuth } from '../../contexts/AuthContext';
+import { useIsOnline } from '../../contexts/OfflineContext';
 import { assignmentService } from '../../services/assignmentService';
 import { transactionalAssignmentService } from '../../services/transactionalAssignmentService';
 import { weaponInventoryService } from '../../services/weaponInventoryService';
+import { Soldier as BaseSoldier } from '../../types';
 
-interface Soldier {
-  id: string;
-  name: string;
-  personalNumber: string;
-  phone?: string;
-  company?: string;
+// Extend Soldier with computed property
+interface Soldier extends BaseSoldier {
   outstandingCount?: number;
-  isRsp?: boolean;
 }
 
 const SoldierSearchScreen: React.FC = () => {
   const navigation = useNavigation();
   const route = useRoute();
+  const { userRole } = useAuth(); // Get user role
+  const isOnline = useIsOnline(); // Check connectivity for offline mode
   const { mode, type } = (route.params as {
     mode: 'signature' | 'return' | 'storage' | 'retrieve' | 'rsp_issue' | 'rsp_credit';
     type?: 'combat' | 'clothing'
@@ -109,7 +109,43 @@ const SoldierSearchScreen: React.FC = () => {
         data = data.filter((s: any) => s.isRsp === true);
       }
 
-      setSoldiers(data);
+      if (mode === 'rsp_issue' || mode === 'rsp_credit') {
+        data = data.filter((s: any) => s.isRsp === true);
+      }
+
+      // Filter by status for non-Shlishut roles
+      // 'not_recruited' and 'released' soldiers should NOT appear in arme/vetement modules
+      // They should only appear in Shlishut module
+      // Also, admin/both can see all in Shlishut, but NOT in arme/vetement
+      //
+      // IMPORTANT: When OFFLINE, show ALL soldiers regardless of status
+      // because status updates from Shlishut won't be available
+      const isArmoryOrLogistics = type === 'combat' || type === 'clothing';
+
+      if (isOnline) {
+        // ONLINE: Apply normal status filtering
+        if (isArmoryOrLogistics) {
+          // In armory/logistics: only show soldiers with status 'recruited', 'releasing_today', 'gimelim', 'pitzul', 'rianun'
+          data = data.filter((s: any) => {
+            const status = s.status || 'pre_recruitment';
+            return ['recruited', 'releasing_today', 'gimelim', 'pitzul', 'rianun'].includes(status);
+          });
+        } else {
+          // For non-type modes (like Shlishut), check user role
+          const canViewPreRecruitment = userRole === 'admin' || userRole === 'both' || userRole === 'shlishut';
+          if (!canViewPreRecruitment) {
+            data = data.filter((s: any) => (s.status || 'pre_recruitment') !== 'pre_recruitment');
+          }
+        }
+
+        // For return mode (זיכוי חייל), only show soldiers in 'releasing_today' status
+        if (mode === 'return' && isArmoryOrLogistics) {
+          data = data.filter((s: any) => s.status === 'releasing_today');
+        }
+      }
+      // OFFLINE: No status filtering - show all soldiers
+      // Status updates from Shlishut are not available offline
+
       setFilteredSoldiers(data);
     } catch (error) {
       console.error('Error loading soldiers:', error);
@@ -182,55 +218,80 @@ const SoldierSearchScreen: React.FC = () => {
     (navigation.navigate as any)('EditSoldier', { soldierId: soldier.id });
   };
 
-  const renderSoldierItem = ({ item }: { item: Soldier }) => (
-    <View style={styles.soldierCardContainer}>
-      <TouchableOpacity
-        style={styles.soldierCard}
-        onPress={() => handleSelectSoldier(item)}
-        onLongPress={() => handleEditSoldier(item)}
-        activeOpacity={0.7}
-      >
-        <View style={styles.soldierAvatar}>
-          <Text style={styles.avatarText}>
-            {item.name?.charAt(0) || '?'}
-          </Text>
-        </View>
+  // Status config (duplicated for now)
+  const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
+    pre_recruitment: { label: 'טרום גיוס', color: '#6B7280', bg: '#F3F4F6' },
+    recruited: { label: 'מגויס', color: '#059669', bg: '#D1FAE5' },
+    gimelim: { label: 'גימלים', color: '#8B5CF6', bg: '#EDE9FE' },
+    pitzul: { label: 'פיצול', color: '#F59E0B', bg: '#FEF3C7' },
+    rianun: { label: 'רענון', color: '#EC4899', bg: '#FCE7F3' },
+    releasing_today: { label: 'משתחרר היום', color: '#D97706', bg: '#FEF3C7' },
+    released: { label: 'משוחרר', color: '#3B82F6', bg: '#DBEAFE' },
+  };
 
-        <View style={styles.soldierInfo}>
-          <Text style={styles.soldierName}>{item.name}</Text>
-          <Text style={styles.soldierNumber}>מ.א: {item.personalNumber}</Text>
-          {item.company && (
-            <Text style={styles.soldierCompany}>{item.company}</Text>
-          )}
-        </View>
+  const renderSoldierItem = ({ item }: { item: Soldier }) => {
+    const status = item.status || 'pre_recruitment';
+    const statusConfig = STATUS_CONFIG[status];
+    const showStatus = statusConfig && status !== 'recruited'; // Don't show badge for regular recruited soldiers to reduce noise, or show for all?
+    // Let's show for all special statuses including releasing_today, gimelim, etc.
 
-        {mode === 'return' ? (
-          <View style={[
-            styles.outstandingBadge,
-            (item.outstandingCount || 0) === 0 && styles.outstandingBadgeZero
-          ]}>
-            <Text style={[
-              styles.outstandingText,
-              (item.outstandingCount || 0) === 0 && styles.outstandingTextZero
-            ]}>
-              {item.outstandingCount || 0}
+    return (
+      <View style={styles.soldierCardContainer}>
+        <TouchableOpacity
+          style={styles.soldierCard}
+          onPress={() => handleSelectSoldier(item)}
+          onLongPress={() => handleEditSoldier(item)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.soldierAvatar}>
+            <Text style={styles.avatarText}>
+              {item.name?.charAt(0) || '?'}
             </Text>
           </View>
-        ) : (
-          <Ionicons name="chevron-back" size={20} color={Colors.textLight} />
-        )}
-      </TouchableOpacity>
 
-      {/* Edit Button */}
-      <TouchableOpacity
-        style={styles.editButton}
-        onPress={() => handleEditSoldier(item)}
-        activeOpacity={0.7}
-      >
-        <Ionicons name="create-outline" size={18} color={Colors.primary} />
-      </TouchableOpacity>
-    </View>
-  );
+          <View style={styles.soldierInfo}>
+            <Text style={styles.soldierName}>{item.name}</Text>
+            <Text style={styles.soldierNumber}>מ.א: {item.personalNumber}</Text>
+            {item.company && (
+              <Text style={styles.soldierCompany}>{item.company}</Text>
+            )}
+
+            {/* Status Badge */}
+            {statusConfig && status !== 'recruited' && (
+              <View style={[styles.statusBadge, { backgroundColor: statusConfig.bg }]}>
+                <Text style={[styles.statusText, { color: statusConfig.color }]}>{statusConfig.label}</Text>
+              </View>
+            )}
+          </View>
+
+          {mode === 'return' ? (
+            <View style={[
+              styles.outstandingBadge,
+              (item.outstandingCount || 0) === 0 && styles.outstandingBadgeZero
+            ]}>
+              <Text style={[
+                styles.outstandingText,
+                (item.outstandingCount || 0) === 0 && styles.outstandingTextZero
+              ]}>
+                {item.outstandingCount || 0}
+              </Text>
+            </View>
+          ) : (
+            <Ionicons name="chevron-back" size={20} color={Colors.textLight} />
+          )}
+        </TouchableOpacity>
+
+        {/* Edit Button */}
+        <TouchableOpacity
+          style={styles.editButton}
+          onPress={() => handleEditSoldier(item)}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="create-outline" size={18} color={Colors.primary} />
+        </TouchableOpacity>
+      </View>
+    );
+  };
 
   const renderEmptyList = () => (
     <View style={styles.emptyContainer}>
@@ -284,6 +345,16 @@ const SoldierSearchScreen: React.FC = () => {
 
         <View style={styles.headerSpacer} />
       </View>
+
+      {/* Offline Mode Banner */}
+      {!isOnline && (type === 'combat' || type === 'clothing') && (
+        <View style={styles.offlineBanner}>
+          <Ionicons name="cloud-offline" size={16} color="#92400E" />
+          <Text style={styles.offlineBannerText}>
+            מצב לא מקוון - כל החיילים מוצגים (כולל לא מגויסים)
+          </Text>
+        </View>
+      )}
 
       {/* Search Bar */}
       <View style={styles.searchContainer}>
@@ -368,6 +439,26 @@ const styles = StyleSheet.create({
 
   headerSpacer: {
     width: 44,
+  },
+
+  // Offline Banner
+  offlineBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FEF3C7',
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    gap: Spacing.xs,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F59E0B',
+  },
+
+  offlineBannerText: {
+    fontSize: FontSize.sm,
+    color: '#92400E',
+    fontWeight: '500',
+    textAlign: 'center',
   },
 
   // Search
@@ -527,6 +618,19 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     marginTop: Spacing.sm,
     textAlign: 'center',
+  },
+  statusBadge: {
+    marginTop: 4,
+    backgroundColor: '#FEF9C3',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    alignSelf: 'flex-end',
+  },
+  statusText: {
+    fontSize: 10,
+    color: '#854D0E',
+    fontWeight: '600',
   },
 });
 

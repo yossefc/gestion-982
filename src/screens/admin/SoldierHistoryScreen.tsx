@@ -12,12 +12,12 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   TextInput,
-  Alert,
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
+import { AppModal, ModalType } from '../../components';
 import { soldierService } from '../../services/soldierService';
 import { assignmentService } from '../../services/assignmentService';
 import { rspAssignmentService } from '../../services/firebaseService';
@@ -43,9 +43,20 @@ const SoldierHistoryScreen: React.FC = () => {
   const [searchResults, setSearchResults] = useState<Soldier[]>([]);
   const [history, setHistory] = useState<HistoryItem[]>([]);
 
+  // AppModal state
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalType, setModalType] = useState<ModalType>('info');
+  const [modalMessage, setModalMessage] = useState('');
+  const [modalTitle, setModalTitle] = useState<string | undefined>(undefined);
+  const [modalButtons, setModalButtons] = useState<any[]>([]);
+
   const handleSearch = async () => {
     if (!searchQuery.trim()) {
-      Alert.alert('שים לב', 'יש להזין שם או מספר אישי');
+      setModalType('warning');
+      setModalTitle('שים לב');
+      setModalMessage('יש להזין שם או מספר אישי');
+      setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalVisible(true);
       return;
     }
 
@@ -59,14 +70,22 @@ const SoldierHistoryScreen: React.FC = () => {
       );
 
       if (results.length === 0) {
-        Alert.alert('לא נמצא', 'לא נמצאו חיילים התואמים את החיפוש');
+        setModalType('info');
+        setModalTitle('לא נמצא');
+        setModalMessage('לא נמצאו חיילים התואמים את החיפוש');
+        setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+        setModalVisible(true);
         setSearchResults([]);
       } else {
         setSearchResults(results);
       }
     } catch (error) {
       console.error('Search error:', error);
-      Alert.alert('שגיאה', 'לא ניתן לבצע חיפוש');
+
+      setModalType('error');
+      setModalMessage('לא ניתן לבצע חיפוש');
+      setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalVisible(true);
     } finally {
       setSearching(false);
     }
@@ -122,7 +141,11 @@ const SoldierHistoryScreen: React.FC = () => {
       setHistory(historyItems);
     } catch (error) {
       console.error('Load history error:', error);
-      Alert.alert('שגיאה', 'לא ניתן לטעון את ההיסטוריה');
+      console.error('Load history error:', error);
+      setModalType('error');
+      setModalMessage('לא ניתן לטעון את ההיסטוריה');
+      setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalVisible(true);
     } finally {
       setLoading(false);
     }
@@ -148,7 +171,7 @@ const SoldierHistoryScreen: React.FC = () => {
 
   const getTypeLabel = (type: string) => {
     switch (type) {
-      case 'clothing': return 'אפנאות';
+      case 'clothing': return 'אפסנאות';
       case 'combat': return 'קרב';
       case 'rsp': return 'רס"פ';
       default: return type;
@@ -412,8 +435,19 @@ const SoldierHistoryScreen: React.FC = () => {
             )}
           </>
         )}
+
       </ScrollView>
-    </View>
+
+      {/* App Modal */}
+      <AppModal
+        visible={modalVisible}
+        type={modalType}
+        title={modalTitle}
+        message={modalMessage}
+        buttons={modalButtons}
+        onClose={() => setModalVisible(false)}
+      />
+    </View >
   );
 };
 

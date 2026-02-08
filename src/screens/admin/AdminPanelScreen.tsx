@@ -11,16 +11,18 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
   Platform,
+  Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
+import { AppModal, ModalType } from '../../components';
 import { soldierService } from '../../services/soldierService';
 import { userService } from '../../services/userService';
 import { assignmentService } from '../../services/assignmentService';
 import { migrateArmamentStatuses } from '../../utils/migrateStatuses';
+import { weaponInventoryService } from '../../services/weaponInventoryService';
 
 const AdminPanelScreen: React.FC = () => {
   const navigation = useNavigation();
@@ -32,9 +34,97 @@ const AdminPanelScreen: React.FC = () => {
     totalAssignments: 0,
   });
 
+  // AppModal state
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalType, setModalType] = useState<ModalType>('info');
+  const [modalMessage, setModalMessage] = useState('');
+  const [modalTitle, setModalTitle] = useState<string | undefined>(undefined);
+  const [modalButtons, setModalButtons] = useState<any[]>([]);
+
+  // Category Deletion State
+  const [deleteCategoryModalVisible, setDeleteCategoryModalVisible] = useState(false);
+  const [categories, setCategories] = useState<any[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [categoryStats, setCategoryStats] = useState<any | null>(null);
+
   useEffect(() => {
     loadStats();
   }, []);
+
+  const handleOpenDeleteCategoryModal = async () => {
+    try {
+      setLoading(true);
+      const inventoryStats = await weaponInventoryService.getInventoryStats();
+      setCategories(inventoryStats.byCategory);
+      setDeleteCategoryModalVisible(true);
+    } catch (error) {
+      console.error('Error loading inventory stats:', error);
+      setModalType('error');
+      setModalMessage('לא ניתן לטעון את קטגוריות הנשק');
+      setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalVisible(true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCategorySelection = (category: string) => {
+    setSelectedCategory(category);
+    const stats = categories.find(c => c.category === category);
+    setCategoryStats(stats);
+  };
+
+  const executeCategoryDeletion = async () => {
+    if (!selectedCategory || !categoryStats) return;
+
+    // Check if there are weapons to delete
+    const weaponsToDelete = categoryStats.total - categoryStats.assigned;
+    if (weaponsToDelete <= 0) {
+      setModalType('info');
+      setModalMessage('אין נשקים למחיקה בקטגוריה זו (כל הנשקים מוקצים)');
+      setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setDeleteCategoryModalVisible(false);
+      setModalVisible(true);
+      return;
+    }
+
+    setModalType('warning');
+    setModalTitle('אישור מחיקה');
+    setModalMessage(`האם אתה בטוח שברצונך למחוק ${weaponsToDelete} נשקים מסוג ${selectedCategory}? \n\n${categoryStats.assigned} נשקים המוקצים לחיילים לא יימחקו.`);
+    setModalButtons([
+      { text: 'ביטול', style: 'outline', onPress: () => setModalVisible(false) },
+      {
+        text: 'מחק',
+        style: 'destructive',
+        onPress: async () => {
+          setModalVisible(false); // Close confirmation modal
+          setDeleteCategoryModalVisible(false); // Close selection modal
+
+          try {
+            setLoading(true);
+            const deletedCount = await weaponInventoryService.deleteWeaponsByCategory(selectedCategory);
+
+            setModalType('success');
+            setModalTitle('הצלחה');
+            setModalMessage(`נמחקו ${deletedCount} נשקים בהצלחה.`);
+            setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+            setModalVisible(true);
+          } catch (error) {
+            console.error('Error deleting weapons:', error);
+            setModalType('error');
+            setModalMessage('שגיאה במחיקת הנשקים');
+            setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+            setModalVisible(true);
+          } finally {
+            setLoading(false);
+            setSelectedCategory(null);
+            setCategoryStats(null);
+          }
+        }
+      },
+    ]);
+    setModalVisible(true);
+  };
 
   const loadStats = async () => {
     try {
@@ -60,61 +150,84 @@ const AdminPanelScreen: React.FC = () => {
       });
     } catch (error) {
       console.error('Error loading stats:', error);
-      Alert.alert('שגיאה', 'לא ניתן לטעון את הנתונים');
+      setModalType('error');
+      setModalMessage('לא ניתן לטעון את הנתונים');
+      setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalVisible(true);
     } finally {
       setLoading(false);
     }
   };
 
   const handleInitializeData = () => {
-    Alert.alert(
-      'אתחול נתוני ברירת מחדל',
-      'האם אתה בטוח? פעולה זו תוסיף ציוד ברירת מחדל למערכת.',
-      [
-        { text: 'ביטול', style: 'cancel' },
-        { text: 'אישור', onPress: () => initializeDefaultData() },
-      ]
-    );
+    setModalType('warning');
+    setModalTitle('אתחול נתוני ברירת מחדל');
+    setModalMessage('האם אתה בטוח? פעולה זו תוסיף ציוד ברירת מחדל למערכת.');
+    setModalButtons([
+      { text: 'ביטול', style: 'outline', onPress: () => setModalVisible(false) },
+      { text: 'אישור', style: 'destructive', onPress: () => { setModalVisible(false); initializeDefaultData(); } },
+    ]);
+    setModalVisible(true);
   };
 
   const initializeDefaultData = async () => {
     try {
       setLoading(true);
       // Initialize default equipment logic here
-      Alert.alert('הצלחה', 'הנתונים אותחלו בהצלחה');
+      // Initialize default equipment logic here
+      setModalType('success');
+      setModalTitle('הצלחה');
+      setModalMessage('הנתונים אותחלו בהצלחה');
+      setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalVisible(true);
     } catch (error) {
-      Alert.alert('שגיאה', 'לא ניתן לאתחל את הנתונים');
+      setModalType('error');
+      setModalMessage('לא ניתן לאתחל את הנתונים');
+      setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalVisible(true);
     } finally {
       setLoading(false);
     }
   };
 
   const handleMigrateStatuses = () => {
-    Alert.alert(
-      'עדכון סטטוסים',
-      'פעולה זו תאחד את כל הסטטוסים של הציוד והנשק במערכת לפורמט החדש. האם להמשיך?',
-      [
-        { text: 'ביטול', style: 'cancel' },
-        {
-          text: 'אישור',
-          onPress: async () => {
-            try {
-              setLoading(true);
-              const result = await migrateArmamentStatuses();
-              if (result.success) {
-                Alert.alert('הצלחה', `התהליך הושלם. עודכנו ${result.updatedCount} מסמכים.`);
-              } else {
-                Alert.alert('שגיאה', 'התהליך נכשל');
-              }
-            } catch (error) {
-              Alert.alert('שגיאה', 'אירעה שגיאה בלתי צפויה');
-            } finally {
-              setLoading(false);
+    setModalType('warning');
+    setModalTitle('עדכון סטטוסים');
+    setModalMessage('פעולה זו תאחד את כל הסטטוסים של הציוד והנשק במערכת לפורמט החדש. האם להמשיך?');
+    setModalButtons([
+      { text: 'ביטול', style: 'outline', onPress: () => setModalVisible(false) },
+      {
+        text: 'אישור',
+        style: 'primary',
+        onPress: async () => {
+          setModalVisible(false);
+          try {
+            setLoading(true);
+            const result = await migrateArmamentStatuses();
+            if (result.success) {
+              setModalType('success');
+              setModalTitle('הצלחה');
+              setModalMessage(`התהליך הושלם. עודכנו ${result.updatedCount} מסמכים.`);
+              setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+              setModalVisible(true);
+            } else {
+              setModalType('error');
+              setModalMessage('התהליך נכשל');
+              setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+              setModalVisible(true);
             }
+          } catch (error) {
+            setModalType('error');
+            setModalMessage('אירעה שגיאה בלתי צפויה');
+            setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+            setModalVisible(true);
+          } finally {
+            setLoading(false);
           }
         },
-      ]
-    );
+      },
+    ]);
+    setModalVisible(true);
   };
 
   const StatCard = ({
@@ -211,6 +324,15 @@ const AdminPanelScreen: React.FC = () => {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
+        {/* Database Debug - MOVED TO TOP FOR VISIBILITY */}
+        <ActionCard
+          title="בדיקת מסד נתונים (Database Debug)"
+          subtitle="כלי דיאגנוסטיקה ותיקון"
+          icon="server"
+          color={Colors.danger}
+          onPress={() => navigation.navigate('DatabaseDebug' as never)}
+        />
+
         {/* Stats Section */}
         <Text style={styles.sectionTitle}>סטטיסטיקות מערכת</Text>
         <View style={styles.statsGrid}>
@@ -287,6 +409,16 @@ const AdminPanelScreen: React.FC = () => {
           color={Colors.arme}
           onPress={handleMigrateStatuses}
         />
+
+        {/* New Section: Weapon Inventory Management */}
+        <Text style={styles.sectionTitle}>ניהול מלאי נשק</Text>
+        <ActionCard
+          title="איפוס קטגוריה"
+          subtitle="מחיקת כל הנשקים הפנויים מקטגוריה"
+          icon="trash"
+          color={Colors.danger}
+          onPress={handleOpenDeleteCategoryModal}
+        />
         <ActionCard
           title="Migration RSP"
           subtitle="Initialiser le champ isRsp pour les soldats existants"
@@ -302,7 +434,13 @@ const AdminPanelScreen: React.FC = () => {
           subtitle="ייצוא כל הנתונים לקובץ Excel"
           icon="download"
           color={Colors.success}
-          onPress={() => Alert.alert('בקרוב', 'פיצ׳ר זה יהיה זמין בקרוב')}
+          onPress={() => {
+            setModalType('info');
+            setModalTitle('בקרוב');
+            setModalMessage('פיצ׳ר זה יהיה זמין בקרוב');
+            setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+            setModalVisible(true);
+          }}
           disabled
         />
         <ActionCard
@@ -310,7 +448,13 @@ const AdminPanelScreen: React.FC = () => {
           subtitle="יצירת גיבוי מלא של המערכת"
           icon="cloud-upload"
           color={Colors.primary}
-          onPress={() => Alert.alert('בקרוב', 'פיצ׳ר זה יהיה זמין בקרוב')}
+          onPress={() => {
+            setModalType('info');
+            setModalTitle('בקרוב');
+            setModalMessage('פיצ׳ר זה יהיה זמין בקרוב');
+            setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+            setModalVisible(true);
+          }}
           disabled
         />
 
@@ -333,11 +477,180 @@ const AdminPanelScreen: React.FC = () => {
           </View>
         </View>
       </ScrollView>
+
+      {/* Category Deletion Selection Modal */}
+      <Modal
+        visible={deleteCategoryModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setDeleteCategoryModalVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setDeleteCategoryModalVisible(false)}
+        >
+          <View style={styles.modalContent} onStartShouldSetResponder={() => true}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>בחירת קטגוריה למחיקה</Text>
+              <TouchableOpacity onPress={() => setDeleteCategoryModalVisible(false)}>
+                <Ionicons name="close" size={24} color={Colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={{ maxHeight: 300, width: '100%' }}>
+              {categories.map((cat) => (
+                <TouchableOpacity
+                  key={cat.category}
+                  style={[
+                    styles.categoryItem,
+                    selectedCategory === cat.category && styles.selectedCategoryItem
+                  ]}
+                  onPress={() => handleCategorySelection(cat.category)}
+                >
+                  <Text style={[
+                    styles.categoryItemText,
+                    selectedCategory === cat.category && styles.selectedCategoryItemText
+                  ]}>
+                    {cat.category}
+                  </Text>
+                  <View style={styles.categoryBadges}>
+                    <Text style={styles.badgetext}>סה״כ: {cat.total}</Text>
+                    <Text style={[styles.badgetext, { color: Colors.warning }]}>מוקצה: {cat.assigned}</Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            {selectedCategory && categoryStats && (
+              <View style={styles.statsSummary}>
+                <Text style={styles.summaryText}>
+                  נשקים למחיקה (פנויים/תקולים): {categoryStats.total - categoryStats.assigned}
+                </Text>
+                <Text style={styles.summaryTextWarning}>
+                  נשקים מוגנים (מוקצים): {categoryStats.assigned}
+                </Text>
+
+                <TouchableOpacity
+                  style={styles.deleteButton}
+                  onPress={executeCategoryDeletion}
+                >
+                  <Text style={styles.deleteButtonText}>מחק נשקים</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* App Modal */}
+      <AppModal
+        visible={modalVisible}
+        type={modalType}
+        title={modalTitle}
+        message={modalMessage}
+        buttons={modalButtons}
+        onClose={() => setModalVisible(false)}
+      />
     </View>
   );
 };
 
 const styles = StyleSheet.create({
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: Spacing.lg,
+  },
+  modalContent: {
+    backgroundColor: Colors.backgroundCard,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.lg,
+    width: '100%',
+    maxWidth: 400,
+    alignItems: 'center',
+    ...Shadows.medium,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginBottom: Spacing.md,
+  },
+  modalTitle: {
+    fontSize: FontSize.lg,
+    fontWeight: '700',
+    color: Colors.text,
+  },
+  categoryItem: {
+    padding: Spacing.md,
+    backgroundColor: Colors.background,
+    borderRadius: BorderRadius.md,
+    marginBottom: Spacing.sm,
+    width: '100%',
+    flexDirection: 'row-reverse', // RTL
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  selectedCategoryItem: {
+    borderColor: Colors.danger,
+    backgroundColor: Colors.danger + '10',
+  },
+  categoryItemText: {
+    fontSize: FontSize.md,
+    color: Colors.text,
+    fontWeight: '500',
+  },
+  selectedCategoryItemText: {
+    color: Colors.danger,
+    fontWeight: '700',
+  },
+  categoryBadges: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
+  badgetext: {
+    fontSize: FontSize.xs,
+    color: Colors.textSecondary,
+  },
+  statsSummary: {
+    marginTop: Spacing.md,
+    width: '100%',
+    padding: Spacing.md,
+    backgroundColor: Colors.background,
+    borderRadius: BorderRadius.md,
+    alignItems: 'center',
+  },
+  summaryText: {
+    fontSize: FontSize.sm,
+    color: Colors.text,
+    marginBottom: Spacing.xs,
+  },
+  summaryTextWarning: {
+    fontSize: FontSize.sm,
+    color: Colors.warning,
+    fontWeight: '700',
+    marginBottom: Spacing.md,
+  },
+  deleteButton: {
+    backgroundColor: Colors.danger,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.xl,
+    borderRadius: BorderRadius.md,
+    width: '100%',
+    alignItems: 'center',
+  },
+  deleteButtonText: {
+    color: Colors.textWhite,
+    fontWeight: '700',
+    fontSize: FontSize.md,
+  },
+
   container: {
     flex: 1,
     backgroundColor: Colors.background,

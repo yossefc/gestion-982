@@ -11,7 +11,6 @@ import {
   FlatList,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
   Platform,
   Modal,
   TextInput,
@@ -20,6 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
 import { clothingEquipmentService } from '../../services/clothingEquipmentService';
+import { AppModal, ModalType } from '../../components';
 
 interface Equipment {
   id: string;
@@ -27,9 +27,10 @@ interface Equipment {
   yamach?: number;
   category?: string;
   requiresSerial?: boolean;
+  sources?: { name: string; quantity: number }[];
 }
 
-const CATEGORIES = ['כללי', 'אפנאות עליון', 'אפנאות תחתון', 'הנעלה', 'אביזרים'];
+const CATEGORIES = ['כללי', 'אפסנאות עליון', 'אפסנאות תחתון', 'הנעלה', 'אביזרים'];
 
 const ClothingEquipmentManagementScreen: React.FC = () => {
   const navigation = useNavigation();
@@ -44,11 +45,19 @@ const ClothingEquipmentManagementScreen: React.FC = () => {
   const [editingItem, setEditingItem] = useState<Equipment | null>(null);
   const [formData, setFormData] = useState({
     name: '',
-    yamach: '',
+    // yamach: '', // REMOVED: Using sources instead
     category: 'כללי',
     requiresSerial: false,
+    sources: [] as { name: string; quantity: string }[],
   });
   const [saving, setSaving] = useState(false);
+
+  // AppModal state
+  const [appModalVisible, setAppModalVisible] = useState(false);
+  const [appModalType, setAppModalType] = useState<ModalType>('info');
+  const [appModalMessage, setAppModalMessage] = useState('');
+  const [appModalTitle, setAppModalTitle] = useState<string | undefined>(undefined);
+  const [appModalButtons, setAppModalButtons] = useState<any[]>([]);
 
   useEffect(() => {
     loadEquipment();
@@ -66,7 +75,10 @@ const ClothingEquipmentManagementScreen: React.FC = () => {
       setFilteredEquipment(data);
     } catch (error) {
       console.error('Error loading equipment:', error);
-      Alert.alert('שגיאה', 'לא ניתן לטעון את רשימת הציוד');
+      setAppModalType('error');
+      setAppModalMessage('לא ניתן לטעון את רשימת הציוד');
+      setAppModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setAppModalVisible(false) }]);
+      setAppModalVisible(true);
     } finally {
       setLoading(false);
     }
@@ -94,7 +106,7 @@ const ClothingEquipmentManagementScreen: React.FC = () => {
     setEditingItem(null);
     setFormData({
       name: '',
-      yamach: '',
+      sources: [{ name: 'ימ״ח', quantity: '' }], // Default source
       category: 'כללי',
       requiresSerial: false,
     });
@@ -105,31 +117,38 @@ const ClothingEquipmentManagementScreen: React.FC = () => {
     setEditingItem(item);
     setFormData({
       name: item.name,
-      yamach: item.yamach?.toString() || '',
       category: item.category || 'כללי',
       requiresSerial: item.requiresSerial || false,
+      sources: item.sources && item.sources.length > 0
+        ? item.sources.map(s => ({ name: s.name, quantity: s.quantity.toString() }))
+        : [{ name: 'ימ״ח', quantity: item.yamach?.toString() || '' }],
     });
     setModalVisible(true);
   };
 
   const handleSave = async () => {
     if (!formData.name.trim()) {
-      Alert.alert('שגיאה', 'יש להזין שם לציוד');
+      setAppModalType('error');
+      setAppModalMessage('יש להזין שם לציוד');
+      setAppModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setAppModalVisible(false) }]);
+      setAppModalVisible(true);
       return;
     }
 
     try {
       setSaving(true);
+      const totalQuantity = formData.sources.reduce((sum, s) => sum + (parseInt(s.quantity) || 0), 0);
+
       const data: any = {
         name: formData.name.trim(),
         category: formData.category,
         requiresSerial: formData.requiresSerial,
+        sources: formData.sources.map(s => ({
+          name: s.name.trim() || 'מקור לא ידוע',
+          quantity: parseInt(s.quantity) || 0,
+        })),
+        yamach: totalQuantity, // Synced for backward compatibility
       };
-
-      // Ajouter yamach seulement s'il est défini et non vide
-      if (formData.yamach && formData.yamach.trim()) {
-        data.yamach = parseInt(formData.yamach);
-      }
 
       if (editingItem) {
         await clothingEquipmentService.update(editingItem.id, data);
@@ -142,69 +161,124 @@ const ClothingEquipmentManagementScreen: React.FC = () => {
       }
 
       setModalVisible(false);
-      Alert.alert('הצלחה', editingItem ? 'הציוד עודכן בהצלחה' : 'הציוד נוסף בהצלחה');
+      setAppModalType('success');
+      setAppModalMessage(editingItem ? 'הציוד עודכן בהצלחה' : 'הציוד נוסף בהצלחה');
+      setAppModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setAppModalVisible(false) }]);
+      setAppModalVisible(true);
     } catch (error) {
-      Alert.alert('שגיאה', 'לא ניתן לשמור את הציוד');
+      setAppModalType('error');
+      setAppModalMessage('לא ניתן לשמור את הציוד');
+      setAppModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setAppModalVisible(false) }]);
+      setAppModalVisible(true);
     } finally {
       setSaving(false);
     }
   };
 
   const handleDelete = (item: Equipment) => {
-    Alert.alert(
-      'מחיקת ציוד',
-      `האם למחוק את "${item.name}"?`,
-      [
-        { text: 'ביטול', style: 'cancel' },
-        {
-          text: 'מחק',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await clothingEquipmentService.delete(item.id);
-              setEquipment(prev => prev.filter(eq => eq.id !== item.id));
-              Alert.alert('הצלחה', 'הציוד נמחק בהצלחה');
-            } catch (error) {
-              Alert.alert('שגיאה', 'לא ניתן למחוק את הציוד');
-            }
-          },
+    setAppModalType('warning');
+    setAppModalTitle('מחיקת ציוד');
+    setAppModalMessage(`האם למחוק את "${item.name}"?`);
+    setAppModalButtons([
+      { text: 'ביטול', style: 'outline', onPress: () => setAppModalVisible(false) },
+      {
+        text: 'מחק',
+        style: 'danger',
+        icon: 'trash' as const,
+        onPress: async () => {
+          setAppModalVisible(false);
+          try {
+            await clothingEquipmentService.delete(item.id);
+            setEquipment(prev => prev.filter(eq => eq.id !== item.id));
+            setAppModalType('success');
+            setAppModalTitle(undefined);
+            setAppModalMessage('הציוד נמחק בהצלחה');
+            setAppModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setAppModalVisible(false) }]);
+            setAppModalVisible(true);
+          } catch (error) {
+            setAppModalType('error');
+            setAppModalTitle(undefined);
+            setAppModalMessage('לא ניתן למחוק את הציוד');
+            setAppModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setAppModalVisible(false) }]);
+            setAppModalVisible(true);
+          }
         },
-      ]
-    );
+      },
+    ]);
+    setAppModalVisible(true);
   };
 
-  const renderEquipmentItem = ({ item }: { item: Equipment }) => (
-    <View style={styles.equipmentCard}>
-      <View style={styles.equipmentInfo}>
-        <Text style={styles.equipmentName}>{item.name}</Text>
-        <View style={styles.equipmentMeta}>
-          {(item.yamach !== undefined && item.yamach !== null) && (
-            <Text style={styles.equipmentYamach}>ימ״ח: {item.yamach}</Text>
-          )}
-          {item.category && (
-            <View style={styles.categoryBadge}>
-              <Text style={styles.categoryText}>{item.category}</Text>
-            </View>
-          )}
+  const renderEquipmentItem = ({ item }: { item: Equipment }) => {
+    const totalQuantity = item.sources && item.sources.length > 0
+      ? item.sources.reduce((sum, s) => sum + (s.quantity || 0), 0)
+      : (item.yamach || 0);
+
+    return (
+      <View style={styles.equipmentCard}>
+        {/* Header Row */}
+        <View style={styles.cardHeader}>
+          <View style={styles.cardTitleRow}>
+            <Text style={styles.equipmentName}>{item.name}</Text>
+            {item.category && (
+              <View style={styles.categoryBadge}>
+                <Text style={styles.categoryText}>{item.category}</Text>
+              </View>
+            )}
+          </View>
+
+          {/* Action Buttons */}
+          <View style={styles.equipmentActions}>
+            <TouchableOpacity
+              style={[styles.actionButton, styles.editButton]}
+              onPress={() => openEditModal(item)}
+            >
+              <Ionicons name="create-outline" size={18} color={Colors.info} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.actionButton, styles.deleteButton]}
+              onPress={() => handleDelete(item)}
+            >
+              <Ionicons name="trash-outline" size={18} color={Colors.danger} />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Sources Section */}
+        <View style={styles.sourcesSection}>
+          <View style={styles.sourcesRow}>
+            {item.sources && item.sources.length > 0 ? (
+              item.sources.slice(0, 3).map((source, index) => (
+                <View key={index} style={styles.sourceChip}>
+                  <Text style={styles.sourceChipName}>{source.name}</Text>
+                  <View style={styles.sourceChipQuantity}>
+                    <Text style={styles.sourceChipQuantityText}>{source.quantity}</Text>
+                  </View>
+                </View>
+              ))
+            ) : (
+              <View style={styles.sourceChip}>
+                <Text style={styles.sourceChipName}>ימ״ח</Text>
+                <View style={styles.sourceChipQuantity}>
+                  <Text style={styles.sourceChipQuantityText}>{item.yamach || 0}</Text>
+                </View>
+              </View>
+            )}
+            {item.sources && item.sources.length > 3 && (
+              <View style={[styles.sourceChip, { backgroundColor: Colors.textLight }]}>
+                <Text style={[styles.sourceChipName, { color: Colors.textWhite }]}>+{item.sources.length - 3}</Text>
+              </View>
+            )}
+          </View>
+
+          {/* Total Badge */}
+          <View style={styles.totalBadge}>
+            <Ionicons name="cube" size={14} color={Colors.textWhite} />
+            <Text style={styles.totalBadgeText}>{totalQuantity}</Text>
+          </View>
         </View>
       </View>
-
-      <View style={styles.equipmentActions}>
-        <TouchableOpacity
-          style={[styles.actionButton, styles.editButton]}
-          onPress={() => openEditModal(item)}
-        >
-          <Ionicons name="create-outline" size={20} color={Colors.info} />
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.actionButton, styles.deleteButton]}
-          onPress={() => handleDelete(item)}
-        >
-          <Ionicons name="trash-outline" size={20} color={Colors.danger} />
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -218,7 +292,7 @@ const ClothingEquipmentManagementScreen: React.FC = () => {
         </TouchableOpacity>
 
         <View style={styles.headerTitleContainer}>
-          <Text style={styles.headerTitle}>ניהול ציוד</Text>
+          <Text style={styles.headerTitle}>ניהול ציוד אפסנאות</Text>
           <Text style={styles.headerSubtitle}>{equipment.length} פריטים</Text>
         </View>
 
@@ -331,17 +405,58 @@ const ClothingEquipmentManagementScreen: React.FC = () => {
                 />
               </View>
 
-              {/* Yamach Input */}
+              {/* Sources Section */}
               <View style={styles.inputContainer}>
-                <Text style={styles.inputLabel}>ימ״ח (אופציונלי)</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="הזן מספר ימ״ח"
-                  placeholderTextColor={Colors.placeholder}
-                  value={formData.yamach}
-                  onChangeText={(text) => setFormData(prev => ({ ...prev, yamach: text }))}
-                  keyboardType="numeric"
-                />
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <Text style={styles.inputLabel}>מקורות ציוד</Text>
+                  <TouchableOpacity onPress={() => setFormData(prev => ({
+                    ...prev,
+                    sources: [...prev.sources, { name: '', quantity: '' }]
+                  }))}>
+                    <Text style={{ color: Colors.vetement, fontWeight: '600' }}>+ הוסף מקור</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {formData.sources.map((source, index) => (
+                  <View key={index} style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
+                    <TextInput
+                      style={[styles.input, { flex: 1 }]}
+                      placeholder="כמות"
+                      keyboardType="numeric"
+                      value={source.quantity}
+                      onChangeText={(t) => {
+                        const newSources = [...formData.sources];
+                        newSources[index].quantity = t;
+                        setFormData(prev => ({ ...prev, sources: newSources }));
+                      }}
+                    />
+                    <TextInput
+                      style={[styles.input, { flex: 2 }]}
+                      placeholder="שם המקור (למשל: ימ״ח)"
+                      value={source.name}
+                      onChangeText={(t) => {
+                        const newSources = [...formData.sources];
+                        newSources[index].name = t;
+                        setFormData(prev => ({ ...prev, sources: newSources }));
+                      }}
+                    />
+                    {formData.sources.length > 1 && (
+                      <TouchableOpacity
+                        style={{ justifyContent: 'center', padding: 4 }}
+                        onPress={() => {
+                          const newSources = formData.sources.filter((_, i) => i !== index);
+                          setFormData(prev => ({ ...prev, sources: newSources }));
+                        }}
+                      >
+                        <Ionicons name="trash-outline" size={20} color={Colors.danger} />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                ))}
+
+                <Text style={{ textAlign: 'right', color: Colors.textSecondary, marginTop: 4 }}>
+                  סה״כ כמות: {formData.sources.reduce((sum, s) => sum + (parseInt(s.quantity) || 0), 0)}
+                </Text>
               </View>
 
               {/* Category Selector */}
@@ -407,6 +522,16 @@ const ClothingEquipmentManagementScreen: React.FC = () => {
           </View>
         </View>
       </Modal>
+
+      {/* App Modal */}
+      <AppModal
+        visible={appModalVisible}
+        type={appModalType}
+        title={appModalTitle}
+        message={appModalMessage}
+        buttons={appModalButtons}
+        onClose={() => setAppModalVisible(false)}
+      />
     </View>
   );
 };
@@ -546,12 +671,27 @@ const styles = StyleSheet.create({
 
   equipmentCard: {
     backgroundColor: Colors.backgroundCard,
-    borderRadius: BorderRadius.lg,
-    padding: Spacing.lg,
+    borderRadius: BorderRadius.xl,
+    padding: Spacing.md,
+    marginBottom: Spacing.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    ...Shadows.medium,
+  },
+
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: Spacing.sm,
+  },
+
+  cardTitleRow: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: Spacing.md,
-    ...Shadows.small,
+    gap: Spacing.sm,
+    flexWrap: 'wrap',
   },
 
   equipmentInfo: {
@@ -560,9 +700,10 @@ const styles = StyleSheet.create({
   },
 
   equipmentName: {
-    fontSize: FontSize.base,
-    fontWeight: '600',
+    fontSize: FontSize.lg,
+    fontWeight: '700',
     color: Colors.text,
+    textAlign: 'right',
   },
 
   equipmentMeta: {
@@ -572,9 +713,84 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
   },
 
-  equipmentYamach: {
+  // Sources Section - Modern Chip Design
+  sourcesSection: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: Spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+  },
+
+  sourcesRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.xs,
+    flex: 1,
+  },
+
+  sourceChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.vetementLight,
+    borderRadius: BorderRadius.full,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    gap: 6,
+  },
+
+  sourceChipName: {
+    fontSize: FontSize.xs,
+    fontWeight: '500',
+    color: Colors.vetementDark,
+  },
+
+  sourceChipQuantity: {
+    backgroundColor: Colors.vetement,
+    borderRadius: BorderRadius.full,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    minWidth: 24,
+    alignItems: 'center',
+  },
+
+  sourceChipQuantityText: {
+    fontSize: FontSize.xs,
+    fontWeight: '700',
+    color: Colors.textWhite,
+  },
+
+  totalBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.vetement,
+    borderRadius: BorderRadius.lg,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    gap: 6,
+    marginLeft: Spacing.sm,
+  },
+
+  totalBadgeText: {
+    fontSize: FontSize.md,
+    fontWeight: '700',
+    color: Colors.textWhite,
+  },
+
+  // Legacy styles kept for compatibility
+  sourcesContainer: {
+    height: 60,
+    width: '100%',
+    marginTop: Spacing.xs,
+    marginBottom: Spacing.xs,
+  },
+
+  sourceText: {
     fontSize: FontSize.sm,
     color: Colors.textSecondary,
+    textAlign: 'right',
+    marginBottom: 4,
   },
 
   categoryBadge: {

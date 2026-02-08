@@ -8,7 +8,6 @@ import {
   StyleSheet,
   ScrollView,
   ActivityIndicator,
-  Alert,
   TextInput,
   RefreshControl,
 } from 'react-native';
@@ -16,6 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { CombatEquipment } from '../../types';
 import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
+import { AppModal, ModalType } from '../../components';
 import { combatEquipmentService, DEFAULT_COMBAT_EQUIPMENT } from '../../services/firebaseService';
 
 const CATEGORY_CONFIG: { [key: string]: { icon: string; color: string } } = {
@@ -35,6 +35,13 @@ const CombatEquipmentListScreen: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('הכל');
 
+  // AppModal state
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalType, setModalType] = useState<ModalType>('info');
+  const [modalMessage, setModalMessage] = useState('');
+  const [modalTitle, setModalTitle] = useState<string | undefined>(undefined);
+  const [modalButtons, setModalButtons] = useState<any[]>([]);
+
   useFocusEffect(
     useCallback(() => {
       loadEquipment();
@@ -46,33 +53,42 @@ const CombatEquipmentListScreen: React.FC = () => {
       const data = await combatEquipmentService.getAll();
 
       if (data.length === 0) {
-        Alert.alert(
-          'אין ציוד במערכת',
-          'האם ברצונך להוסיף ציוד ברירת מחדל?',
-          [
-            { text: 'לא', style: 'cancel' },
-            {
-              text: 'כן, הוסף',
-              onPress: async () => {
-                try {
-                  for (const eq of DEFAULT_COMBAT_EQUIPMENT) {
-                    await combatEquipmentService.create(eq);
-                  }
-                  loadEquipment();
-                } catch (error) {
-                  console.error('Error adding default equipment:', error);
-                  Alert.alert('שגיאה', 'נכשל בהוספת ציוד ברירת מחדל');
+        setModalType('info');
+        setModalTitle('אין ציוד במערכת');
+        setModalMessage('האם ברצונך להוסיף ציוד ברירת מחדל?');
+        setModalButtons([
+          { text: 'לא', style: 'outline', onPress: () => setModalVisible(false) },
+          {
+            text: 'כן, הוסף',
+            style: 'primary',
+            onPress: async () => {
+              setModalVisible(false);
+              try {
+                for (const eq of DEFAULT_COMBAT_EQUIPMENT) {
+                  await combatEquipmentService.create(eq);
                 }
-              },
-            },
-          ]
-        );
+                loadEquipment();
+              } catch (error) {
+                console.error('Error adding default equipment:', error);
+                setModalType('error');
+                setModalMessage('נכשל בהוספת ציוד ברירת מחדל');
+                setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+                setModalVisible(true);
+              }
+            }
+          }
+        ]);
+        setModalVisible(true);
       }
 
       setEquipment(data);
     } catch (error) {
       console.error('Error loading equipment:', error);
-      Alert.alert('שגיאה', 'נכשל בטעינת הציוד');
+      console.error('Error loading equipment:', error);
+      setModalType('error');
+      setModalMessage('נכשל בטעינת הציוד');
+      setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalVisible(true);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -107,27 +123,35 @@ const CombatEquipmentListScreen: React.FC = () => {
   };
 
   const handleDeleteEquipment = (item: CombatEquipment) => {
-    Alert.alert(
-      'מחיקת ציוד',
-      `האם אתה בטוח שברצונך למחוק את "${item.name}"?`,
-      [
-        { text: 'ביטול', style: 'cancel' },
-        {
-          text: 'מחק',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await combatEquipmentService.delete(item.id);
-              Alert.alert('הצלחה', 'הציוד נמחק בהצלחה');
-              loadEquipment();
-            } catch (error) {
-              console.error('Error deleting equipment:', error);
-              Alert.alert('שגיאה', 'נכשל במחיקת הציוד');
-            }
-          },
-        },
-      ]
-    );
+    setModalType('warning');
+    setModalTitle('מחיקת ציוד');
+    setModalMessage(`האם אתה בטוח שברצונך למחוק את "${item.name}"?`);
+    setModalButtons([
+      { text: 'ביטול', style: 'outline', onPress: () => setModalVisible(false) },
+      {
+        text: 'מחק',
+        style: 'destructive',
+        onPress: async () => {
+          setModalVisible(false);
+          try {
+            await combatEquipmentService.delete(item.id);
+            setModalType('success');
+            setModalTitle('הצלחה');
+            setModalMessage('הציוד נמחק בהצלחה');
+            setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+            setModalVisible(true);
+            loadEquipment();
+          } catch (error) {
+            console.error('Error deleting equipment:', error);
+            setModalType('error');
+            setModalMessage('נכשל במחיקת הציוד');
+            setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+            setModalVisible(true);
+          }
+        }
+      }
+    ]);
+    setModalVisible(true);
   };
 
   if (loading) {
@@ -325,7 +349,18 @@ const CombatEquipmentListScreen: React.FC = () => {
       <TouchableOpacity style={styles.fab} onPress={handleAddEquipment}>
         <Text style={styles.fabIcon}>+</Text>
       </TouchableOpacity>
-    </View>
+
+
+      {/* App Modal */}
+      <AppModal
+        visible={modalVisible}
+        type={modalType}
+        title={modalTitle}
+        message={modalMessage}
+        buttons={modalButtons}
+        onClose={() => setModalVisible(false)}
+      />
+    </View >
   );
 };
 

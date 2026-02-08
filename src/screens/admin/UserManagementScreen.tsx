@@ -11,13 +11,13 @@ import {
   FlatList,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
   Platform,
   Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
+import { AppModal, ModalType } from '../../components';
 import { userService } from '../../services/userService';
 import { UserRole } from '../../types';
 
@@ -25,15 +25,20 @@ interface User {
   id: string;
   email: string;
   displayName?: string;
-  role: 'admin' | 'both' | 'arme' | 'vetement';
+  role: UserRole;
+  company?: string;  // פלוגה - requis pour le rôle RSP
 }
 
 const ROLES = [
   { value: 'admin', label: 'מנהל', color: Colors.soldatsDark, bg: Colors.soldatsLight },
   { value: 'both', label: 'מלא', color: Colors.successDark, bg: Colors.successLight },
   { value: 'arme', label: 'נשק', color: Colors.armeDark, bg: Colors.armeLight },
-  { value: 'vetement', label: 'אפנאות', color: Colors.vetementDark, bg: Colors.vetementLight },
+  { value: 'vetement', label: 'אפסנאות', color: Colors.vetementDark, bg: Colors.vetementLight },
+  { value: 'rsp', label: 'רס"פ', color: Colors.warningDark, bg: Colors.warningLight },
+  { value: 'shlishut', label: 'שלישות', color: Colors.infoDark, bg: Colors.infoLight },
 ];
+
+const COMPANIES = ['פלוגה א', 'פלוגה ב', 'פלוגה ג', 'פלוגה ד', 'מפקדה', 'ניוד'];
 
 const UserManagementScreen: React.FC = () => {
   const navigation = useNavigation();
@@ -42,6 +47,15 @@ const UserManagementScreen: React.FC = () => {
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [selectedRole, setSelectedRole] = useState<string>('');
+  const [selectedCompany, setSelectedCompany] = useState<string>('');
+
+  // AppModal state
+  const [appModalVisible, setAppModalVisible] = useState(false);
+  const [modalType, setModalType] = useState<ModalType>('info');
+  const [modalMessage, setModalMessage] = useState('');
+  const [modalTitle, setModalTitle] = useState<string | undefined>(undefined);
+  const [modalButtons, setModalButtons] = useState<any[]>([]);
 
   useEffect(() => {
     loadUsers();
@@ -54,7 +68,10 @@ const UserManagementScreen: React.FC = () => {
       setUsers(data);
     } catch (error) {
       console.error('Error loading users:', error);
-      Alert.alert('שגיאה', 'לא ניתן לטעון את רשימת המשתמשים');
+      setModalType('error');
+      setModalMessage('לא ניתן לטעון את רשימת המשתמשים');
+      setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setAppModalVisible(false) }]);
+      setAppModalVisible(true);
     } finally {
       setLoading(false);
     }
@@ -66,22 +83,60 @@ const UserManagementScreen: React.FC = () => {
 
   const handleEditUser = (user: User) => {
     setSelectedUser(user);
+    setSelectedRole(user.role);
+    setSelectedCompany(user.company || '');
     setModalVisible(true);
   };
 
-  const handleUpdateRole = async (newRole: string) => {
+  const handleSelectRole = (role: string) => {
+    setSelectedRole(role);
+    // Si ce n'est pas RSP, effacer la company
+    if (role !== 'rsp') {
+      setSelectedCompany('');
+    }
+  };
+
+  const handleSelectCompany = (company: string) => {
+    setSelectedCompany(company);
+  };
+
+  const handleSaveChanges = async () => {
     if (!selectedUser) return;
+
+    // Validation: RSP doit avoir une company
+    if (selectedRole === 'rsp' && !selectedCompany) {
+      setModalType('warning');
+      setModalTitle('שגיאה');
+      setModalMessage('יש לבחור פלוגה עבור רס"פ');
+      setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setAppModalVisible(false) }]);
+      setAppModalVisible(true);
+      return;
+    }
 
     try {
       setSaving(true);
-      await userService.updateRole(selectedUser.id, newRole as UserRole);
+      // Mettre à jour le rôle et la company
+      await userService.updateRole(selectedUser.id, selectedRole as UserRole);
+      if (selectedRole === 'rsp') {
+        await userService.updateCompany(selectedUser.id, selectedCompany);
+      } else {
+        // Effacer la company si ce n'est plus RSP
+        await userService.updateCompany(selectedUser.id, '');
+      }
       setUsers(prev => prev.map(u =>
-        u.id === selectedUser.id ? { ...u, role: newRole as any } : u
+        u.id === selectedUser.id ? { ...u, role: selectedRole as any, company: selectedRole === 'rsp' ? selectedCompany : undefined } : u
       ));
       setModalVisible(false);
-      Alert.alert('הצלחה', 'התפקיד עודכן בהצלחה');
+      setModalType('success');
+      setModalTitle('הצלחה');
+      setModalMessage('התפקיד עודכן בהצלחה');
+      setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setAppModalVisible(false) }]);
+      setAppModalVisible(true);
     } catch (error) {
-      Alert.alert('שגיאה', 'לא ניתן לעדכן את התפקיד');
+      setModalType('error');
+      setModalMessage('לא ניתן לעדכן את התפקיד');
+      setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setAppModalVisible(false) }]);
+      setAppModalVisible(true);
     } finally {
       setSaving(false);
     }
@@ -202,36 +257,83 @@ const UserManagementScreen: React.FC = () => {
                     key={role.value}
                     style={[
                       styles.roleOption,
-                      selectedUser.role === role.value && styles.roleOptionSelected,
+                      selectedRole === role.value && styles.roleOptionSelected,
                     ]}
-                    onPress={() => handleUpdateRole(role.value)}
+                    onPress={() => handleSelectRole(role.value)}
                     disabled={saving}
                   >
                     <View style={[styles.roleOptionDot, { backgroundColor: role.color }]} />
                     <Text style={[
                       styles.roleOptionText,
-                      selectedUser.role === role.value && styles.roleOptionTextSelected,
+                      selectedRole === role.value && styles.roleOptionTextSelected,
                     ]}>
                       {role.label}
                     </Text>
-                    {selectedUser.role === role.value && (
+                    {selectedRole === role.value && (
                       <Ionicons name="checkmark" size={20} color={Colors.primary} />
                     )}
                   </TouchableOpacity>
                 ))}
 
-                {saving && (
-                  <View style={styles.savingOverlay}>
-                    <ActivityIndicator size="small" color={Colors.primary} />
-                    <Text style={styles.savingText}>שומר...</Text>
-                  </View>
+                {/* Sélecteur de פלוגה pour RSP */}
+                {selectedRole === 'rsp' && (
+                  <>
+                    <Text style={styles.modalSectionTitle}>בחר פלוגה:</Text>
+                    <View style={styles.companyGrid}>
+                      {COMPANIES.map((company) => (
+                        <TouchableOpacity
+                          key={company}
+                          style={[
+                            styles.companyOption,
+                            selectedCompany === company && styles.companyOptionSelected,
+                          ]}
+                          onPress={() => handleSelectCompany(company)}
+                          disabled={saving}
+                        >
+                          <Text style={[
+                            styles.companyOptionText,
+                            selectedCompany === company && styles.companyOptionTextSelected,
+                          ]}>
+                            {company}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </>
                 )}
+
+                {/* Bouton de sauvegarde */}
+                <TouchableOpacity
+                  style={[
+                    styles.saveButton,
+                    saving && styles.saveButtonDisabled,
+                  ]}
+                  onPress={handleSaveChanges}
+                  disabled={saving}
+                >
+                  {saving ? (
+                    <ActivityIndicator size="small" color={Colors.textWhite} />
+                  ) : (
+                    <Text style={styles.saveButtonText}>שמור שינויים</Text>
+                  )}
+                </TouchableOpacity>
               </View>
             )}
           </View>
         </View>
+
       </Modal>
-    </View>
+
+      {/* App Modal */}
+      <AppModal
+        visible={appModalVisible}
+        type={modalType}
+        title={modalTitle}
+        message={modalMessage}
+        buttons={modalButtons}
+        onClose={() => setAppModalVisible(false)}
+      />
+    </View >
   );
 };
 
@@ -492,6 +594,57 @@ const styles = StyleSheet.create({
   savingText: {
     fontSize: FontSize.md,
     color: Colors.textSecondary,
+  },
+
+  // Company selector styles
+  companyGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.sm,
+    marginBottom: Spacing.lg,
+  },
+
+  companyOption: {
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    borderRadius: BorderRadius.md,
+    backgroundColor: Colors.backgroundInput,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+
+  companyOptionSelected: {
+    backgroundColor: Colors.warningLight,
+    borderColor: Colors.warning,
+  },
+
+  companyOptionText: {
+    fontSize: FontSize.sm,
+    color: Colors.text,
+  },
+
+  companyOptionTextSelected: {
+    fontWeight: '600',
+    color: Colors.warningDark,
+  },
+
+  // Save button styles
+  saveButton: {
+    backgroundColor: Colors.primary,
+    borderRadius: BorderRadius.md,
+    paddingVertical: Spacing.md,
+    alignItems: 'center',
+    marginTop: Spacing.lg,
+  },
+
+  saveButtonDisabled: {
+    backgroundColor: Colors.textLight,
+  },
+
+  saveButtonText: {
+    fontSize: FontSize.base,
+    fontWeight: '600',
+    color: Colors.textWhite,
   },
 });
 

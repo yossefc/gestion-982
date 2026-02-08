@@ -20,6 +20,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { Colors, Shadows } from '../../theme/Colors';
 import { combatStockService, EquipmentStock } from '../../services/combatStockService';
+import { useData } from '../../contexts/DataContext';
+import { combatStockDebugService } from '../../services/combatStockDebugService';
 
 const FIXED_COLUMN_WIDTH = 110;
 const DATA_CELL_WIDTH = 46;
@@ -41,6 +43,10 @@ const COLUMNS = [
 
 const CombatStockScreen: React.FC = () => {
   const navigation = useNavigation();
+
+  // OPTIMISÉ: Vérifier si le DataContext est initialisé
+  const { isInitialized } = useData();
+
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [stocks, setStocks] = useState<EquipmentStock[]>([]);
@@ -49,9 +55,12 @@ const CombatStockScreen: React.FC = () => {
   const namesScrollRef = useRef<ScrollView>(null);
   const dataScrollRef = useRef<ScrollView>(null);
 
+  // OPTIMISÉ: Charger uniquement quand le cache est prêt
   useEffect(() => {
-    loadStocks();
-  }, []);
+    if (isInitialized) {
+      loadStocks();
+    }
+  }, [isInitialized]);
 
   const loadStocks = async () => {
     try {
@@ -78,6 +87,34 @@ const CombatStockScreen: React.FC = () => {
     } finally {
       setLoading(false);
       setRefreshing(false);
+    }
+  };
+
+  const debugDuplicates = async () => {
+    try {
+      const result = await combatStockDebugService.debugStockDuplicates();
+
+      let message = `ציוד: ${result.summary.totalEquipment}\n`;
+      message += `שמות ייחודיים: ${result.summary.uniqueNames}\n`;
+      message += `כפילויות: ${result.summary.duplicateNames}\n\n`;
+
+      if (result.equipmentDuplicates.length > 0) {
+        message += 'כפילויות בציוד:\n';
+        result.equipmentDuplicates.slice(0, 5).forEach(dup => {
+          message += `• ${dup.name} (${dup.count}x)\n`;
+        });
+        if (result.equipmentDuplicates.length > 5) {
+          message += `... ועוד ${result.equipmentDuplicates.length - 5}\n`;
+        }
+      }
+
+      Alert.alert('ניתוח כפילויות', message, [
+        { text: 'סגור', style: 'cancel' },
+        { text: 'ראה קונסול', onPress: () => console.log('Full debug result:', result) }
+      ]);
+    } catch (error) {
+      console.error('Error debugging:', error);
+      Alert.alert('שגיאה', 'לא ניתן לבצע ניתוח');
     }
   };
 
@@ -132,9 +169,14 @@ const CombatStockScreen: React.FC = () => {
           <Ionicons name="arrow-forward" size={22} color="#FFF" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>טבלת מלאי ({stocks.length})</Text>
-        <TouchableOpacity style={styles.headerButton} onPress={loadStocks}>
-          <Ionicons name="refresh" size={22} color="#FFF" />
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <TouchableOpacity style={styles.headerButton} onPress={debugDuplicates}>
+            <Ionicons name="bug" size={20} color="#FFF" />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.headerButton} onPress={loadStocks}>
+            <Ionicons name="refresh" size={22} color="#FFF" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {stocks.length === 0 ? (

@@ -11,9 +11,9 @@ import {
   TouchableOpacity,
   TextInput,
   ActivityIndicator,
-  Alert,
   Platform,
 } from 'react-native';
+import { AppModal, ModalType } from '../../components';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
@@ -32,6 +32,13 @@ const AssignWeaponScreen: React.FC = () => {
   const [soldiers, setSoldiers] = useState<Soldier[]>([]);
   const [filteredSoldiers, setFilteredSoldiers] = useState<Soldier[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // AppModal state
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalType, setModalType] = useState<ModalType>('info');
+  const [modalMessage, setModalMessage] = useState('');
+  const [modalTitle, setModalTitle] = useState<string | undefined>(undefined);
+  const [modalButtons, setModalButtons] = useState<any[]>([]);
 
   useEffect(() => {
     loadData();
@@ -66,7 +73,11 @@ const AssignWeaponScreen: React.FC = () => {
       setFilteredSoldiers(soldiersData);
     } catch (error) {
       console.error('Error loading data:', error);
-      Alert.alert('שגיאה', 'לא ניתן לטעון נתונים');
+      console.error('Error loading data:', error);
+      setModalType('error');
+      setModalMessage('לא ניתן לטעון נתונים');
+      setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalVisible(true);
     } finally {
       setLoading(false);
     }
@@ -75,34 +86,41 @@ const AssignWeaponScreen: React.FC = () => {
   const handleAssign = async (soldier: Soldier) => {
     if (!weapon) return;
 
-    Alert.alert(
-      'הקצאת נשק',
-      `להקצות ${weapon.category} ${weapon.serialNumber} ל${soldier.name}?`,
-      [
-        { text: 'ביטול', style: 'cancel' },
-        {
-          text: 'אשר',
-          onPress: async () => {
-            try {
-              setAssigning(true);
-              await weaponInventoryService.assignWeaponToSoldier(weaponId, {
-                soldierId: soldier.id,
-                soldierName: soldier.name,
-                soldierPersonalNumber: soldier.personalNumber,
-              });
-              Alert.alert('הצלחה', 'הנשק הוקצה בהצלחה', [
-                { text: 'אישור', onPress: () => navigation.navigate('WeaponInventoryList') },
-              ]);
-            } catch (error: any) {
-              console.error('Error assigning weapon:', error);
-              Alert.alert('שגיאה', error.message || 'לא ניתן להקצות את הנשק');
-            } finally {
-              setAssigning(false);
-            }
-          },
+    setModalType('info');
+    setModalTitle('הקצאת נשק');
+    setModalMessage(`להקצות ${weapon.category} ${weapon.serialNumber} ל${soldier.name}?`);
+    setModalButtons([
+      { text: 'ביטול', style: 'outline', onPress: () => setModalVisible(false) },
+      {
+        text: 'אשר',
+        style: 'primary',
+        onPress: async () => {
+          setModalVisible(false);
+          try {
+            setAssigning(true);
+            await weaponInventoryService.assignWeaponToSoldier(weaponId, {
+              soldierId: soldier.id,
+              soldierName: soldier.name,
+              soldierPersonalNumber: soldier.personalNumber,
+            });
+            setModalType('success');
+            setModalTitle('הצלחה');
+            setModalMessage('הנשק הוקצה בהצלחה');
+            setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => { setModalVisible(false); navigation.navigate('WeaponInventoryList'); } }]);
+            setModalVisible(true);
+          } catch (error: any) {
+            console.error('Error assigning weapon:', error);
+            setModalType('error');
+            setModalMessage(error.message || 'לא ניתן להקצות את הנשק');
+            setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+            setModalVisible(true);
+          } finally {
+            setAssigning(false);
+          }
         },
-      ]
-    );
+      },
+    ]);
+    setModalVisible(true);
   };
 
   if (loading || !weapon) {
@@ -193,6 +211,16 @@ const AssignWeaponScreen: React.FC = () => {
           <Text style={styles.overlayText}>מקצה נשק...</Text>
         </View>
       )}
+
+      {/* App Modal */}
+      <AppModal
+        visible={modalVisible}
+        type={modalType}
+        title={modalTitle}
+        message={modalMessage}
+        buttons={modalButtons}
+        onClose={() => setModalVisible(false)}
+      />
     </View>
   );
 };

@@ -93,6 +93,8 @@ export const soldierService = {
         ...soldierData,
         searchKey,
         nameLower,
+        status: soldierData.status || 'pre_recruitment', // Default status
+        clearanceStatus: { armory: false, logistics: false }, // Default clearance
         createdAt: Timestamp.now(),
         updatedAt: Timestamp.now(),
       });
@@ -175,10 +177,10 @@ export const soldierService = {
         return soldiersCache;
       }
 
+      // Query simple sans orderBy pour inclure les docs sans nameLower
       const querySnapshot = await getDocs(
         query(
           collection(db, COLLECTIONS.SOLDIERS),
-          orderBy('nameLower', 'asc'),
           firestoreLimit(limitCount)
         )
       );
@@ -188,6 +190,9 @@ export const soldierService = {
         ...doc.data(),
         createdAt: doc.data().createdAt?.toDate(),
       })) as Soldier[];
+
+      // Tri côté client
+      soldiers.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 
       // Mettre à jour le cache
       soldiersCache = soldiers;
@@ -389,6 +394,67 @@ export const soldierService = {
     } catch (error) {
       logError('soldierService.getByCompany', error);
       throw mapFirebaseError(error);
+    }
+  },
+
+  // Mettre à jour le statut d'un soldat
+  async updateStatus(id: string, status: Soldier['status']): Promise<void> {
+    try {
+      await this.update(id, { status });
+    } catch (error) {
+      logError('soldierService.updateStatus', error);
+      throw error;
+    }
+  },
+
+  // Mettre à jour le statut de zikuy (clearance)
+  async updateClearance(id: string, type: 'armory' | 'logistics', value: boolean): Promise<void> {
+    try {
+      const soldier = await this.getById(id);
+      if (!soldier) throw new Error('Soldier not found');
+
+      const currentClearance = soldier.clearanceStatus || { armory: false, logistics: false };
+
+      const newClearance = {
+        ...currentClearance,
+        [type]: value
+      };
+
+      await this.update(id, { clearanceStatus: newClearance });
+
+      // Check if released
+      await this.checkClearanceAndRelease(id);
+    } catch (error) {
+      logError('soldierService.updateClearance', error);
+      throw error;
+    }
+  },
+
+  // Vérifier si le soldat peut être libéré automatiquement
+  async checkClearanceAndRelease(id: string): Promise<void> {
+    try {
+      const soldier = await this.getById(id);
+      if (!soldier) return;
+
+      // Uniquement si en processus de libération
+      if (soldier.status !== 'releasing_today') return;
+
+      const clearance = soldier.clearanceStatus;
+      if (clearance && clearance.armory && clearance.logistics) {
+        // Auto release
+        await this.updateStatus(id, 'released');
+        await logService.logChange({
+          entityType: 'soldier',
+          entityId: id,
+          action: 'update',
+          performedBy: 'system',
+          performedByName: 'System Auto-Release',
+          after: { status: 'released' }
+        });
+      }
+    } catch (error) {
+      logError('soldierService.checkClearanceAndRelease', error);
+      // Ne pas bloquer pour ça
     }
   },
 };

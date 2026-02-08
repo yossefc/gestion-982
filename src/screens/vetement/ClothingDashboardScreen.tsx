@@ -163,7 +163,7 @@ const ClothingDashboardScreen: React.FC = () => {
         </TouchableOpacity>
 
         <View style={styles.headerTitleContainer}>
-          <Text style={styles.headerTitle}>דאשבורד אפנאות</Text>
+          <Text style={styles.headerTitle}>דאשבורד אפסנאות</Text>
           <Text style={styles.headerSubtitle}>סטטיסטיקות ודוחות</Text>
         </View>
 

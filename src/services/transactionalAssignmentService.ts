@@ -7,6 +7,10 @@
  * Architecture:
  * - assignments: Historique immuable (append-only)
  * - soldier_holdings: État courant (mis à jour transactionnellement)
+ *
+ * OFFLINE SUPPORT:
+ * - Les opérations sont mises en queue si offline
+ * - Sync automatique au retour du réseau
  */
 
 import {
@@ -25,6 +29,12 @@ import {
 } from 'firebase/firestore';
 import { app } from '../config/firebase';
 import { AssignmentItem, HoldingItem } from '../types';
+import {
+  offlineService,
+  isOnline,
+  setTransactionFunctions,
+  OperationType,
+} from './offlineService';
 
 const db = getFirestore(app);
 
@@ -171,22 +181,33 @@ function applyOperationToHoldings(
 
     const itemSerials = item.serial ? item.serial.split(',').map(s => s.trim()).filter(Boolean) : [];
 
-    if (action === 'issue' || action === 'add') {
+    if (action === 'issue' || action === 'add' || action === 'retrieve') {
       current.quantity += item.quantity;
-      current.serials = [...current.serials, ...itemSerials];
+
+      // DEDUPLICATION: On n'ajoute que les séries qui ne sont pas déjà présentes
+      const newSerialsToAdd = itemSerials.filter(s => !current.serials.includes(s));
+      current.serials = [...current.serials, ...newSerialsToAdd];
+
+      // Si l'item a des serials, quantity DOIT = nombre de serials (chaque serial = 1 unité)
+      if (current.serials.length > 0) {
+        current.quantity = current.serials.length;
+      }
+
       current.status = 'assigned';
     } else if (action === 'storage') {
       // Pour l'אפסון, on ne retire plus l'item, on change juste son statut
       current.status = 'stored';
-    } else if (action === 'retrieve') {
-      // Retour d'אפסון -> redevient active
-      current.status = 'assigned';
     } else if (action === 'return' || action === 'credit') {
-      current.quantity -= item.quantity;
       if (itemSerials.length > 0) {
         current.serials = current.serials.filter(s => !itemSerials.includes(s));
       } else {
         current.serials = current.serials.slice(0, Math.max(0, current.serials.length - item.quantity));
+      }
+      // Si l'item a des serials, quantity DOIT = nombre de serials restants
+      if (current.serials.length > 0) {
+        current.quantity = current.serials.length;
+      } else {
+        current.quantity -= item.quantity;
       }
     }
 
@@ -269,6 +290,8 @@ export async function issueEquipment(params: IssueEquipmentParams): Promise<stri
 
     transaction.set(holdingRef, {
       soldierId,
+      soldierName,
+      soldierPersonalNumber,
       type,
       items: newHoldings,
       outstandingCount,
@@ -350,6 +373,8 @@ export async function returnEquipment(params: ReturnEquipmentParams): Promise<st
 
     transaction.set(holdingRef, {
       soldierId,
+      soldierName,
+      soldierPersonalNumber,
       type,
       items: newHoldings,
       outstandingCount,
@@ -447,6 +472,8 @@ export async function addEquipment(params: AddEquipmentParams): Promise<string> 
 
     transaction.set(holdingRef, {
       soldierId,
+      soldierName,
+      soldierPersonalNumber,
       type,
       items: newHoldings,
       outstandingCount,
@@ -522,6 +549,8 @@ export async function creditEquipment(
     // 3. Fermer les holdings
     transaction.set(holdingRef, {
       soldierId,
+      soldierName,
+      soldierPersonalNumber,
       type,
       items: [],
       outstandingCount: 0,
@@ -615,6 +644,8 @@ export async function storageEquipment(
 
     transaction.set(holdingRef, {
       soldierId,
+      soldierName,
+      soldierPersonalNumber,
       type,
       items: newHoldings,
       outstandingCount,
@@ -679,6 +710,8 @@ export async function retrieveEquipment(
 
     transaction.set(holdingRef, {
       soldierId,
+      soldierName,
+      soldierPersonalNumber,
       type,
       items: newHoldings,
       outstandingCount,
@@ -691,8 +724,84 @@ export async function retrieveEquipment(
 }
 
 /**
+ * Déduplique les items en fusionnant les quantités et serials.
+ * Gère 2 cas:
+ *  1) Même equipmentId → fusion directe
+ *  2) Même equipmentName + serials en commun mais equipmentId différents
+ *     (ex: un vrai ID "1ejpa..." et un ID fabriqué "WEAPON_מקלע מאג")
+ *     → on garde le vrai ID (celui qui ne commence pas par "WEAPON_")
+ */
+function deduplicateHoldings(items: HoldingItem[]): HoldingItem[] {
+  const holdingsMap = new Map<string, HoldingItem>();
+
+  for (const item of items) {
+    // Chercher un doublon existant: même equipmentId OU même nom + serials en commun
+    let mergeKey: string | undefined = undefined;
+
+    if (holdingsMap.has(item.equipmentId)) {
+      mergeKey = item.equipmentId;
+    } else {
+      // Vérifier si un autre item avec le même nom a des serials en commun
+      for (const [key, existing] of holdingsMap) {
+        if (existing.equipmentName === item.equipmentName) {
+          const hasCommonSerial = item.serials.some(s => s && existing.serials.includes(s));
+          if (hasCommonSerial) {
+            mergeKey = key;
+            break;
+          }
+        }
+      }
+    }
+
+    if (mergeKey !== undefined) {
+      const existing = holdingsMap.get(mergeKey)!;
+      const mergedSerials = [...new Set([...existing.serials, ...item.serials])];
+
+      // Garder le vrai ID (celui qui ne commence pas par "WEAPON_")
+      const realId = existing.equipmentId.startsWith('WEAPON_') ? item.equipmentId : existing.equipmentId;
+
+      holdingsMap.delete(mergeKey);
+      holdingsMap.set(realId, {
+        ...existing,
+        equipmentId: realId,
+        serials: mergedSerials,
+        quantity: mergedSerials.filter(Boolean).length || existing.quantity,
+        status: existing.status === 'stored' || item.status === 'stored' ? 'stored' : 'assigned',
+      });
+    } else {
+      holdingsMap.set(item.equipmentId, { ...item });
+    }
+  }
+
+  return Array.from(holdingsMap.values()).filter(item => item.quantity > 0);
+}
+
+/**
+ * REPAIR ONLY: Force save current deduplicated holdings to DB
+ * Utilise la logique de lecture (qui déduplique) pour écraser les données corrompues
+ */
+export async function repairSoldierHoldings(soldierId: string, type: 'combat' | 'clothing'): Promise<void> {
+  // 1. Lire les holdings (la lecture applique déjà deduplicateHoldings)
+  const cleanItems = await getCurrentHoldings(soldierId, type);
+
+  // 2. Calculer le total
+  const outstandingCount = cleanItems.reduce((sum, item) => sum + item.quantity, 0);
+
+  // 3. Écraser dans la base
+  const holdingId = `${soldierId}_${type}`;
+  const holdingRef = doc(db, 'soldier_holdings', holdingId);
+
+  await setDoc(holdingRef, {
+    items: cleanItems,
+    outstandingCount,
+    lastUpdated: Timestamp.now(),
+  }, { merge: true });
+}
+
+/**
  * Get current holdings for a soldier (lecture depuis soldier_holdings)
  * NON-TRANSACTIONNEL: simple lecture
+ * Inclut une déduplication automatique pour corriger les données historiques
  */
 export async function getCurrentHoldings(
   soldierId: string,
@@ -703,7 +812,9 @@ export async function getCurrentHoldings(
   const holdingSnap = await getDoc(holdingRef);
 
   if (holdingSnap.exists()) {
-    return holdingSnap.data().items || [];
+    const items = holdingSnap.data().items || [];
+    // Dédupliquer automatiquement pour corriger les données historiques
+    return deduplicateHoldings(items);
   }
 
   return [];
@@ -781,15 +892,265 @@ export async function recalculateAllSoldiersHoldings(
   return { success, errors };
 }
 
-// Export du service
+// ============================================
+// OFFLINE-AWARE WRAPPERS
+// ============================================
+
+/**
+ * Wrapper pour issueEquipment avec support offline
+ * AMÉLIORÉ: Attrape les erreurs réseau et met en queue automatiquement
+ */
+async function issueEquipmentOffline(params: IssueEquipmentParams): Promise<string> {
+  if (!isOnline()) {
+    console.log('[TransactionalAssignment] Offline - Queuing issue operation');
+    return await offlineService.queue('issue', params);
+  }
+
+  try {
+    return await issueEquipment(params);
+  } catch (error: any) {
+    // Si c'est une erreur réseau, mettre en queue au lieu d'échouer
+    const isNetworkError =
+      error?.code === 'unavailable' ||
+      error?.code === 'failed-precondition' ||
+      error?.message?.includes('network') ||
+      error?.message?.includes('offline') ||
+      error?.message?.includes('Failed to get document') ||
+      error?.message?.includes('Could not reach Cloud Firestore');
+
+    if (isNetworkError) {
+      console.log('[TransactionalAssignment] Network error detected - Queuing issue operation');
+      return await offlineService.queue('issue', params);
+    }
+
+    // Pour les autres erreurs, les propager normalement
+    throw error;
+  }
+}
+
+/**
+ * Wrapper pour returnEquipment avec support offline
+ * AMÉLIORÉ: Attrape les erreurs réseau et met en queue automatiquement
+ */
+async function returnEquipmentOffline(params: ReturnEquipmentParams): Promise<string> {
+  if (!isOnline()) {
+    console.log('[TransactionalAssignment] Offline - Queuing return operation');
+    return await offlineService.queue('return', params);
+  }
+
+  try {
+    return await returnEquipment(params);
+  } catch (error: any) {
+    const isNetworkError =
+      error?.code === 'unavailable' ||
+      error?.code === 'failed-precondition' ||
+      error?.message?.includes('network') ||
+      error?.message?.includes('offline') ||
+      error?.message?.includes('Failed to get document') ||
+      error?.message?.includes('Could not reach Cloud Firestore');
+
+    if (isNetworkError) {
+      console.log('[TransactionalAssignment] Network error detected - Queuing return operation');
+      return await offlineService.queue('return', params);
+    }
+    throw error;
+  }
+}
+
+/**
+ * Wrapper pour addEquipment avec support offline
+ * AMÉLIORÉ: Attrape les erreurs réseau et met en queue automatiquement
+ */
+async function addEquipmentOffline(params: AddEquipmentParams): Promise<string> {
+  if (!isOnline()) {
+    console.log('[TransactionalAssignment] Offline - Queuing add operation');
+    return await offlineService.queue('add', params);
+  }
+
+  try {
+    return await addEquipment(params);
+  } catch (error: any) {
+    const isNetworkError =
+      error?.code === 'unavailable' ||
+      error?.code === 'failed-precondition' ||
+      error?.message?.includes('network') ||
+      error?.message?.includes('offline') ||
+      error?.message?.includes('Failed to get document') ||
+      error?.message?.includes('Could not reach Cloud Firestore');
+
+    if (isNetworkError) {
+      console.log('[TransactionalAssignment] Network error detected - Queuing add operation');
+      return await offlineService.queue('add', params);
+    }
+    throw error;
+  }
+}
+
+/**
+ * Wrapper pour creditEquipment avec support offline
+ * AMÉLIORÉ: Attrape les erreurs réseau et met en queue automatiquement
+ */
+async function creditEquipmentOffline(
+  soldierId: string,
+  soldierName: string,
+  soldierPersonalNumber: string,
+  type: 'combat' | 'clothing',
+  creditedBy: string,
+  requestId: string
+): Promise<string> {
+  const params = { soldierId, soldierName, soldierPersonalNumber, type, creditedBy, requestId };
+  if (!isOnline()) {
+    console.log('[TransactionalAssignment] Offline - Queuing credit operation');
+    return await offlineService.queue('credit', params);
+  }
+
+  try {
+    return await creditEquipment(soldierId, soldierName, soldierPersonalNumber, type, creditedBy, requestId);
+  } catch (error: any) {
+    const isNetworkError =
+      error?.code === 'unavailable' ||
+      error?.code === 'failed-precondition' ||
+      error?.message?.includes('network') ||
+      error?.message?.includes('offline') ||
+      error?.message?.includes('Failed to get document') ||
+      error?.message?.includes('Could not reach Cloud Firestore');
+
+    if (isNetworkError) {
+      console.log('[TransactionalAssignment] Network error detected - Queuing credit operation');
+      return await offlineService.queue('credit', params);
+    }
+    throw error;
+  }
+}
+
+/**
+ * Wrapper pour storageEquipment avec support offline
+ * AMÉLIORÉ: Attrape les erreurs réseau et met en queue automatiquement
+ */
+async function storageEquipmentOffline(
+  soldierId: string,
+  soldierName: string,
+  soldierPersonalNumber: string,
+  type: 'combat' | 'clothing',
+  items: AssignmentItem[],
+  storedBy: string,
+  requestId: string
+): Promise<string> {
+  const params = { soldierId, soldierName, soldierPersonalNumber, type, items, storedBy, requestId };
+  if (!isOnline()) {
+    console.log('[TransactionalAssignment] Offline - Queuing storage operation');
+    return await offlineService.queue('storage', params);
+  }
+
+  try {
+    return await storageEquipment(soldierId, soldierName, soldierPersonalNumber, type, items, storedBy, requestId);
+  } catch (error: any) {
+    const isNetworkError =
+      error?.code === 'unavailable' ||
+      error?.code === 'failed-precondition' ||
+      error?.message?.includes('network') ||
+      error?.message?.includes('offline') ||
+      error?.message?.includes('Failed to get document') ||
+      error?.message?.includes('Could not reach Cloud Firestore');
+
+    if (isNetworkError) {
+      console.log('[TransactionalAssignment] Network error detected - Queuing storage operation');
+      return await offlineService.queue('storage', params);
+    }
+    throw error;
+  }
+}
+
+/**
+ * Wrapper pour retrieveEquipment avec support offline
+ * AMÉLIORÉ: Attrape les erreurs réseau et met en queue automatiquement
+ */
+async function retrieveEquipmentOffline(
+  soldierId: string,
+  soldierName: string,
+  soldierPersonalNumber: string,
+  type: 'combat' | 'clothing',
+  items: AssignmentItem[],
+  retrievedBy: string,
+  requestId: string
+): Promise<string> {
+  const params = { soldierId, soldierName, soldierPersonalNumber, type, items, retrievedBy, requestId };
+  if (!isOnline()) {
+    console.log('[TransactionalAssignment] Offline - Queuing retrieve operation');
+    return await offlineService.queue('retrieve', params);
+  }
+
+  try {
+    return await retrieveEquipment(soldierId, soldierName, soldierPersonalNumber, type, items, retrievedBy, requestId);
+  } catch (error: any) {
+    const isNetworkError =
+      error?.code === 'unavailable' ||
+      error?.code === 'failed-precondition' ||
+      error?.message?.includes('network') ||
+      error?.message?.includes('offline') ||
+      error?.message?.includes('Failed to get document') ||
+      error?.message?.includes('Could not reach Cloud Firestore');
+
+    if (isNetworkError) {
+      console.log('[TransactionalAssignment] Network error detected - Queuing retrieve operation');
+      return await offlineService.queue('retrieve', params);
+    }
+    throw error;
+  }
+}
+
+// Enregistrer les fonctions transactionnelles pour le service offline
+// Cela permet au service offline de rejouer les opérations quand on revient online
+setTransactionFunctions({
+  issue: issueEquipment,
+  return: returnEquipment,
+  add: addEquipment,
+  credit: (params: any) => creditEquipment(
+    params.soldierId,
+    params.soldierName,
+    params.soldierPersonalNumber,
+    params.type,
+    params.creditedBy,
+    params.requestId
+  ),
+  storage: (params: any) => storageEquipment(
+    params.soldierId,
+    params.soldierName,
+    params.soldierPersonalNumber,
+    params.type,
+    params.items,
+    params.storedBy,
+    params.requestId
+  ),
+  retrieve: (params: any) => retrieveEquipment(
+    params.soldierId,
+    params.soldierName,
+    params.soldierPersonalNumber,
+    params.type,
+    params.items,
+    params.retrievedBy,
+    params.requestId
+  ),
+});
+
+// Export du service avec wrappers offline
 export const transactionalAssignmentService = {
-  issueEquipment,
-  returnEquipment,
-  addEquipment,
-  creditEquipment,
-  storageEquipment,
-  retrieveEquipment,
+  // Fonctions avec support offline (recommandé)
+  issueEquipment: issueEquipmentOffline,
+  returnEquipment: returnEquipmentOffline,
+  addEquipment: addEquipmentOffline,
+  creditEquipment: creditEquipmentOffline,
+  storageEquipment: storageEquipmentOffline,
+  retrieveEquipment: retrieveEquipmentOffline,
+
+  // Fonctions directes (sans offline, pour usage interne)
+  issueEquipmentDirect: issueEquipment,
+  returnEquipmentDirect: returnEquipment,
+  addEquipmentDirect: addEquipment,
+
+  // Fonctions de lecture (pas besoin d'offline wrapper)
   getCurrentHoldings,
   getAllHoldings,
   recalculateAllSoldiersHoldings,
+  repairSoldierHoldings,
 };

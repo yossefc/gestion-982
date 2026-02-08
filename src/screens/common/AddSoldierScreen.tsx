@@ -12,7 +12,6 @@ import {
   TextInput,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
   Platform,
   KeyboardAvoidingView,
   KeyboardTypeOptions,
@@ -22,7 +21,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
 import { soldierService } from '../../services/soldierService';
-import { useSoldiers } from '../../contexts/SoldiersContext';
+import { useSoldiers } from '../../contexts/DataContext';
+import { AppModal, ModalType } from '../../components';
+import { useRoute, RouteProp } from '@react-navigation/native';
 
 const COMPANIES = ['פלוגה א', 'פלוגה ב', 'פלוגה ג', 'פלוגה ד', 'מפקדה', 'ניוד'];
 
@@ -83,6 +84,8 @@ const InputField: React.FC<InputFieldProps> = React.memo(({
 
 const AddSoldierScreen: React.FC = () => {
   const navigation = useNavigation();
+  const route = useRoute<RouteProp<{ params: { fromShlishut?: boolean } }, 'params'>>();
+  const fromShlishut = route.params?.fromShlishut || false;
   const { refreshSoldiers } = useSoldiers();
   const [loading, setLoading] = useState(false);
   const [focusedInput, setFocusedInput] = useState<string | null>(null);
@@ -94,9 +97,16 @@ const AddSoldierScreen: React.FC = () => {
     company: '',
     department: '',
     isRsp: false,
+    status: 'pre_recruitment' as 'pre_recruitment' | 'recruited',
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // Modal state
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalType, setModalType] = useState<ModalType>('info');
+  const [modalMessage, setModalMessage] = useState('');
+  const [modalButtons, setModalButtons] = useState<any[]>([]);
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
@@ -127,11 +137,23 @@ const AddSoldierScreen: React.FC = () => {
       // Rafraîchir le cache des soldats après création
       await refreshSoldiers();
 
-      Alert.alert('הצלחה', 'החייל נוסף בהצלחה', [
-        { text: 'אישור', onPress: () => navigation.goBack() }
-      ]);
+      setModalType('success');
+      setModalMessage('החייל נוסף בהצלחה');
+      setModalButtons([{
+        text: 'סגור',
+        style: 'primary',
+        icon: 'checkmark-circle' as const,
+        onPress: () => {
+          setModalVisible(false);
+          navigation.goBack();
+        },
+      }]);
+      setModalVisible(true);
     } catch (error: any) {
-      Alert.alert('שגיאה', error.message || 'לא ניתן להוסיף את החייל');
+      setModalType('error');
+      setModalMessage(error.message || 'לא ניתן להוסיף את החייל');
+      setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalVisible(true);
     } finally {
       setLoading(false);
     }
@@ -266,6 +288,46 @@ const AddSoldierScreen: React.FC = () => {
                 thumbColor={Platform.OS === 'ios' ? '#FFFFFF' : (formData.isRsp ? Colors.soldatsDark : '#F3F4F6')}
               />
             </View>
+
+            {/* Status Selection (only for Shlishut) */}
+            {fromShlishut && (
+              <View style={styles.inputContainer}>
+                <Text style={styles.inputLabel}>סטטוס התחלתי</Text>
+                <View style={styles.companyGrid}>
+                  <TouchableOpacity
+                    style={[
+                      styles.companyButton,
+                      formData.status === 'pre_recruitment' && { backgroundColor: '#6B7280', borderColor: '#6B7280' },
+                    ]}
+                    onPress={() => setFormData(prev => ({ ...prev, status: 'pre_recruitment' }))}
+                  >
+                    <Text style={[
+                      styles.companyButtonText,
+                      formData.status === 'pre_recruitment' && styles.companyButtonTextSelected,
+                    ]}>
+                      לא מגויס
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.companyButton,
+                      formData.status === 'recruited' && { backgroundColor: '#059669', borderColor: '#059669' },
+                    ]}
+                    onPress={() => setFormData(prev => ({ ...prev, status: 'recruited' }))}
+                  >
+                    <Text style={[
+                      styles.companyButtonText,
+                      formData.status === 'recruited' && styles.companyButtonTextSelected,
+                    ]}>
+                      מגויס
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                <Text style={{ fontSize: 12, color: Colors.textSecondary, marginTop: 4, textAlign: 'right' }}>
+                  "לא מגויס" - לא יופיע בנשקייה ואפסנאות
+                </Text>
+              </View>
+            )}
           </View>
 
           {/* Submit Button */}
@@ -294,6 +356,15 @@ const AddSoldierScreen: React.FC = () => {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* App Modal */}
+      <AppModal
+        visible={modalVisible}
+        type={modalType}
+        message={modalMessage}
+        buttons={modalButtons}
+        onClose={() => setModalVisible(false)}
+      />
     </View>
   );
 };

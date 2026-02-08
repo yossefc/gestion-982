@@ -15,6 +15,8 @@ import {
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { WeaponInventoryItem, WeaponStatus } from '../types';
+import { transactionalAssignmentService } from './transactionalAssignmentService';
+import cacheService from './cacheService';
 
 const COLLECTION = 'weapons_inventory';
 
@@ -180,6 +182,7 @@ export const deleteWeapon = async (id: string): Promise<void> => {
 
 /**
  * Récupérer les armes disponibles
+ * AMÉLIORÉ: Utilise le cache en mode offline
  */
 export const getAvailableWeapons = async (): Promise<WeaponInventoryItem[]> => {
   try {
@@ -205,12 +208,26 @@ export const getAvailableWeapons = async (): Promise<WeaponInventoryItem[]> => {
       return a.serialNumber.localeCompare(b.serialNumber);
     });
   } catch (error) {
-    throw error;
+    // Mode offline: utiliser le cache et filtrer localement
+    console.warn('[WeaponInventory] Firebase error, using cache:', error);
+    try {
+      const cached = await cacheService.get<WeaponInventoryItem>('weaponsInventory');
+      const available = cached.data.filter(w => w.status === 'available');
+      return available.sort((a, b) => {
+        const catCompare = a.category.localeCompare(b.category);
+        if (catCompare !== 0) return catCompare;
+        return a.serialNumber.localeCompare(b.serialNumber);
+      });
+    } catch (cacheError) {
+      console.warn('[WeaponInventory] Cache also failed:', cacheError);
+      return []; // Retourner liste vide si tout échoue
+    }
   }
 };
 
 /**
  * Récupérer les armes assignées
+ * AMÉLIORÉ: Utilise le cache en mode offline
  */
 export const getAssignedWeapons = async (): Promise<WeaponInventoryItem[]> => {
   try {
@@ -238,12 +255,22 @@ export const getAssignedWeapons = async (): Promise<WeaponInventoryItem[]> => {
     // Trier en mémoire
     return weapons.sort((a, b) => a.category.localeCompare(b.category));
   } catch (error) {
-    throw error;
+    // Mode offline: utiliser le cache et filtrer localement
+    console.warn('[WeaponInventory] Firebase error, using cache for assigned:', error);
+    try {
+      const cached = await cacheService.get<WeaponInventoryItem>('weaponsInventory');
+      const assigned = cached.data.filter(w => w.status === 'assigned');
+      return assigned.sort((a, b) => a.category.localeCompare(b.category));
+    } catch (cacheError) {
+      console.warn('[WeaponInventory] Cache also failed:', cacheError);
+      return [];
+    }
   }
 };
 
 /**
  * Récupérer les armes en אפסון
+ * AMÉLIORÉ: Utilise le cache en mode offline
  */
 export const getStorageWeapons = async (): Promise<WeaponInventoryItem[]> => {
   try {
@@ -266,7 +293,16 @@ export const getStorageWeapons = async (): Promise<WeaponInventoryItem[]> => {
     // Trier en mémoire
     return weapons.sort((a, b) => a.category.localeCompare(b.category));
   } catch (error) {
-    throw error;
+    // Mode offline: utiliser le cache et filtrer localement
+    console.warn('[WeaponInventory] Firebase error, using cache for stored:', error);
+    try {
+      const cached = await cacheService.get<WeaponInventoryItem>('weaponsInventory');
+      const stored = cached.data.filter(w => w.status === 'stored');
+      return stored.sort((a, b) => a.category.localeCompare(b.category));
+    } catch (cacheError) {
+      console.warn('[WeaponInventory] Cache also failed:', cacheError);
+      return [];
+    }
   }
 };
 
@@ -435,6 +471,35 @@ export const getSoldiersWithStoredWeapons = async (): Promise<Array<{
 /**
  * Assigner une arme à un soldat
  */
+/**
+ * Mettre à jour UNIQUEMENT le statut de l'arme en inventaire (sans créer d'assignment)
+ * Utilisé par CombatAssignmentScreen qui gère déjà l'assignment globalement
+ */
+export const setWeaponAssignedStatusOnly = async (
+  weaponId: string,
+  soldier: {
+    soldierId: string;
+    soldierName: string;
+    soldierPersonalNumber: string;
+  }
+): Promise<void> => {
+  try {
+    await updateWeapon(weaponId, {
+      status: 'assigned',
+      assignedTo: {
+        ...soldier,
+        assignedDate: new Date(),
+      },
+      storageDate: deleteField() as any,
+    });
+  } catch (error) {
+    throw error;
+  }
+};
+
+/**
+ * Assigner une arme à un soldat
+ */
 export const assignWeaponToSoldier = async (
   weaponId: string,
   soldier: {
@@ -453,6 +518,26 @@ export const assignWeaponToSoldier = async (
       throw new Error('הנשק אינו זמין להקצאה');
     }
 
+    // 1. Find correct CATALOG ID (Standardization)
+    // Avoid using "WEAPON_..." if we can find the real UUID from combat_equipment
+    // We import the service dynamically strictly if needed or assume top-level import
+    const { combatEquipmentService } = require('./firebaseService');
+    const catalogItems = await combatEquipmentService.getAll();
+
+    // Try to find a match by name or category
+    let targetEquipmentId = `WEAPON_${weapon.category}`; // Default fallback
+    let targetEquipmentName = weapon.category;
+
+    const match = catalogItems.find((item: any) =>
+      item.name === weapon.category || item.category === weapon.category
+    );
+
+    if (match) {
+      targetEquipmentId = match.id;
+      targetEquipmentName = match.name;
+    }
+
+    // 2. Update Inventory
     await updateWeapon(weaponId, {
       status: 'assigned',
       assignedTo: {
@@ -461,6 +546,23 @@ export const assignWeaponToSoldier = async (
       },
       storageDate: deleteField() as any,
     });
+
+    // 3. Create Assignment (Standardized)
+    await transactionalAssignmentService.addEquipment({
+      soldierId: soldier.soldierId,
+      soldierName: soldier.soldierName,
+      soldierPersonalNumber: soldier.soldierPersonalNumber,
+      type: 'combat',
+      items: [{
+        equipmentId: targetEquipmentId,
+        equipmentName: targetEquipmentName,
+        quantity: 1,
+        serial: weapon.serialNumber,
+      }],
+      addedBy: 'SYSTEM_INVENTORY',
+      requestId: `assign_${weaponId}_${Date.now()}`,
+    });
+
   } catch (error) {
     throw error;
   }
@@ -471,11 +573,47 @@ export const assignWeaponToSoldier = async (
  */
 export const returnWeapon = async (weaponId: string): Promise<void> => {
   try {
+    const weapon = await getWeaponById(weaponId);
+    if (!weapon) throw new Error('Weapon not found');
+
+    const previousOwner = weapon.assignedTo;
+
+    // 1. Update Inventory
     await updateWeapon(weaponId, {
       status: 'available',
       assignedTo: deleteField() as any,
       storageDate: deleteField() as any,
     });
+
+    // 2. Update Soldier Holdings (Smart Return)
+    if (previousOwner && previousOwner.soldierId) {
+      // Find which Equipment ID holds this serial
+      const currentHoldings = await transactionalAssignmentService.getCurrentHoldings(previousOwner.soldierId, 'combat');
+
+      // Look for the specific serial number
+      const holdingItem = currentHoldings.find(h =>
+        h.serials && h.serials.includes(weapon.serialNumber)
+      );
+
+      // Default to constructed ID if not found (fallback)
+      const targetEquipmentId = holdingItem ? holdingItem.equipmentId : `WEAPON_${weapon.category}`;
+      const targetEquipmentName = holdingItem ? holdingItem.equipmentName : weapon.category;
+
+      await transactionalAssignmentService.returnEquipment({
+        soldierId: previousOwner.soldierId,
+        soldierName: previousOwner.soldierName,
+        soldierPersonalNumber: previousOwner.soldierPersonalNumber,
+        type: 'combat',
+        items: [{
+          equipmentId: targetEquipmentId,
+          equipmentName: targetEquipmentName,
+          quantity: 1,
+          serial: weapon.serialNumber,
+        }],
+        returnedBy: 'SYSTEM_INVENTORY',
+        requestId: `return_${weaponId}_${Date.now()}`,
+      });
+    }
   } catch (error) {
     throw error;
   }
@@ -610,6 +748,56 @@ export const getInventoryStats = async (): Promise<{
   }
 };
 
+/**
+ * Supprimer les armes d'une catégorie spécifique (sauf celles assignées)
+ * Retourne le nombre d'armes supprimées
+ */
+export const deleteWeaponsByCategory = async (
+  category: string,
+  excludeAssigned: boolean = true
+): Promise<number> => {
+  try {
+    const weapons = await getWeaponsByCategory(category);
+
+    // Filtrer les armes à supprimer
+    const weaponsToDelete = excludeAssigned
+      ? weapons.filter(w => w.status !== 'assigned')
+      : weapons;
+
+    if (weaponsToDelete.length === 0) {
+      return 0;
+    }
+
+    // Firebase batch limit is 500
+    const BATCH_SIZE = 450;
+    const chunks = [];
+
+    for (let i = 0; i < weaponsToDelete.length; i += BATCH_SIZE) {
+      chunks.push(weaponsToDelete.slice(i, i + BATCH_SIZE));
+    }
+
+    let deletedCount = 0;
+    const { writeBatch } = require('firebase/firestore');
+
+    for (const chunk of chunks) {
+      const batch = writeBatch(db);
+
+      chunk.forEach(weapon => {
+        const docRef = doc(db, COLLECTION, weapon.id);
+        batch.delete(docRef);
+      });
+
+      await batch.commit();
+      deletedCount += chunk.length;
+    }
+
+    return deletedCount;
+  } catch (error) {
+    console.error('Error deleting weapons by category:', error);
+    throw error;
+  }
+};
+
 export const weaponInventoryService = {
   // CRUD
   getAllWeapons,
@@ -627,10 +815,14 @@ export const weaponInventoryService = {
   getSoldiersWithStoredWeapons,
   // Actions
   assignWeaponToSoldier,
+  setWeaponAssignedStatusOnly,
   returnWeapon,
   moveWeaponToStorage,
   moveWeaponToStorageWithSoldier,
   removeWeaponFromStorage,
   // Stats
   getInventoryStats,
+  deleteWeaponsByCategory,
 };
+
+

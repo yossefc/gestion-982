@@ -11,7 +11,6 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
   Platform,
   RefreshControl,
   Modal,
@@ -22,6 +21,7 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
 import { weaponInventoryService } from '../../services/weaponInventoryService';
 import { WeaponInventoryItem, WeaponStatus } from '../../types';
+import { AppModal, ModalType } from '../../components';
 
 type FilterTab = 'all' | 'available' | 'assigned' | 'stored' | 'defective';
 
@@ -46,6 +46,13 @@ const WeaponInventoryListScreen: React.FC = () => {
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedWeapon, setSelectedWeapon] = useState<WeaponInventoryItem | null>(null);
   const [editedSerialNumber, setEditedSerialNumber] = useState('');
+
+  // AppModal state
+  const [appModalVisible, setAppModalVisible] = useState(false);
+  const [appModalType, setAppModalType] = useState<ModalType>('info');
+  const [appModalMessage, setAppModalMessage] = useState('');
+  const [appModalTitle, setAppModalTitle] = useState<string | undefined>(undefined);
+  const [appModalButtons, setAppModalButtons] = useState<any[]>([]);
 
   useFocusEffect(
     useCallback(() => {
@@ -83,7 +90,10 @@ const WeaponInventoryListScreen: React.FC = () => {
       applyFilter(activeFilter, allWeapons);
     } catch (error) {
       console.error('Error loading weapons:', error);
-      Alert.alert('שגיאה', 'לא ניתן לטעון את המלאי');
+      setAppModalType('error');
+      setAppModalMessage('לא ניתן לטעון את המלאי');
+      setAppModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setAppModalVisible(false) }]);
+      setAppModalVisible(true);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -166,19 +176,28 @@ const WeaponInventoryListScreen: React.FC = () => {
     if (!selectedWeapon) return;
 
     if (!editedSerialNumber.trim()) {
-      Alert.alert('שגיאה', 'יש להזין מסטב');
+      setAppModalType('error');
+      setAppModalMessage('יש להזין מסטב');
+      setAppModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setAppModalVisible(false) }]);
+      setAppModalVisible(true);
       return;
     }
 
     if (editedSerialNumber.trim() === selectedWeapon.serialNumber) {
-      Alert.alert('שגיאה', 'המסטב זהה לקיים');
+      setAppModalType('info');
+      setAppModalMessage('המסטב זהה לקיים');
+      setAppModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setAppModalVisible(false) }]);
+      setAppModalVisible(true);
       return;
     }
 
     // Check if serial number already exists
     const existingWeapon = await weaponInventoryService.getWeaponBySerialNumber(editedSerialNumber.trim());
     if (existingWeapon) {
-      Alert.alert('שגיאה', 'מסטב זה כבר קיים במערכת');
+      setAppModalType('error');
+      setAppModalMessage('מסטב זה כבר קיים במערכת');
+      setAppModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setAppModalVisible(false) }]);
+      setAppModalVisible(true);
       return;
     }
 
@@ -186,12 +205,18 @@ const WeaponInventoryListScreen: React.FC = () => {
       await weaponInventoryService.updateWeapon(selectedWeapon.id, {
         serialNumber: editedSerialNumber.trim(),
       });
-      Alert.alert('הצלחה', 'המסטב עודכן בהצלחה');
+      setAppModalType('success');
+      setAppModalMessage('המסטב עודכן בהצלחה');
+      setAppModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setAppModalVisible(false) }]);
+      setAppModalVisible(true);
       closeWeaponModal();
       loadWeapons();
     } catch (error) {
       console.error('Error updating serial number:', error);
-      Alert.alert('שגיאה', 'לא ניתן לעדכן את המסטב');
+      setAppModalType('error');
+      setAppModalMessage('לא ניתן לעדכן את המסטב');
+      setAppModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setAppModalVisible(false) }]);
+      setAppModalVisible(true);
     }
   };
 
@@ -199,93 +224,202 @@ const WeaponInventoryListScreen: React.FC = () => {
     if (!selectedWeapon) return;
 
     if (selectedWeapon.status !== 'available') {
-      Alert.alert('שגיאה', 'לא ניתן למחוק נשק שאינו זמין');
+      setAppModalType('error');
+      setAppModalMessage('לא ניתן למחוק נשק שאינו זמין');
+      setAppModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setAppModalVisible(false) }]);
+      setAppModalVisible(true);
       return;
     }
 
-    Alert.alert(
-      'מחיקת נשק',
-      `האם אתה בטוח שברצונך למחוק ${selectedWeapon.category} ${selectedWeapon.serialNumber}?`,
-      [
-        { text: 'ביטול', style: 'cancel' },
-        {
-          text: 'מחק',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await weaponInventoryService.deleteWeapon(selectedWeapon.id);
-              Alert.alert('הצלחה', 'הנשק נמחק בהצלחה');
-              closeWeaponModal();
-              loadWeapons();
-            } catch (error) {
-              console.error('Error deleting weapon:', error);
-              Alert.alert('שגיאה', 'לא ניתן למחוק את הנשק');
-            }
-          },
-        },
-      ]
-    );
-  };
-
-  const handleDeleteWeapon = (weapon: WeaponInventoryItem) => {
-    if (weapon.status !== 'available') {
-      Alert.alert('שגיאה', 'לא ניתן למחוק נשק שאינו זמין');
-      return;
-    }
-
-    Alert.alert('מחיקת נשק', `האם אתה בטוח שברצונך למחוק ${weapon.category} ${weapon.serialNumber}?`, [
-      { text: 'ביטול', style: 'cancel' },
+    setAppModalType('warning');
+    setAppModalTitle('מחיקת נשק');
+    setAppModalMessage(`האם אתה בטוח שברצונך למחוק ${selectedWeapon.category} ${selectedWeapon.serialNumber}?`);
+    setAppModalButtons([
+      { text: 'ביטול', style: 'outline', onPress: () => setAppModalVisible(false) },
       {
         text: 'מחק',
-        style: 'destructive',
+        style: 'danger',
+        icon: 'trash' as const,
         onPress: async () => {
+          setAppModalVisible(false);
           try {
-            await weaponInventoryService.deleteWeapon(weapon.id);
-            Alert.alert('הצלחה', 'הנשק נמחק בהצלחה');
+            await weaponInventoryService.deleteWeapon(selectedWeapon.id);
+            setAppModalType('success');
+            setAppModalTitle(undefined);
+            setAppModalMessage('הנשק נמחק בהצלחה');
+            setAppModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setAppModalVisible(false) }]);
+            setAppModalVisible(true);
+            closeWeaponModal();
             loadWeapons();
           } catch (error) {
             console.error('Error deleting weapon:', error);
-            Alert.alert('שגיאה', 'לא ניתן למחוק את הנשק');
+            setAppModalType('error');
+            setAppModalTitle(undefined);
+            setAppModalMessage('לא ניתן למחוק את הנשק');
+            setAppModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setAppModalVisible(false) }]);
+            setAppModalVisible(true);
           }
         },
       },
     ]);
+    setAppModalVisible(true);
+  };
+
+  const handleDeleteWeapon = (weapon: WeaponInventoryItem) => {
+    if (weapon.status !== 'available') {
+      setAppModalType('error');
+      setAppModalMessage('לא ניתן למחוק נשק שאינו זמין');
+      setAppModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setAppModalVisible(false) }]);
+      setAppModalVisible(true);
+      return;
+    }
+
+    setAppModalType('warning');
+    setAppModalTitle('מחיקת נשק');
+    setAppModalMessage(`האם אתה בטוח שברצונך למחוק ${weapon.category} ${weapon.serialNumber}?`);
+    setAppModalButtons([
+      { text: 'ביטול', style: 'outline', onPress: () => setAppModalVisible(false) },
+      {
+        text: 'מחק',
+        style: 'danger',
+        icon: 'trash' as const,
+        onPress: async () => {
+          setAppModalVisible(false);
+          try {
+            await weaponInventoryService.deleteWeapon(weapon.id);
+            setAppModalType('success');
+            setAppModalTitle(undefined);
+            setAppModalMessage('הנשק נמחק בהצלחה');
+            setAppModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setAppModalVisible(false) }]);
+            setAppModalVisible(true);
+            loadWeapons();
+          } catch (error) {
+            console.error('Error deleting weapon:', error);
+            setAppModalType('error');
+            setAppModalTitle(undefined);
+            setAppModalMessage('לא ניתן למחוק את הנשק');
+            setAppModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setAppModalVisible(false) }]);
+            setAppModalVisible(true);
+          }
+        },
+      },
+    ]);
+    setAppModalVisible(true);
   };
 
   const handleAssignWeapon = (weapon: WeaponInventoryItem) => {
     if (weapon.status !== 'available') {
-      Alert.alert('שגיאה', 'הנשק אינו זמין להקצאה');
+      setAppModalType('error');
+      setAppModalMessage('הנשק אינו זמין להקצאה');
+      setAppModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setAppModalVisible(false) }]);
+      setAppModalVisible(true);
       return;
     }
     navigation.navigate('AssignWeapon', { weaponId: weapon.id });
   };
 
   const handleReturnWeapon = (weapon: WeaponInventoryItem) => {
-    Alert.alert(
-      'החזרת נשק',
-      `האם להחזיר ${weapon.category} ${weapon.serialNumber} למלאי?`,
-      [
-        { text: 'ביטול', style: 'cancel' },
-        {
-          text: 'החזר',
-          onPress: async () => {
-            try {
-              await weaponInventoryService.returnWeapon(weapon.id);
-              Alert.alert('הצלחה', 'הנשק הוחזר למלאי');
-              loadWeapons();
-            } catch (error) {
-              console.error('Error returning weapon:', error);
-              Alert.alert('שגיאה', 'לא ניתן להחזיר את הנשק');
-            }
-          },
+    setAppModalType('confirm');
+    setAppModalTitle('החזרת נשק');
+    setAppModalMessage(`האם להחזיר ${weapon.category} ${weapon.serialNumber} למלאי?`);
+    setAppModalButtons([
+      { text: 'ביטול', style: 'outline', onPress: () => setAppModalVisible(false) },
+      {
+        text: 'החזר',
+        style: 'primary',
+        icon: 'return-down-back' as const,
+        onPress: async () => {
+          setAppModalVisible(false);
+          try {
+            await weaponInventoryService.returnWeapon(weapon.id);
+            setAppModalType('success');
+            setAppModalTitle(undefined);
+            setAppModalMessage('הנשק הוחזר למלאי');
+            setAppModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setAppModalVisible(false) }]);
+            setAppModalVisible(true);
+            loadWeapons();
+          } catch (error) {
+            console.error('Error returning weapon:', error);
+            setAppModalType('error');
+            setAppModalTitle(undefined);
+            setAppModalMessage('לא ניתן להחזיר את הנשק');
+            setAppModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setAppModalVisible(false) }]);
+            setAppModalVisible(true);
+          }
         },
-      ]
-    );
+      },
+    ]);
+    setAppModalVisible(true);
   };
 
-  const handleMoveToStorage = (weapon: WeaponInventoryItem) => {
-    navigation.navigate('WeaponStorage');
+  const handleMarkAsDefective = () => {
+    setAppModalType('warning');
+    setAppModalTitle('דיווח על תקלה');
+    setAppModalMessage(`האם לסמן את ${selectedWeapon?.category} ${selectedWeapon?.serialNumber} כתקול?`);
+    setAppModalButtons([
+      { text: 'ביטול', style: 'outline', onPress: () => setAppModalVisible(false) },
+      {
+        text: 'סמן כתקול',
+        style: 'danger',
+        onPress: async () => {
+          setAppModalVisible(false);
+          try {
+            if (selectedWeapon) {
+              await weaponInventoryService.updateWeapon(selectedWeapon.id, { status: 'defective' });
+              setAppModalType('success');
+              setAppModalTitle(undefined);
+              setAppModalMessage('הנשק סומן כתקול');
+              setAppModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setAppModalVisible(false) }]);
+              setAppModalVisible(true);
+              closeWeaponModal();
+              loadWeapons();
+            }
+          } catch (error) {
+            console.error('Error updating weapon:', error);
+            setAppModalType('error');
+            setAppModalMessage('שגיאה בעדכון הסטטוס');
+            setAppModalVisible(true);
+          }
+        },
+      },
+    ]);
+    setAppModalVisible(true);
   };
+
+  const handleMarkAsFixed = () => {
+    setAppModalType('confirm');
+    setAppModalTitle('חזרה מתיקון');
+    setAppModalMessage(`האם לסמן את ${selectedWeapon?.category} ${selectedWeapon?.serialNumber} כתקין (זמין)?`);
+    setAppModalButtons([
+      { text: 'ביטול', style: 'outline', onPress: () => setAppModalVisible(false) },
+      {
+        text: 'סמן כתקין',
+        style: 'primary',
+        onPress: async () => {
+          setAppModalVisible(false);
+          try {
+            if (selectedWeapon) {
+              await weaponInventoryService.updateWeapon(selectedWeapon.id, { status: 'available' });
+              setAppModalType('success');
+              setAppModalTitle(undefined);
+              setAppModalMessage('הנשק חזר למלאי הזמין');
+              setAppModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setAppModalVisible(false) }]);
+              setAppModalVisible(true);
+              closeWeaponModal();
+              loadWeapons();
+            }
+          } catch (error) {
+            console.error('Error updating weapon:', error);
+            setAppModalType('error');
+            setAppModalMessage('שגיאה בעדכון הסטטוס');
+            setAppModalVisible(true);
+          }
+        },
+      },
+    ]);
+    setAppModalVisible(true);
+  };
+
 
   const getStatusColor = (status: WeaponStatus) => {
     switch (status) {
@@ -577,6 +711,26 @@ const WeaponInventoryListScreen: React.FC = () => {
 
                 {/* Action Buttons */}
                 <View style={styles.modalActions}>
+                  {selectedWeapon.status === 'available' && (
+                    <TouchableOpacity
+                      style={[styles.modalButton, { backgroundColor: Colors.danger }]}
+                      onPress={handleMarkAsDefective}
+                    >
+                      <Ionicons name="construct-outline" size={20} color={Colors.textWhite} />
+                      <Text style={styles.modalButtonText}>סמן כתקול</Text>
+                    </TouchableOpacity>
+                  )}
+
+                  {selectedWeapon.status === 'defective' && (
+                    <TouchableOpacity
+                      style={[styles.modalButton, { backgroundColor: Colors.success }]}
+                      onPress={handleMarkAsFixed}
+                    >
+                      <Ionicons name="checkmark-circle-outline" size={20} color={Colors.textWhite} />
+                      <Text style={styles.modalButtonText}>סמן כתקין</Text>
+                    </TouchableOpacity>
+                  )}
+
                   <TouchableOpacity
                     style={[styles.modalButton, styles.modalButtonEdit]}
                     onPress={handleEditSerialNumber}
@@ -589,10 +743,10 @@ const WeaponInventoryListScreen: React.FC = () => {
                     style={[
                       styles.modalButton,
                       styles.modalButtonDelete,
-                      selectedWeapon.status !== 'available' && styles.modalButtonDisabled,
+                      selectedWeapon.status !== 'available' && selectedWeapon.status !== 'defective' && styles.modalButtonDisabled,
                     ]}
                     onPress={handleDeleteWeaponFromModal}
-                    disabled={selectedWeapon.status !== 'available'}
+                    disabled={selectedWeapon.status !== 'available' && selectedWeapon.status !== 'defective'}
                   >
                     <Ionicons name="trash-outline" size={20} color={Colors.textWhite} />
                     <Text style={styles.modalButtonText}>מחק נשק</Text>
@@ -609,6 +763,16 @@ const WeaponInventoryListScreen: React.FC = () => {
           </View>
         </TouchableOpacity>
       </Modal>
+
+      {/* App Modal */}
+      <AppModal
+        visible={appModalVisible}
+        type={appModalType}
+        title={appModalTitle}
+        message={appModalMessage}
+        buttons={appModalButtons}
+        onClose={() => setAppModalVisible(false)}
+      />
     </View>
   );
 };

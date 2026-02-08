@@ -11,7 +11,6 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
   Platform,
   TextInput,
   Modal,
@@ -22,14 +21,16 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import SignatureCanvas from 'react-native-signature-canvas';
 import * as Print from 'expo-print';
 import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
-import { combatEquipmentService, manaService } from '../../services/firebaseService';
 import { assignmentService } from '../../services/assignmentService';
 import { transactionalAssignmentService } from '../../services/transactionalAssignmentService';
 import { weaponInventoryService } from '../../services/weaponInventoryService';
 import { printQueueService } from '../../services/printQueueService';
 import { useAuth } from '../../contexts/AuthContext';
+import { useData } from '../../contexts/DataContext';
+import { useIsOnline } from '../../contexts/OfflineContext';
 import { Mana, WeaponInventoryItem, Assignment } from '../../types';
 import { openWhatsAppChat } from '../../services/whatsappService';
+import { AppModal } from '../../components';
 
 interface Equipment {
   id: string;
@@ -56,6 +57,10 @@ const CombatAssignmentScreen: React.FC = () => {
   const { user } = useAuth();
   const signatureRef = useRef<any>(null);
 
+  // OPTIMISÉ: Utiliser le cache centralisé pour équipements et manot
+  const { combatEquipment, manot: cachedManot, isInitialized } = useData();
+  const isOnline = useIsOnline();
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [selectionMode, setSelectionMode] = useState<SelectionMode>('mana');
@@ -68,6 +73,8 @@ const CombatAssignmentScreen: React.FC = () => {
   const [showSignature, setShowSignature] = useState(false);
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
   const [existingAssignments, setExistingAssignments] = useState<any[]>([]);
+  const [isOfflineMode, setIsOfflineMode] = useState(false);
+  const [dataLoaded, setDataLoaded] = useState(false);
 
   // Weapon inventory for autocomplete
   const [availableWeapons, setAvailableWeapons] = useState<WeaponInventoryItem[]>([]);
@@ -75,36 +82,83 @@ const CombatAssignmentScreen: React.FC = () => {
   const [currentSerialField, setCurrentSerialField] = useState<{ equipmentId: string; index: number; equipmentName: string } | null>(null);
   const [serialSearchText, setSerialSearchText] = useState('');
   const [selectedPrinter, setSelectedPrinter] = useState<Print.Printer | null>(null);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successModalData, setSuccessModalData] = useState<{
+    assignmentForPrint: any;
+    whatsappMessage: string;
+    isQueuedOffline?: boolean;
+  } | null>(null);
 
+  // AppModal state
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalType, setModalType] = useState<any>('info');
+  const [modalMessage, setModalMessage] = useState('');
+  const [modalTitle, setModalTitle] = useState<string | undefined>(undefined);
+  const [modalButtons, setModalButtons] = useState<any[]>([]);
+
+  // OPTIMISE: Utiliser les donnees du cache des qu'elles sont disponibles
+  // Mode offline: continuer meme si pas completement initialise
   useEffect(() => {
-    loadEquipment();
-  }, []);
+    // Ne pas recharger si deja en mode offline ou si donnees deja chargees
+    if (isOfflineMode || dataLoaded) return;
 
-  const loadEquipment = async () => {
+    // Si on a des donnees en cache, les utiliser immediatement
+    if (combatEquipment.length > 0 || cachedManot.length > 0 || isInitialized) {
+      setEquipment(combatEquipment as Equipment[]);
+      setManot(cachedManot);
+      loadSoldierSpecificData();
+      setDataLoaded(true);
+    }
+  }, [isInitialized, combatEquipment, cachedManot, isOfflineMode, dataLoaded]);
+
+  // Timeout de securite: apres 3 secondes, continuer quand meme (mode offline)
+  // Ce timeout gere TOUS les cas de blocage: authLoading, Firebase lent, etc.
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      if (loading) {
+        console.log('[CombatAssignment] Timeout (3s) - proceeding in offline mode');
+        setIsOfflineMode(true);
+        setEquipment(combatEquipment as Equipment[]);
+        setManot(cachedManot);
+        setLoading(false);
+      }
+    }, 3000); // Reduit a 3 secondes pour une meilleure UX
+    return () => clearTimeout(timeout);
+  }, [loading, combatEquipment, cachedManot]);
+
+  // Charger uniquement les données spécifiques au soldat (pas en cache global)
+  const loadSoldierSpecificData = async () => {
     try {
       setLoading(true);
-      const [equipmentData, manotData, currentItems] = await Promise.all([
-        combatEquipmentService.getAll(),
-        manaService.getAll(),
-        transactionalAssignmentService.getCurrentHoldings(soldier.id, 'combat'),
-      ]);
-      console.log('Loaded equipment:', equipmentData.length, 'items');
-      console.log('Loaded manot:', manotData.length, 'items');
-      // The original code had weaponsData and existingData here.
-      // The instruction snippet removed weaponsData from the destructuring,
-      // but kept a console.log for it. To maintain functionality and avoid errors,
-      // I'm keeping the weaponInventoryService call and its corresponding variable.
-      // The instruction specifically asked to replace assignmentService.calculateCurrentHoldings.
-      const weaponsData = await weaponInventoryService.getAvailableWeapons(); // Re-adding this to keep functionality
-      console.log('Loaded available weapons:', weaponsData.length, 'items');
-      console.log('Current items:', currentItems.length, 'items'); // Changed from 'Existing assignments' to 'Current items'
-      setEquipment(equipmentData);
-      setManot(manotData);
+
+      // Charger chaque donnée individuellement pour gérer le mode hors ligne
+      let currentItems: any[] = [];
+      let weaponsData: WeaponInventoryItem[] = [];
+
+      // Essayer de charger les affectations actuelles
+      try {
+        currentItems = await transactionalAssignmentService.getCurrentHoldings(soldier.id, 'combat');
+        console.log('Current items:', currentItems.length, 'items');
+      } catch (error) {
+        console.warn('Could not load current holdings (offline?):', error);
+        // Continuer même si ça échoue (mode hors ligne)
+      }
+
+      // Essayer de charger les armes disponibles
+      try {
+        weaponsData = await weaponInventoryService.getAvailableWeapons();
+        console.log('Loaded available weapons:', weaponsData.length, 'items');
+      } catch (error) {
+        console.warn('Could not load available weapons (offline?):', error);
+        // Continuer même si ça échoue (mode hors ligne)
+      }
+
       setAvailableWeapons(weaponsData);
       setExistingAssignments(currentItems);
     } catch (error) {
       console.error('Error loading data:', error);
-      Alert.alert('שגיאה', 'לא ניתן לטעון את הנתונים');
+      // Ne pas afficher d'erreur si on est en mode hors ligne
+      // L'utilisateur peut quand même continuer avec les données en cache
     } finally {
       setLoading(false);
     }
@@ -410,15 +464,10 @@ const CombatAssignmentScreen: React.FC = () => {
       text-align: left;
       min-width: 80px;
     }
-    .logo-placeholder {
+    .logo-img {
       width: 60px;
       height: 60px;
-      border: 1px dashed #999;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 9px;
-      color: #666;
+      object-fit: contain;
     }
     .doc-title {
       font-size: 18px;
@@ -565,7 +614,7 @@ const CombatAssignmentScreen: React.FC = () => {
   <!-- Header Section -->
   <div class="header">
     <div class="header-right">
-      <div class="logo-placeholder">לוגו גדוד</div>
+      <img src="data:image/png;base64,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" class="logo-img" alt="לוגו גדוד 982" />
     </div>
     <div class="header-center">
       <div class="doc-title">טופס החתמה על ציוד לחימה</div>
@@ -718,13 +767,20 @@ const CombatAssignmentScreen: React.FC = () => {
     } catch (error) {
       console.error('[CombatAssignment] Error printing PDF:', error);
       // Ne pas bloquer si l'impression échoue
-      Alert.alert('שים לב', 'לא ניתן להדפיס את המסמך, אך ההחתמה נשמרה בהצלחה');
+      setModalType('warning');
+      setModalTitle('שים לב');
+      setModalMessage('לא ניתן להדפיס את המסמך, אך ההחתמה נשמרה בהצלחה');
+      setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalVisible(true);
     }
   };
 
   const validateAndContinue = () => {
     if (selectedItems.size === 0) {
-      Alert.alert('שגיאה', 'יש לבחור לפחות פריט אחד');
+      setModalType('error');
+      setModalMessage('יש לבחור לפחות פריט אחד');
+      setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalVisible(true);
       return;
     }
 
@@ -732,13 +788,19 @@ const CombatAssignmentScreen: React.FC = () => {
     for (const [id, item] of Array.from(selectedItems.entries())) {
       if (item.equipment.requiresSerial) {
         if (!item.serials || item.serials.length !== item.quantity) {
-          Alert.alert('שגיאה', `יש להזין מספרים סידוריים עבור ${item.equipment.name}`);
+          setModalType('error');
+          setModalMessage(`יש להזין מספרים סידוריים עבור ${item.equipment.name}`);
+          setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+          setModalVisible(true);
           return;
         }
         // Check each serial is not empty
         for (let i = 0; i < item.serials.length; i++) {
           if (!item.serials[i]?.trim()) {
-            Alert.alert('שגיאה', `יש להזין מספר סידורי ${i + 1} עבור ${item.equipment.name}`);
+            setModalType('error');
+            setModalMessage(`יש להזין מספר סידורי ${i + 1} עבור ${item.equipment.name}`);
+            setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+            setModalVisible(true);
             return;
           }
         }
@@ -750,7 +812,10 @@ const CombatAssignmentScreen: React.FC = () => {
 
   const handleSubmit = async () => {
     if (!signatureData) {
-      Alert.alert('שגיאה', 'יש לחתום על הטופס');
+      setModalType('error');
+      setModalMessage('יש לחתום על הטופס');
+      setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalVisible(true);
       return;
     }
 
@@ -799,7 +864,10 @@ const CombatAssignmentScreen: React.FC = () => {
         assignedBy: user?.id || '',
         requestId,
       });
-      console.log('[CombatAssignment] Transactional assignment created:', assignmentId);
+
+      // Vérifier si l'opération a été mise en queue (mode offline)
+      const isQueuedOffline = assignmentId.startsWith('LOCAL_');
+      console.log('[CombatAssignment] Transactional assignment created:', assignmentId, isQueuedOffline ? '(QUEUED OFFLINE)' : '');
 
       // Update weapon inventory status for each weapon with serial number
       const weaponUpdatePromises: Promise<void>[] = [];
@@ -817,7 +885,9 @@ const CombatAssignmentScreen: React.FC = () => {
               if (weapon) {
                 console.log(`[CombatAssignment] Queuing weapon update: ${weapon.serialNumber} (${weapon.id})`);
                 weaponUpdatePromises.push(
-                  weaponInventoryService.assignWeaponToSoldier(weapon.id, {
+                  // OPTIMIZATION: Use setWeaponAssignedStatusOnly to avoid redundant soldier holdings updates
+                  // The main issueEquipment call above already handles the soldier's holdings.
+                  weaponInventoryService.setWeaponAssignedStatusOnly(weapon.id, {
                     soldierId: soldier.id,
                     soldierName: soldier.name,
                     soldierPersonalNumber: soldier.personalNumber,
@@ -853,8 +923,9 @@ const CombatAssignmentScreen: React.FC = () => {
       }, false);
       */
 
-      // Envoyer à la file d'attente (Web)
-      const queuePromise = sendToPrintQueue({
+      // Envoyer à la file d'attente EN ARRIÈRE-PLAN (ne bloque pas l'affichage)
+      // On lance la promesse sans await pour ne pas bloquer
+      sendToPrintQueue({
         soldierName: soldier.name,
         soldierPersonalNumber: soldier.personalNumber,
         soldierPhone: soldier.phone,
@@ -862,10 +933,12 @@ const CombatAssignmentScreen: React.FC = () => {
         items,
         signature: signatureData,
         timestamp: new Date(),
+      }).then(() => {
+        console.log('[CombatAssignment] Print queue sent successfully (background)');
+      }).catch((printError) => {
+        console.error('[CombatAssignment] Print queue error (background):', printError);
+        // On ne bloque pas l'utilisateur, juste un log
       });
-
-      // await Promise.all([printPromise, queuePromise]);
-      await queuePromise;
 
       // Generate WhatsApp message
       let whatsappMessage = `שלום ${soldier.name},\n\nההחתמה בוצעה בהצלחה.\n\n`;
@@ -926,11 +999,14 @@ const CombatAssignmentScreen: React.FC = () => {
         });
       }
 
-      Alert.alert(
-        'הצלחה',
-        'ההחתמה בוצעה בהצלחה והמסמך נשלח למדפסת',
-        successButtons
-      );
+      // Show success modal with animated green checkmark
+      // Note: isQueuedOffline indicates the operation was queued for later sync
+      setSuccessModalData({
+        assignmentForPrint,
+        whatsappMessage,
+        isQueuedOffline,
+      });
+      setShowSuccessModal(true);
     } catch (error: any) {
       console.error('[CombatAssignment] Error saving:', error);
       console.error('[CombatAssignment] Error details:', {
@@ -938,7 +1014,10 @@ const CombatAssignmentScreen: React.FC = () => {
         code: error?.code,
         stack: error?.stack
       });
-      Alert.alert('שגיאה', `לא ניתן לשמור את ההחתמה\n\nפרטי שגיאה: ${error?.message || 'Unknown error'}`);
+      setModalType('error');
+      setModalMessage(`לא ניתן לשמור את ההחתמה\n\nפרטי שגיאה: ${error?.message || 'Unknown error'}`);
+      setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalVisible(true);
     } finally {
       setSaving(false);
     }
@@ -952,7 +1031,9 @@ const CombatAssignmentScreen: React.FC = () => {
     return acc;
   }, {} as Record<string, Equipment[]>);
 
-  if (loading) {
+  // Afficher le loading seulement si on charge ET qu'on n'est pas en mode offline
+  // Le timeout de 3s garantit qu'on ne reste jamais bloque indefiniment
+  if (loading && !isOfflineMode) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={Colors.arme} />
@@ -1018,11 +1099,11 @@ const CombatAssignmentScreen: React.FC = () => {
                       </View>
                     )}
                   </View>
-                  {item.serial && (
+                  {item.serials && item.serials.length > 0 && (
                     <View style={styles.existingEquipmentSerialContainer}>
                       <Ionicons name="barcode-outline" size={18} color={Colors.arme} />
                       <Text style={styles.existingEquipmentSerialLabel}>מסטב:</Text>
-                      <Text style={styles.existingEquipmentSerial}>{item.serial}</Text>
+                      <Text style={styles.existingEquipmentSerial}>{item.serials.join(', ')}</Text>
                     </View>
                   )}
                 </View>
@@ -1073,6 +1154,17 @@ const CombatAssignmentScreen: React.FC = () => {
             {selectionMode === 'mana' && !selectedMana && (
               <View>
                 <Text style={styles.sectionTitle}>בחר מנה</Text>
+                {/* Offline banner when no data available */}
+                {!isOnline && manot.length === 0 && (
+                  <View style={styles.offlineWarning}>
+                    <Ionicons name="cloud-offline" size={24} color="#92400E" />
+                    <Text style={styles.offlineWarningTitle}>אין חיבור לאינטרנט</Text>
+                    <Text style={styles.offlineWarningText}>
+                      לא נמצאו מנות בזיכרון המקומי.{'\n'}
+                      התחבר לאינטרנט כדי לטעון את המנות, ואז הן יהיו זמינות גם offline.
+                    </Text>
+                  </View>
+                )}
                 <View style={styles.manotList}>
                   {manot.map(mana => (
                     <TouchableOpacity
@@ -1120,6 +1212,17 @@ const CombatAssignmentScreen: React.FC = () => {
             {/* Equipment by Category */}
             {((selectionMode === 'manual') || (selectionMode === 'mana' && selectedMana)) && (
               <>
+                {/* Offline warning when no equipment available */}
+                {!isOnline && equipment.length === 0 && (
+                  <View style={styles.offlineWarning}>
+                    <Ionicons name="cloud-offline" size={24} color="#92400E" />
+                    <Text style={styles.offlineWarningTitle}>אין חיבור לאינטרנט</Text>
+                    <Text style={styles.offlineWarningText}>
+                      לא נמצא ציוד בזיכרון המקומי.{'\n'}
+                      התחבר לאינטרנט כדי לטעון את רשימת הציוד.
+                    </Text>
+                  </View>
+                )}
                 {/* Show info based on mode */}
                 {selectionMode === 'manual' && selectedMana && (
                   <View style={styles.manualModeInfo}>
@@ -1263,7 +1366,10 @@ const CombatAssignmentScreen: React.FC = () => {
                                               style={styles.serialPickerButton}
                                               onPress={() => {
                                                 if (allAvailableSerials.length === 0) {
-                                                  Alert.alert('שגיאה', `אין ${equipmentName} זמינים במלאי`);
+                                                  setModalType('error');
+                                                  setModalMessage(`אין ${equipmentName} זמינים במלאי`);
+                                                  setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+                                                  setModalVisible(true);
                                                   return;
                                                 }
                                                 openSerialPicker(eq.id, idx, equipmentName, serial);
@@ -1543,6 +1649,69 @@ const CombatAssignmentScreen: React.FC = () => {
           </View>
         </View>
       </Modal>
+
+      {/* Success Modal with animated green checkmark */}
+      <AppModal
+        visible={showSuccessModal}
+        type={successModalData?.isQueuedOffline ? 'warning' : 'success'}
+        title={successModalData?.isQueuedOffline ? 'נשמר מקומית' : 'הצלחה!'}
+        message={successModalData?.isQueuedOffline
+          ? 'ההחתמה נשמרה מקומית ותסונכרן אוטומטית כשתחזור לאינטרנט.\n\nניתן להמשיך לעבוד במצב אופליין.'
+          : 'ההחתמה בוצעה בהצלחה והמסמך נשלח למדפסת'}
+        buttons={[
+          {
+            text: 'סגור',
+            style: 'primary',
+            icon: 'checkmark-circle',
+            onPress: () => {
+              setShowSuccessModal(false);
+              navigation.goBack();
+            },
+          },
+          // Pas de boutons print/WhatsApp en mode offline
+          ...(successModalData?.isQueuedOffline ? [] : [
+            {
+              text: 'הדפס שוב',
+              style: 'secondary' as const,
+              icon: 'print' as const,
+              onPress: async () => {
+                if (successModalData) {
+                  await generateAndPrintPDF(successModalData.assignmentForPrint, false);
+                }
+              },
+            },
+            ...(soldier.phone ? [{
+              text: 'שלח WhatsApp',
+              style: 'outline' as const,
+              icon: 'logo-whatsapp' as const,
+              onPress: async () => {
+                if (successModalData) {
+                  try {
+                    await openWhatsAppChat(soldier.phone, successModalData.whatsappMessage);
+                  } catch (e) {
+                    console.error('WhatsApp error:', e);
+                  }
+                }
+                setShowSuccessModal(false);
+                navigation.goBack();
+              },
+            }] : []),
+          ]),
+        ]}
+        onClose={() => {
+          setShowSuccessModal(false);
+          navigation.goBack();
+        }}
+      />
+      {/* App Modal */}
+      <AppModal
+        visible={modalVisible}
+        type={modalType}
+        title={modalTitle}
+        message={modalMessage}
+        buttons={modalButtons}
+        onClose={() => setModalVisible(false)}
+      />
     </View>
   );
 };
@@ -1564,6 +1733,33 @@ const styles = StyleSheet.create({
     marginTop: Spacing.md,
     fontSize: FontSize.base,
     color: Colors.textSecondary,
+  },
+
+  // Offline Warning
+  offlineWarning: {
+    backgroundColor: '#FEF3C7',
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.xl,
+    marginHorizontal: Spacing.lg,
+    marginVertical: Spacing.md,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#F59E0B',
+  },
+
+  offlineWarningTitle: {
+    fontSize: FontSize.lg,
+    fontWeight: '600',
+    color: '#92400E',
+    marginTop: Spacing.sm,
+    marginBottom: Spacing.xs,
+  },
+
+  offlineWarningText: {
+    fontSize: FontSize.sm,
+    color: '#92400E',
+    textAlign: 'center',
+    lineHeight: 20,
   },
 
   // Header

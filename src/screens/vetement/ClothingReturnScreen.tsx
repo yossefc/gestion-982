@@ -11,7 +11,6 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,6 +20,8 @@ import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Co
 import { assignmentService } from '../../services/assignmentService';
 import { transactionalAssignmentService } from '../../services/transactionalAssignmentService';
 import { useAuth } from '../../contexts/AuthContext';
+import { soldierService } from '../../services/firebaseService';
+import { AppModal, ModalType } from '../../components';
 
 interface HoldingItem {
   equipmentId: string;
@@ -39,7 +40,7 @@ interface SelectedReturn {
 const ClothingReturnScreen: React.FC = () => {
   const navigation = useNavigation();
   const route = useRoute();
-  const { soldier } = route.params as { soldier: any };
+  const { soldier, isClearance } = route.params as { soldier: any; isClearance?: boolean };
   const { user } = useAuth();
   const signatureRef = useRef<any>(null);
 
@@ -50,10 +51,29 @@ const ClothingReturnScreen: React.FC = () => {
   const [signatureData, setSignatureData] = useState<string | null>(null);
   const [scrollEnabled, setScrollEnabled] = useState(true);
   const [showSignature, setShowSignature] = useState(false);
+  const [isOfflineMode, setIsOfflineMode] = useState(false);
+
+  // Modal state
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalType, setModalType] = useState<ModalType>('info');
+  const [modalMessage, setModalMessage] = useState('');
+  const [modalButtons, setModalButtons] = useState<any[]>([]);
 
   useEffect(() => {
     loadHoldings();
   }, []);
+
+  // Timeout de securite: apres 3 secondes, continuer quand meme (mode offline)
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      if (loading) {
+        console.log('[ClothingReturn] Timeout (3s) - proceeding in offline mode');
+        setIsOfflineMode(true);
+        setLoading(false);
+      }
+    }, 3000);
+    return () => clearTimeout(timeout);
+  }, [loading]);
 
   const loadHoldings = async () => {
     try {
@@ -63,7 +83,13 @@ const ClothingReturnScreen: React.FC = () => {
       setHoldings(items || []);
     } catch (error) {
       console.error('Error loading holdings:', error);
-      Alert.alert('שגיאה', 'לא ניתן לטעון את הציוד');
+      // En mode offline, ne pas afficher d'erreur si le timeout n'est pas atteint
+      if (!isOfflineMode) {
+        setModalType('error');
+        setModalMessage('לא ניתן לטעון את הציוד');
+        setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
+        setModalVisible(true);
+      }
     } finally {
       setLoading(false);
     }
@@ -114,7 +140,10 @@ const ClothingReturnScreen: React.FC = () => {
 
   const validateAndContinue = () => {
     if (selectedReturns.size === 0) {
-      Alert.alert('שגיאה', 'יש לבחור לפחות פריט אחד להחזרה');
+      setModalType('error');
+      setModalMessage('יש לבחור לפחות פריט אחד להחזרה');
+      setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalVisible(true);
       return;
     }
     setShowSignature(true);
@@ -122,7 +151,10 @@ const ClothingReturnScreen: React.FC = () => {
 
   const handleSubmit = async () => {
     if (!signatureData) {
-      Alert.alert('שגיאה', 'יש לחתום על הטופס');
+      setModalType('error');
+      setModalMessage('יש לחתום על הטופס');
+      setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalVisible(true);
       return;
     }
 
@@ -151,18 +183,32 @@ const ClothingReturnScreen: React.FC = () => {
         requestId,
       });
 
-      Alert.alert('הצלחה', 'הזיכוי בוצע בהצלחה', [
-        { text: 'אישור', onPress: () => navigation.goBack() }
-      ]);
+      setModalType('success');
+      setModalMessage('הזיכוי בוצע בהצלחה');
+      setModalButtons([{
+        text: 'סגור',
+        style: 'primary',
+        icon: 'checkmark-circle' as const,
+        onPress: () => {
+          setModalVisible(false);
+          navigation.goBack();
+        },
+      }]);
+      setModalVisible(true);
     } catch (error) {
       console.error('Error saving:', error);
-      Alert.alert('שגיאה', 'לא ניתן לשמור את הזיכוי');
+      setModalType('error');
+      setModalMessage('לא ניתן לשמור את הזיכוי');
+      setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalVisible(true);
     } finally {
       setSaving(false);
     }
   };
 
-  if (loading) {
+  // Afficher le loading seulement si on charge ET qu'on n'est pas en mode offline
+  // Le timeout de 3s garantit qu'on ne reste jamais bloque indefiniment
+  if (loading && !isOfflineMode) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={Colors.vetement} />
@@ -183,7 +229,7 @@ const ClothingReturnScreen: React.FC = () => {
         </TouchableOpacity>
 
         <View style={styles.headerTitleContainer}>
-          <Text style={styles.headerTitle}>זיכוי אפנאות</Text>
+          <Text style={styles.headerTitle}>זיכוי אפסנאות</Text>
           <Text style={styles.headerSubtitle}>{soldier.name}</Text>
         </View>
 
@@ -213,6 +259,39 @@ const ClothingReturnScreen: React.FC = () => {
 
         {!showSignature ? (
           <>
+            {/* Clearance Action for Empty State */}
+            {isClearance && holdings.length === 0 && (
+              <View style={{ marginBottom: 20 }}>
+                <View style={styles.emptyState}>
+                  <Ionicons name="checkmark-done-circle" size={64} color={Colors.success} />
+                  <Text style={styles.emptyTitle}>החייל נקי מציוד</Text>
+                  <Text style={styles.emptySubtitle}>ניתן לאשר זיכוי סופי</Text>
+                </View>
+                <TouchableOpacity
+                  style={[styles.continueButton, { backgroundColor: Colors.success, marginTop: 10 }]}
+                  onPress={async () => {
+                    try {
+                      setLoading(true);
+                      await soldierService.updateClearance(soldier.id, 'logistics', true);
+                      setModalType('success');
+                      setModalMessage('החייל זוכה בהצלחה באפסנאות.');
+                      setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => { setModalVisible(false); navigation.goBack(); } }]);
+                      setModalVisible(true);
+                    } catch (err) {
+                      console.error(err);
+                      setModalType('error');
+                      setModalMessage('שגיאה בביצוע זיכוי');
+                      setModalVisible(true);
+                    } finally {
+                      setLoading(false);
+                    }
+                  }}
+                >
+                  <Text style={styles.continueButtonText}>✓ אשר זיכוי סופי (Logistics Clearance)</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
             {/* Holdings List */}
             <Text style={styles.sectionTitle}>ציוד להחזרה</Text>
 
@@ -367,6 +446,15 @@ const ClothingReturnScreen: React.FC = () => {
           </>
         )}
       </ScrollView>
+
+      {/* App Modal */}
+      <AppModal
+        visible={modalVisible}
+        type={modalType}
+        message={modalMessage}
+        buttons={modalButtons}
+        onClose={() => setModalVisible(false)}
+      />
     </View>
   );
 };

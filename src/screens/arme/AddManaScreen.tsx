@@ -8,13 +8,14 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
-  Alert,
+
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
+import { AppModal, ModalType } from '../../components';
 import { PackageType, CombatEquipment, RootStackParamList } from '../../types';
 import { manaService, combatEquipmentService } from '../../services/firebaseService';
 
@@ -42,6 +43,13 @@ const AddManaScreen: React.FC = () => {
   const [type, setType] = useState<PackageType>('מנה');
   const [selectedEquipments, setSelectedEquipments] = useState<EquipmentSelection[]>([]);
 
+  // AppModal state
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalType, setModalType] = useState<ModalType>('info');
+  const [modalMessage, setModalMessage] = useState('');
+  const [modalTitle, setModalTitle] = useState<string | undefined>(undefined);
+  const [modalButtons, setModalButtons] = useState<any[]>([]);
+
   useEffect(() => {
     loadData();
   }, []);
@@ -64,7 +72,11 @@ const AddManaScreen: React.FC = () => {
       }
     } catch (error) {
       console.error('Error loading data:', error);
-      Alert.alert('שגיאה', 'נכשל בטעינת הנתונים');
+      console.error('Error loading data:', error);
+      setModalType('error');
+      setModalMessage('נכשל בטעינת הנתונים');
+      setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalVisible(true);
     } finally {
       setInitialLoading(false);
     }
@@ -116,12 +128,18 @@ const AddManaScreen: React.FC = () => {
 
   const handleSave = async () => {
     if (!name.trim()) {
-      Alert.alert('שגיאה', 'נא להזין שם');
+      setModalType('error');
+      setModalMessage('נא להזין שם');
+      setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalVisible(true);
       return;
     }
 
     if (selectedEquipments.length === 0) {
-      Alert.alert('שגיאה', 'נא לבחור לפחות פריט ציוד אחד');
+      setModalType('error');
+      setModalMessage('נא לבחור לפחות פריט ציוד אחד');
+      setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalVisible(true);
       return;
     }
 
@@ -135,9 +153,11 @@ const AddManaScreen: React.FC = () => {
           equipments: selectedEquipments,
         });
 
-        Alert.alert('הצלחה', `${type} "${name}" עודכנה בהצלחה`, [
-          { text: 'אישור', onPress: () => navigation.goBack() },
-        ]);
+        setModalType('success');
+        setModalTitle('הצלחה');
+        setModalMessage(`${type} "${name}" עודכנה בהצלחה`);
+        setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => { setModalVisible(false); navigation.goBack(); } }]);
+        setModalVisible(true);
       } else {
         await manaService.create({
           name: name.trim(),
@@ -145,13 +165,18 @@ const AddManaScreen: React.FC = () => {
           equipments: selectedEquipments,
         });
 
-        Alert.alert('הצלחה', `${type} "${name}" נוספה בהצלחה`, [
-          { text: 'אישור', onPress: () => navigation.goBack() },
-        ]);
+        setModalType('success');
+        setModalTitle('הצלחה');
+        setModalMessage(`${type} "${name}" נוספה בהצלחה`);
+        setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => { setModalVisible(false); navigation.goBack(); } }]);
+        setModalVisible(true);
       }
     } catch (error) {
       console.error('Error saving mana:', error);
-      Alert.alert('שגיאה', 'נכשל בשמירת הנתונים');
+      setModalType('error');
+      setModalMessage('נכשל בשמירת הנתונים');
+      setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalVisible(true);
     } finally {
       setLoading(false);
     }
@@ -410,7 +435,18 @@ const AddManaScreen: React.FC = () => {
           )}
         </TouchableOpacity>
       </View>
-    </View>
+
+
+      {/* App Modal */}
+      <AppModal
+        visible={modalVisible}
+        type={modalType}
+        title={modalTitle}
+        message={modalMessage}
+        buttons={modalButtons}
+        onClose={() => setModalVisible(false)}
+      />
+    </View >
   );
 };
 

@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
+import { AppModal, ModalType } from '../../components';
 import {
   getFirestore,
   collection,
@@ -41,6 +42,13 @@ const MigrationScreen: React.FC = () => {
   const navigation = useNavigation();
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<MigrationResult[]>([]);
+
+  // AppModal state
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalType, setModalType] = useState<ModalType>('info');
+  const [modalMessage, setModalMessage] = useState('');
+  const [modalTitle, setModalTitle] = useState<string | undefined>(undefined);
+  const [modalButtons, setModalButtons] = useState<any[]>([]);
 
   const normalizeText = (text: string): string => {
     return text
@@ -264,38 +272,98 @@ const MigrationScreen: React.FC = () => {
 
   // Migration 4: Recalculer tous les holdings (Global)
   const runGlobalRecalculate = async () => {
-    Alert.alert(
-      'Recalcul Global',
-      'Ceci va recalculer les holdings de TOUS les soldats depuis leur historique d\'assignments. Continuer?',
-      [
-        { text: 'ביטול', style: 'cancel' },
-        {
-          text: 'אשר',
-          onPress: async () => {
-            setLoading(true);
-            setResults([]);
-            addResult('info', '🚀 Démarrage du recalcul global...');
+    setModalType('warning');
+    setModalTitle('Recalcul Global');
+    setModalMessage('Ceci va recalculer les holdings de TOUS les soldats depuis leur historique d\'assignments. Continuer?');
+    setModalButtons([
+      { text: 'ביטול', style: 'outline', onPress: () => setModalVisible(false) },
+      {
+        text: 'אשר',
+        style: 'primary',
+        onPress: async () => {
+          setModalVisible(false);
+          setLoading(true);
+          setResults([]);
+          addResult('info', '🚀 Démarrage du recalcul global...');
 
-            try {
-              const { success, errors } = await transactionalAssignmentService.recalculateAllSoldiersHoldings(
-                (current, total) => {
-                  if (current % 10 === 0 || current === total) {
-                    console.log(`Progress: ${current}/${total}`);
-                  }
+          try {
+            const { success, errors } = await transactionalAssignmentService.recalculateAllSoldiersHoldings(
+              (current, total) => {
+                if (current % 10 === 0 || current === total) {
+                  console.log(`Progress: ${current}/${total}`);
                 }
-              );
+              }
+            );
 
-              addResult('success', `✅ Recalcul terminé: ${success} succès, ${errors} erreurs.`);
-              Alert.alert('הצלחה', 'Recalcul global terminé!');
-            } catch (error: any) {
-              addResult('error', `❌ Erreur globale: ${error.message}`);
-            } finally {
-              setLoading(false);
-            }
+            addResult('success', `✅ Recalcul terminé: ${success} succès, ${errors} erreurs.`);
+            setTimeout(() => {
+              setModalType('success');
+              setModalTitle('הצלחה');
+              setModalMessage('Recalcul global terminé!');
+              setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+              setModalVisible(true);
+            }, 500);
+          } catch (error: any) {
+            addResult('error', `❌ Erreur globale: ${error.message}`);
+          } finally {
+            setLoading(false);
           }
         }
-      ]
-    );
+      }
+    ]);
+    setModalVisible(true);
+  };
+
+  // Migration 5: Set all soldiers to 'not_recruited' status
+  const setAllSoldiersNotRecruited = async () => {
+    setModalType('warning');
+    setModalTitle('עדכון סטטוס חיילים');
+    setModalMessage('פעולה זו תעדכן את כל החיילים לסטטוס "לא מגויס". להמשיך?');
+    setModalButtons([
+      { text: 'ביטול', style: 'outline', onPress: () => setModalVisible(false) },
+      {
+        text: 'אשר',
+        style: 'primary',
+        onPress: async () => {
+          setModalVisible(false);
+          setLoading(true);
+          setResults([]);
+          addResult('info', '🔄 עדכון סטטוס כל החיילים ל-"לא מגויס"...');
+
+          try {
+            const soldiersSnapshot = await getDocsFromServer(collection(db, 'soldiers'));
+            let updated = 0;
+
+            for (const docSnapshot of soldiersSnapshot.docs) {
+              const data = docSnapshot.data();
+              await setDoc(doc(db, 'soldiers', docSnapshot.id), {
+                ...data,
+                status: 'not_recruited',
+                updatedAt: Timestamp.now(),
+              });
+              updated++;
+              if (updated % 20 === 0) {
+                addResult('info', `⏳ עודכנו ${updated} חיילים...`);
+              }
+            }
+
+            addResult('success', `✅ הצלחה! ${updated} חיילים עודכנו לסטטוס "לא מגויס"`);
+            setTimeout(() => {
+              setModalType('success');
+              setModalTitle('הצלחה');
+              setModalMessage(`${updated} חיילים עודכנו לסטטוס "לא מגויס"`);
+              setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+              setModalVisible(true);
+            }, 500);
+          } catch (error: any) {
+            addResult('error', `❌ שגיאה: ${error.message}`);
+          } finally {
+            setLoading(false);
+          }
+        }
+      }
+    ]);
+    setModalVisible(true);
   };
 
   return (
@@ -349,6 +417,15 @@ const MigrationScreen: React.FC = () => {
             <Text style={styles.buttonText}>4. Recalcul Global (TOUS les soldats)</Text>
             <Text style={styles.buttonSubtext}>Synchronise soldier_holdings avec l'historique</Text>
           </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.button, { backgroundColor: '#8B5CF6' }, loading && styles.buttonDisabled]}
+            onPress={setAllSoldiersNotRecruited}
+            disabled={loading}
+          >
+            <Text style={styles.buttonText}>5. עדכן כל החיילים ל-"לא מגויס"</Text>
+            <Text style={styles.buttonSubtext}>Set all soldiers status to not_recruited</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Results */}
@@ -378,8 +455,19 @@ const MigrationScreen: React.FC = () => {
             <Text style={styles.loadingText}>Migration en cours...</Text>
           </View>
         )}
+
       </ScrollView>
-    </View>
+
+      {/* App Modal */}
+      <AppModal
+        visible={modalVisible}
+        type={modalType}
+        title={modalTitle}
+        message={modalMessage}
+        buttons={modalButtons}
+        onClose={() => setModalVisible(false)}
+      />
+    </View >
   );
 };
 

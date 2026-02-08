@@ -9,8 +9,8 @@ echo.
 echo Ouverture du service d'impression...
 echo.
 
-REM Ouvrir printer.html dans le navigateur par defaut
-start "" "printer.html"
+REM Ouvrir la page d'impression Firebase dans Chrome
+start "" "chrome.exe" "https://gestion-982.web.app/printer.html"
 
 echo.
 echo Le service d'impression est maintenant ouvert!

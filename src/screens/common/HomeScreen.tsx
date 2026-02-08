@@ -3,7 +3,7 @@
  * Design militaire moderne - équilibré et plaisant
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useLayoutEffect } from 'react';
 import {
   View,
   Text,
@@ -17,7 +17,8 @@ import {
   Dimensions,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useNavigation } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
+import { useNavigation, CommonActions } from '@react-navigation/native';
 import { Colors, Spacing, BorderRadius } from '../../theme/Colors';
 import { useAuth } from '../../contexts/AuthContext';
 import { soldierService } from '../../services/soldierService';
@@ -26,32 +27,64 @@ const { width } = Dimensions.get('window');
 
 const HomeScreen: React.FC = () => {
   const navigation = useNavigation();
-  const { user, userRole } = useAuth();
+  const { user, userRole, signOut } = useAuth();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [stats, setStats] = useState({
-    totalSoldiers: 0,
-    byCompany: {} as Record<string, number>,
+    totalRecruited: 0,
+    totalReleased: 0,
+    byCompany: {} as Record<string, { recruited: number; released: number }>,
   });
 
+  // Rediriger les utilisateurs RSP vers leur dashboard
+  useLayoutEffect(() => {
+    if (userRole === 'rsp') {
+      navigation.dispatch(
+        CommonActions.reset({
+          index: 0,
+          routes: [{ name: 'RspDashboard' }],
+        })
+      );
+    }
+  }, [userRole, navigation]);
+
   useEffect(() => {
-    if (user) {
+    if (user && userRole !== 'rsp') {
       loadStats();
     }
-  }, [user]);
+  }, [user, userRole]);
 
   const loadStats = async () => {
     try {
       const soldiers = await soldierService.getAll();
-      const companyCount: Record<string, number> = {};
+
+      // Count by company with recruited/released breakdown
+      const companyStats: Record<string, { recruited: number; released: number }> = {};
+      let totalRecruited = 0;
+      let totalReleased = 0;
+
       soldiers.forEach((soldier: any) => {
         const company = soldier.company || 'לא משויך';
-        companyCount[company] = (companyCount[company] || 0) + 1;
+        const status = soldier.status || 'pre_recruitment';
+
+        if (!companyStats[company]) {
+          companyStats[company] = { recruited: 0, released: 0 };
+        }
+
+        // Active statuses count as recruited
+        if (['recruited', 'releasing_today', 'gimelim', 'pitzul', 'rianun'].includes(status)) {
+          companyStats[company].recruited++;
+          totalRecruited++;
+        } else if (status === 'released') {
+          companyStats[company].released++;
+          totalReleased++;
+        }
       });
 
       setStats({
-        totalSoldiers: soldiers.length,
-        byCompany: companyCount,
+        totalRecruited,
+        totalReleased,
+        byCompany: companyStats,
       });
     } catch (error) {
       console.error('Error loading stats:', error);
@@ -66,8 +99,17 @@ const HomeScreen: React.FC = () => {
     loadStats();
   };
 
+  const handleLogout = async () => {
+    try {
+      await signOut();
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
+  };
+
   const canAccessArme = userRole === 'admin' || userRole === 'both' || userRole === 'arme';
   const canAccessVetement = userRole === 'admin' || userRole === 'both' || userRole === 'vetement';
+  const canAccessShlishut = userRole === 'admin' || userRole === 'both' || userRole === 'shlishut';
   const canAccessAdmin = userRole === 'admin';
 
   const roleConfig = useMemo(() => {
@@ -75,25 +117,40 @@ const HomeScreen: React.FC = () => {
       admin: { label: 'מנהל מערכת', color: '#6366F1' },
       both: { label: 'הרשאה מלאה', color: '#10B981' },
       arme: { label: 'נשקייה', color: '#F59E0B' },
-      vetement: { label: 'אפנאות', color: '#3B82F6' },
+      vetement: { label: 'אפסנאות', color: '#3B82F6' },
+      rsp: { label: 'רס"פ', color: '#F59E0B' },
+      shlishut: { label: 'שלישות', color: '#8B5CF6' },
     };
     return config[userRole || ''] || { label: 'משתמש', color: '#64748B' };
   }, [userRole]);
+
+  // Si RSP, ne pas afficher ce screen (redirection en cours)
+  if (userRole === 'rsp') {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="small" color="#F59E0B" />
+        <Text style={styles.loadingText}>מעבר לדאשבורד רס"פ...</Text>
+      </View>
+    );
+  }
 
   // Couleurs pour les compagnies
   const companyColors = useMemo(() => ['#10B981', '#3B82F6', '#F59E0B', '#8B5CF6', '#EC4899', '#14B8A6'], []);
 
   // Liste des compagnies préparée
   const companiesList = useMemo(() => {
+    const total = stats.totalRecruited + stats.totalReleased;
     return Object.entries(stats.byCompany)
       .sort(([a], [b]) => a.localeCompare(b, 'he'))
-      .map(([company, count], index) => ({
+      .map(([company, data], index) => ({
         company,
-        count,
+        recruited: data.recruited,
+        released: data.released,
+        total: data.recruited + data.released,
         color: companyColors[index % companyColors.length],
-        percentage: stats.totalSoldiers > 0 ? (count / stats.totalSoldiers) * 100 : 0,
+        percentage: total > 0 ? ((data.recruited + data.released) / total) * 100 : 0,
       }));
-  }, [stats.byCompany, stats.totalSoldiers, companyColors]);
+  }, [stats.byCompany, stats.totalRecruited, stats.totalReleased, companyColors]);
 
   if (loading) {
     return (
@@ -116,19 +173,24 @@ const HomeScreen: React.FC = () => {
         <View style={styles.headerContent}>
           <View style={styles.userSection}>
             <Text style={styles.greeting}>שלום,</Text>
-            <Text style={styles.userName}>{user?.displayName || user?.email?.split('@')[0]}</Text>
+            <Text style={styles.userName}>{user?.name || user?.email?.split('@')[0]}</Text>
             <View style={[styles.roleBadge, { backgroundColor: roleConfig.color + '30' }]}>
               <View style={[styles.roleDot, { backgroundColor: roleConfig.color }]} />
               <Text style={[styles.roleText, { color: '#FFFFFF' }]}>{roleConfig.label}</Text>
             </View>
           </View>
 
-          <View style={styles.logoContainer}>
-            <Image
-              source={require('../../../assets/images/logo-982.png')}
-              style={styles.logoImage}
-              resizeMode="contain"
-            />
+          <View style={styles.headerRight}>
+            <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+              <Ionicons name="log-out-outline" size={22} color="rgba(255,255,255,0.85)" />
+            </TouchableOpacity>
+            <View style={styles.logoContainer}>
+              <Image
+                source={require('../../../assets/images/logo-982.png')}
+                style={styles.logoImage}
+                resizeMode="contain"
+              />
+            </View>
           </View>
         </View>
       </LinearGradient>
@@ -145,14 +207,21 @@ const HomeScreen: React.FC = () => {
           />
         }
       >
-        {/* Carte statistique principale */}
-        <View style={styles.mainStatCard}>
-          <View style={styles.mainStatHeader}>
-            <Text style={styles.mainStatLabel}>סה״כ חיילים במערכת</Text>
+        {/* Stats Cards - Recruited & Released */}
+        <View style={styles.statsRow}>
+          <View style={[styles.statCard, { backgroundColor: '#10B98115', borderColor: '#10B981' }]}>
+            <View style={styles.statCardIcon}>
+              <Ionicons name="checkmark-circle" size={24} color="#10B981" />
+            </View>
+            <Text style={[styles.statCardValue, { color: '#10B981' }]}>{stats.totalRecruited}</Text>
+            <Text style={styles.statCardLabel}>מגויסים</Text>
           </View>
-          <Text style={styles.mainStatValue}>{stats.totalSoldiers}</Text>
-          <View style={styles.mainStatBar}>
-            <View style={[styles.mainStatBarFill, { width: '100%' }]} />
+          <View style={[styles.statCard, { backgroundColor: '#3B82F615', borderColor: '#3B82F6' }]}>
+            <View style={styles.statCardIcon}>
+              <Ionicons name="flag" size={24} color="#3B82F6" />
+            </View>
+            <Text style={[styles.statCardValue, { color: '#3B82F6' }]}>{stats.totalReleased}</Text>
+            <Text style={styles.statCardLabel}>משוחררים</Text>
           </View>
         </View>
 
@@ -163,22 +232,21 @@ const HomeScreen: React.FC = () => {
         </View>
 
         <View style={styles.companiesCard}>
-          {companiesList.map(({ company, count, color, percentage }) => (
+          {companiesList.map(({ company, recruited, released, color }) => (
             <View key={company} style={styles.companyItem}>
               <View style={styles.companyInfo}>
                 <View style={[styles.companyDot, { backgroundColor: color }]} />
                 <Text style={styles.companyName}>{company}</Text>
               </View>
-              <View style={styles.companyStats}>
-                <View style={styles.companyBarContainer}>
-                  <View
-                    style={[
-                      styles.companyBar,
-                      { width: `${percentage}%`, backgroundColor: color + '40' }
-                    ]}
-                  />
+              <View style={styles.companyStatsRow}>
+                <View style={[styles.companyBadge, { backgroundColor: '#10B98120' }]}>
+                  <Text style={[styles.companyBadgeText, { color: '#10B981' }]}>{recruited}</Text>
+                  <Text style={[styles.companyBadgeLabel, { color: '#10B981' }]}>מגויס</Text>
                 </View>
-                <Text style={styles.companyCount}>{count}</Text>
+                <View style={[styles.companyBadge, { backgroundColor: '#3B82F620' }]}>
+                  <Text style={[styles.companyBadgeText, { color: '#3B82F6' }]}>{released}</Text>
+                  <Text style={[styles.companyBadgeLabel, { color: '#3B82F6' }]}>משוחרר</Text>
+                </View>
               </View>
             </View>
           ))}
@@ -191,6 +259,26 @@ const HomeScreen: React.FC = () => {
         </View>
 
         <View style={styles.modulesContainer}>
+          {canAccessShlishut && (
+            <TouchableOpacity
+              style={styles.moduleCard}
+              onPress={() => navigation.navigate('ShlishutHome' as never)}
+              activeOpacity={0.7}
+            >
+              <LinearGradient
+                colors={['#8B5CF6', '#7C3AED']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.moduleAccent}
+              />
+              <View style={styles.moduleContent}>
+                <Text style={styles.moduleTitle}>שלישות</Text>
+                <Text style={styles.moduleDesc}>ניהול כוח אדם וסטטוס חיילי</Text>
+              </View>
+              <Text style={styles.moduleArrow}>←</Text>
+            </TouchableOpacity>
+          )}
+
           {canAccessArme && (
             <TouchableOpacity
               style={styles.moduleCard}
@@ -234,6 +322,26 @@ const HomeScreen: React.FC = () => {
           {canAccessAdmin && (
             <TouchableOpacity
               style={styles.moduleCard}
+              onPress={() => (navigation as any).navigate('RspDashboard', {})}
+              activeOpacity={0.7}
+            >
+              <LinearGradient
+                colors={['#F59E0B', '#D97706']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.moduleAccent}
+              />
+              <View style={styles.moduleContent}>
+                <Text style={styles.moduleTitle}>דאשבורד רס"פ</Text>
+                <Text style={styles.moduleDesc}>צפייה בציוד חיילי פלוגה</Text>
+              </View>
+              <Text style={styles.moduleArrow}>←</Text>
+            </TouchableOpacity>
+          )}
+
+          {canAccessAdmin && (
+            <TouchableOpacity
+              style={styles.moduleCard}
               onPress={() => navigation.navigate('AdminPanel' as never)}
               activeOpacity={0.7}
             >
@@ -259,27 +367,6 @@ const HomeScreen: React.FC = () => {
         </View>
 
         <View style={styles.quickActionsRow}>
-          <TouchableOpacity
-            style={styles.quickActionCard}
-            onPress={() => navigation.navigate('AddSoldier' as never)}
-            activeOpacity={0.7}
-          >
-            <View style={[styles.quickActionIconBg, { backgroundColor: '#10B98120' }]}>
-              <Text style={[styles.quickActionIcon, { color: '#10B981' }]}>+</Text>
-            </View>
-            <Text style={styles.quickActionText}>הוספת חייל</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.quickActionCard}
-            onPress={() => (navigation as any).navigate('SoldierSearch', { mode: 'signature', type: 'combat' })}
-            activeOpacity={0.7}
-          >
-            <View style={[styles.quickActionIconBg, { backgroundColor: '#3B82F620' }]}>
-              <Text style={[styles.quickActionIcon, { color: '#3B82F6' }]}>⌕</Text>
-            </View>
-            <Text style={styles.quickActionText}>חיפוש חייל</Text>
-          </TouchableOpacity>
         </View>
 
         {/* Footer */}
@@ -367,6 +454,21 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+
+  logoutButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
   logoContainer: {
     width: 52,
     height: 52,
@@ -374,7 +476,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.95)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: 16,
   },
 
   logoImage: {
@@ -438,6 +539,68 @@ const styles = StyleSheet.create({
     height: '100%',
     backgroundColor: '#4F6D7A',
     borderRadius: 2,
+  },
+
+  // Stats row with two cards
+  statsRow: {
+    flexDirection: 'row',
+    gap: 16,
+    marginBottom: 24,
+  },
+
+  statCard: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 20,
+    alignItems: 'center',
+    borderWidth: 1.5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+
+  statCardIcon: {
+    marginBottom: 8,
+  },
+
+  statCardValue: {
+    fontSize: 32,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+
+  statCardLabel: {
+    fontSize: 13,
+    color: '#64748B',
+    fontWeight: '500',
+  },
+
+  // Company stats row
+  companyStatsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+
+  companyBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    gap: 4,
+  },
+
+  companyBadgeText: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+
+  companyBadgeLabel: {
+    fontSize: 11,
+    fontWeight: '500',
   },
 
   // Section header

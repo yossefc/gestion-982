@@ -1,0 +1,90 @@
+╔══════════════════════════════════════════════════════════════╗
+║                                                              ║
+║       SERVICE D'IMPRESSION AUTOMATIQUE - GESTION-982        ║
+║                                                              ║
+╚══════════════════════════════════════════════════════════════╝
+
+
+INSTALLATION RAPIDE (5 minutes):
+═════════════════════════════════════════════════════════════
+
+1. INSTALLER NODE.JS
+   ─────────────────
+   → Allez sur: https://nodejs.org/
+   → Téléchargez la version LTS (bouton vert)
+   → Installez (cliquez "Suivant" partout)
+   → REDEMARREZ l'ordinateur
+
+2. VERIFIER L'IMPRIMANTE
+   ──────────────────────
+   → Connectez votre imprimante
+   → Définissez-la comme imprimante par défaut:
+     Windows → Paramètres → Imprimantes → Clic droit → Par défaut
+
+3. COPIER LES FICHIERS
+   ───────────────────
+   → Copiez ce dossier vers: C:\Impression-Gestion-982\
+
+4. INSTALLER LES DEPENDANCES
+   ──────────────────────────
+   → Ouvrez CMD dans le dossier (Shift + Clic droit → "Ouvrir PowerShell ici")
+   → Tapez: npm install
+   → Appuyez sur Entrée
+   → Attendez 2-3 minutes
+
+5. LANCER LE SERVICE
+   ─────────────────
+   → Double-cliquez sur: DEMARRER-SERVICE.bat
+   → Gardez la fenêtre OUVERTE
+   → C'est prêt! Les PDFs s'impriment automatiquement!
+
+
+═════════════════════════════════════════════════════════════
+
+FICHIERS DANS CE DOSSIER:
+─────────────────────────
+
+✓ impression-service.js       - Le programme principal
+✓ package.json                 - Configuration
+✓ serviceAccountKey.json       - Identifiants Firebase (SENSIBLE!)
+✓ DEMARRER-SERVICE.bat        - Lancez celui-ci!
+✓ INSTALLATION-NOUVEAU-PC.md  - Guide détaillé complet
+✓ GUIDE-SERVICE-NODE.md       - Guide d'utilisation
+
+
+═════════════════════════════════════════════════════════════
+
+UTILISATION QUOTIDIENNE:
+────────────────────────
+
+Chaque matin:
+  1. Allumez l'imprimante
+  2. Lancez DEMARRER-SERVICE.bat
+  3. Laissez tourner
+
+Chaque soir:
+  1. Fermez la fenêtre (Ctrl+C)
+
+
+═════════════════════════════════════════════════════════════
+
+BESOIN D'AIDE?
+─────────────
+
+→ Consultez INSTALLATION-NOUVEAU-PC.md (guide détaillé)
+→ Vérifiez que Node.js est installé: node --version
+→ Vérifiez l'imprimante par défaut dans Windows
+
+
+═════════════════════════════════════════════════════════════
+
+IMPORTANT - SECURITE:
+────────────────────
+
+⚠ Le fichier serviceAccountKey.json contient des identifiants
+  sensibles. Ne le partagez JAMAIS et ne le mettez JAMAIS en ligne!
+
+
+═════════════════════════════════════════════════════════════
+
+Bon courage! 🖨️

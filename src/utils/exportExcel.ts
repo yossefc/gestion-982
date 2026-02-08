@@ -21,7 +21,7 @@ function convertToCSV(data: any[], headers: string[]): string {
       return value || '';
     }).join(',')
   );
-  
+
   return [headerRow, ...rows].join('\n');
 }
 
@@ -43,7 +43,7 @@ export async function exportAssignmentsToCSV(assignments: Assignment[]): Promise
     soldierId: a.soldierId,
     soldierName: a.soldierName,
     soldierPersonalNumber: a.soldierPersonalNumber,
-    type: a.type === 'combat' ? 'ציוד לחימה' : 'אפנאות',
+    type: a.type === 'combat' ? 'ציוד לחימה' : 'אפסנאות',
     status: a.status,
     timestamp: new Date(a.timestamp).toLocaleDateString('he-IL'),
     itemsCount: a.items.length,
@@ -51,7 +51,7 @@ export async function exportAssignmentsToCSV(assignments: Assignment[]): Promise
 
   const csv = convertToCSV(data, headers);
   const fileUri = FS.documentDirectory + `assignments_${Date.now()}.csv`;
-  
+
   // Ajouter BOM UTF-8 pour Excel
   const bom = '\uFEFF';
   await FileSystem.writeAsStringAsync(fileUri, bom + csv, {
@@ -92,7 +92,7 @@ export async function exportSoldiersToCSV(soldiers: Soldier[]): Promise<void> {
 
   const csv = convertToCSV(data, headers);
   const fileUri = FS.documentDirectory + `soldiers_${Date.now()}.csv`;
-  
+
   const bom = '\uFEFF';
   await FileSystem.writeAsStringAsync(fileUri, bom + csv, {
     encoding: FS.EncodingType.UTF8,

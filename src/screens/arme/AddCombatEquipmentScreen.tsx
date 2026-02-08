@@ -8,7 +8,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
-  Alert,
+
   ActivityIndicator,
   Switch,
   KeyboardAvoidingView,
@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
+import { AppModal, ModalType } from '../../components';
 import { RootStackParamList, SubEquipment } from '../../types';
 import { combatEquipmentService } from '../../services/firebaseService';
 
@@ -47,6 +48,13 @@ const AddCombatEquipmentScreen: React.FC = () => {
   const [subEquipments, setSubEquipments] = useState<SubEquipment[]>([]);
   const [newSubEquipmentName, setNewSubEquipmentName] = useState('');
 
+  // AppModal state
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalType, setModalType] = useState<ModalType>('info');
+  const [modalMessage, setModalMessage] = useState('');
+  const [modalTitle, setModalTitle] = useState<string | undefined>(undefined);
+  const [modalButtons, setModalButtons] = useState<any[]>([]);
+
   useEffect(() => {
     if (isEditMode && equipmentId) {
       loadEquipment();
@@ -67,7 +75,11 @@ const AddCombatEquipmentScreen: React.FC = () => {
       }
     } catch (error) {
       console.error('Error loading equipment:', error);
-      Alert.alert('שגיאה', 'נכשל בטעינת הציוד');
+      console.error('Error loading equipment:', error);
+      setModalType('error');
+      setModalMessage('נכשל בטעינת הציוד');
+      setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalVisible(true);
     } finally {
       setInitialLoading(false);
     }
@@ -75,7 +87,10 @@ const AddCombatEquipmentScreen: React.FC = () => {
 
   const addSubEquipment = () => {
     if (!newSubEquipmentName.trim()) {
-      Alert.alert('שגיאה', 'נא להזין שם רכיב');
+      setModalType('error');
+      setModalMessage('נא להזין שם רכיב');
+      setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalVisible(true);
       return;
     }
 
@@ -94,12 +109,18 @@ const AddCombatEquipmentScreen: React.FC = () => {
 
   const handleSave = async () => {
     if (!name.trim()) {
-      Alert.alert('שגיאה', 'נא להזין שם ציוד');
+      setModalType('error');
+      setModalMessage('נא להזין שם ציוד');
+      setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalVisible(true);
       return;
     }
 
     if (!category) {
-      Alert.alert('שגיאה', 'נא לבחור קטגוריה');
+      setModalType('error');
+      setModalMessage('נא לבחור קטגוריה');
+      setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalVisible(true);
       return;
     }
 
@@ -116,18 +137,25 @@ const AddCombatEquipmentScreen: React.FC = () => {
 
       if (isEditMode && equipmentId) {
         await combatEquipmentService.update(equipmentId, equipmentData);
-        Alert.alert('הצלחה', 'הציוד עודכן בהצלחה', [
-          { text: 'אישור', onPress: () => navigation.goBack() },
-        ]);
+        setModalType('success');
+        setModalTitle('הצלחה');
+        setModalMessage('הציוד עודכן בהצלחה');
+        setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => { setModalVisible(false); navigation.goBack(); } }]);
+        setModalVisible(true);
       } else {
         await combatEquipmentService.create(equipmentData);
-        Alert.alert('הצלחה', 'הציוד נוסף בהצלחה', [
-          { text: 'אישור', onPress: () => navigation.goBack() },
-        ]);
+        setModalType('success');
+        setModalTitle('הצלחה');
+        setModalMessage('הציוד נוסף בהצלחה');
+        setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => { setModalVisible(false); navigation.goBack(); } }]);
+        setModalVisible(true);
       }
     } catch (error) {
       console.error('Error saving equipment:', error);
-      Alert.alert('שגיאה', 'נכשל בשמירת הציוד');
+      setModalType('error');
+      setModalMessage('נכשל בשמירת הציוד');
+      setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalVisible(true);
     } finally {
       setLoading(false);
     }
@@ -341,7 +369,18 @@ const AddCombatEquipmentScreen: React.FC = () => {
           )}
         </TouchableOpacity>
       </View>
-    </View>
+
+
+      {/* App Modal */}
+      <AppModal
+        visible={modalVisible}
+        type={modalType}
+        title={modalTitle}
+        message={modalMessage}
+        buttons={modalButtons}
+        onClose={() => setModalVisible(false)}
+      />
+    </View >
   );
 };
 

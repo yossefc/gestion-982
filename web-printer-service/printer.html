@@ -917,9 +917,10 @@
                 try {
                     console.log('⬇ פותח PDF:', soldierName);
 
-                    // Check if it's a base64 data URL
+                    let blobUrl = pdfUrl;
+
+                    // Check if it's a base64 data URL - convert to blob URL
                     if (pdfUrl.startsWith('data:application/pdf;base64,')) {
-                        // For base64 PDFs, create a blob and open in new window
                         const base64Data = pdfUrl.replace('data:application/pdf;base64,', '');
                         const binaryData = atob(base64Data);
                         const bytes = new Uint8Array(binaryData.length);
@@ -927,53 +928,58 @@
                             bytes[i] = binaryData.charCodeAt(i);
                         }
                         const blob = new Blob([bytes], { type: 'application/pdf' });
-                        const blobUrl = URL.createObjectURL(blob);
-
-                        // Open in new window and print
-                        const printWindow = window.open(blobUrl, '_blank');
-                        if (printWindow) {
-                            printWindow.onload = () => {
-                                setTimeout(() => {
-                                    printWindow.print();
-                                    // Note: Can't reliably close the window after print
-                                    resolve();
-                                }, 500);
-                            };
-                        } else {
-                            // Popup blocked, download instead
-                            console.warn('⚠ חלון חסום, מוריד את הקובץ');
-                            const link = document.createElement('a');
-                            link.href = blobUrl;
-                            link.download = `${soldierName}.pdf`;
-                            link.click();
-                            resolve();
-                        }
-                    } else {
-                        // For regular URLs, use the old iframe method
-                        pdfFrame.onload = () => {
-                            try {
-                                setTimeout(() => {
-                                    pdfFrame.contentWindow.print();
-                                    resolve();
-                                }, 1000);
-                            } catch (error) {
-                                console.warn('⚠ לא ניתן להדפיס אוטומטית, פותח בחלון חדש');
-                                window.open(pdfUrl, '_blank');
-                                resolve();
-                            }
-                        };
-
-                        pdfFrame.onerror = () => {
-                            console.warn('⚠ שגיאה בטעינת iframe, מוריד ישירות');
-                            const link = document.createElement('a');
-                            link.href = pdfUrl;
-                            link.download = `${soldierName}.pdf`;
-                            link.click();
-                            resolve();
-                        };
-
-                        pdfFrame.src = pdfUrl;
+                        blobUrl = URL.createObjectURL(blob);
                     }
+
+                    // Create a hidden iframe for printing
+                    const printFrame = document.createElement('iframe');
+                    printFrame.style.position = 'fixed';
+                    printFrame.style.right = '0';
+                    printFrame.style.bottom = '0';
+                    printFrame.style.width = '0';
+                    printFrame.style.height = '0';
+                    printFrame.style.border = 'none';
+                    printFrame.style.visibility = 'hidden';
+                    document.body.appendChild(printFrame);
+
+                    // Set the source to the PDF
+                    printFrame.src = blobUrl;
+
+                    // Wait for load then print
+                    printFrame.onload = () => {
+                        setTimeout(() => {
+                            try {
+                                printFrame.contentWindow.focus();
+                                printFrame.contentWindow.print();
+                                console.log('✓ הודפס בהצלחה:', soldierName);
+                            } catch (e) {
+                                console.warn('⚠ לא ניתן להדפיס מ-iframe, פותח בחלון חדש');
+                                // Open PDF in new window for manual print
+                                const win = window.open(blobUrl, '_blank');
+                                if (win) {
+                                    win.print();
+                                }
+                            }
+                            // Cleanup after delay
+                            setTimeout(() => {
+                                document.body.removeChild(printFrame);
+                                if (blobUrl !== pdfUrl) {
+                                    URL.revokeObjectURL(blobUrl);
+                                }
+                            }, 3000);
+                            resolve();
+                        }, 1000);
+                    };
+
+                    printFrame.onerror = () => {
+                        console.warn('⚠ שגיאה בטעינת PDF, מנסה פתיחה ישירה');
+                        const win = window.open(blobUrl, '_blank');
+                        if (win) {
+                            setTimeout(() => win.print(), 500);
+                        }
+                        document.body.removeChild(printFrame);
+                        resolve();
+                    };
 
                 } catch (error) {
                     console.error('✗ שגיאה:', error);

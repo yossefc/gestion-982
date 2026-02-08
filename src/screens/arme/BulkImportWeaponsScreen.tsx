@@ -7,7 +7,6 @@ import {
   StyleSheet,
   ScrollView,
   ActivityIndicator,
-  Alert,
   Platform,
   TextInput,
 } from 'react-native';
@@ -15,6 +14,7 @@ import { useNavigation } from '@react-navigation/native';
 import * as DocumentPicker from 'expo-document-picker';
 import * as XLSX from 'xlsx';
 import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
+import { AppModal, ModalType } from '../../components';
 import { weaponInventoryService } from '../../services/weaponInventoryService';
 import { combatEquipmentService } from '../../services/firebaseService';
 
@@ -35,6 +35,13 @@ const BulkImportWeaponsScreen: React.FC = () => {
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [categories, setCategories] = useState<string[]>([]);
   const [loadingCategories, setLoadingCategories] = useState(true);
+
+  // AppModal state
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalType, setModalType] = useState<ModalType>('info');
+  const [modalMessage, setModalMessage] = useState('');
+  const [modalTitle, setModalTitle] = useState<string | undefined>(undefined);
+  const [modalButtons, setModalButtons] = useState<any[]>([]);
 
   // Charger les catégories depuis l'équipement de combat qui nécessite un מסטב
   useEffect(() => {
@@ -113,100 +120,127 @@ const BulkImportWeaponsScreen: React.FC = () => {
       console.log('[Import] Extracted serials:', extractedSerials);
 
       if (extractedSerials.length === 0) {
-        Alert.alert('שגיאה', 'לא נמצאו מסטבים בקובץ.\nוודא שהעמודה הראשונה מכילה מסטבים.');
+        setModalType('error');
+        setModalMessage('לא נמצאו מסטבים בקובץ.\nוודא שהעמודה הראשונה מכילה מסטבים.');
+        setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+        setModalVisible(true);
         return;
       }
 
       setSerials(extractedSerials);
-      Alert.alert(
-        'הצלחה',
-        `נמצאו ${extractedSerials.length} מסטבים בקובץ`,
-        [{ text: 'אישור' }]
-      );
+      setModalType('success');
+      setModalTitle('הצלחה');
+      setModalMessage(`נמצאו ${extractedSerials.length} מסטבים בקובץ`);
+      setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalVisible(true);
     } catch (error) {
       console.error('Error picking/parsing file:', error);
-      Alert.alert('שגיאה', 'נכשל בקריאת הקובץ. וודא שהקובץ הוא Excel תקין.');
+      console.error('Error picking/parsing file:', error);
+      setModalType('error');
+      setModalMessage('נכשל בקריאת הקובץ. וודא שהקובץ הוא Excel תקין.');
+      setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalVisible(true);
     }
   };
 
   const handleImport = async () => {
     if (!category) {
-      Alert.alert('שגיאה', 'אנא בחר קטגוריה');
-      return;
+      if (!category) {
+        setModalType('error');
+        setModalMessage('אנא בחר קטגוריה');
+        setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+        setModalVisible(true);
+        return;
+      }
     }
 
     if (serials.length === 0) {
-      Alert.alert('שגיאה', 'אנא בחר קובץ Excel');
-      return;
+      if (serials.length === 0) {
+        setModalType('error');
+        setModalMessage('אנא בחר קובץ Excel');
+        setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+        setModalVisible(true);
+        return;
+      }
     }
 
-    Alert.alert(
-      'אישור ייבוא',
-      `האם אתה בטוח שברצונך לייבא ${serials.length} מסטבים עבור ${category}?`,
-      [
-        { text: 'ביטול', style: 'cancel' },
-        {
-          text: 'ייבא',
-          onPress: async () => {
-            setProcessing(true);
-            setImportResult(null);
+    setModalType('info');
+    setModalTitle('אישור ייבוא');
+    setModalMessage(`האם אתה בטוח שברצונך לייבא ${serials.length} מסטבים עבור ${category}?`);
+    setModalButtons([
+      { text: 'ביטול', style: 'outline', onPress: () => setModalVisible(false) },
+      {
+        text: 'ייבא',
+        style: 'primary',
+        onPress: async () => {
+          setModalVisible(false);
+          setProcessing(true);
+          setImportResult(null);
 
-            const result: ImportResult = {
-              success: 0,
-              failed: 0,
-              duplicates: 0,
-              errors: [],
-            };
+          const result: ImportResult = {
+            success: 0,
+            failed: 0,
+            duplicates: 0,
+            errors: [],
+          };
 
-            for (let i = 0; i < serials.length; i++) {
-              const serial = serials[i];
+          for (let i = 0; i < serials.length; i++) {
+            const serial = serials[i];
 
-              try {
-                // Vérifier si le serial existe déjà
-                const existing = await weaponInventoryService.getWeaponBySerialNumber(serial);
+            try {
+              // Vérifier si le serial existe déjà
+              const existing = await weaponInventoryService.getWeaponBySerialNumber(serial);
 
-                if (existing) {
-                  console.log(`[Import] Serial ${serial} already exists, skipping`);
-                  result.duplicates++;
-                  continue;
-                }
-
-                // Créer la nouvelle arme
-                await weaponInventoryService.addWeapon({
-                  category,
-                  serialNumber: serial,
-                  status: 'available',
-                });
-
-                result.success++;
-                console.log(`[Import] Successfully imported ${serial} (${i + 1}/${serials.length})`);
-              } catch (error: any) {
-                console.error(`[Import] Error importing ${serial}:`, error);
-                result.failed++;
-                result.errors.push(`${serial}: ${error.message || 'שגיאה לא ידועה'}`);
+              if (existing) {
+                console.log(`[Import] Serial ${serial} already exists, skipping`);
+                result.duplicates++;
+                continue;
               }
+
+              // Créer la nouvelle arme
+              await weaponInventoryService.addWeapon({
+                category,
+                serialNumber: serial,
+                status: 'available',
+              });
+
+              result.success++;
+              console.log(`[Import] Successfully imported ${serial} (${i + 1}/${serials.length})`);
+            } catch (error: any) {
+              console.error(`[Import] Error importing ${serial}:`, error);
+              result.failed++;
+              result.errors.push(`${serial}: ${error.message || 'שגיאה לא ידועה'}`);
             }
+          }
 
-            setProcessing(false);
-            setImportResult(result);
+          setProcessing(false);
+          setImportResult(result);
 
-            // Show summary alert
-            const message = `ייבוא הושלם!\n\nהוספו בהצלחה: ${result.success}\nכבר קיימים: ${result.duplicates}\nנכשלו: ${result.failed}`;
+          // Show summary alert
+          const message = `ייבוא הושלם!\n\nהוספו בהצלחה: ${result.success}\nכבר קיימים: ${result.duplicates}\nנכשלו: ${result.failed}`;
 
-            Alert.alert('סיכום ייבוא', message, [
+          setTimeout(() => {
+            setModalType('success');
+            setModalTitle('סיכום ייבוא');
+            setModalMessage(message);
+            setModalButtons([
               {
                 text: 'סגור',
+                style: 'primary',
                 onPress: () => {
+                  setModalVisible(false);
                   if (result.success > 0) {
                     navigation.goBack();
                   }
                 },
               },
             ]);
-          },
+            setModalVisible(true);
+          }, 500);
         },
-      ]
-    );
+      },
+    ]);
+    setModalVisible(true);
   };
 
   return (
@@ -393,8 +427,19 @@ const BulkImportWeaponsScreen: React.FC = () => {
             )}
           </TouchableOpacity>
         )}
+
       </ScrollView>
-    </View>
+
+      {/* App Modal */}
+      <AppModal
+        visible={modalVisible}
+        type={modalType}
+        title={modalTitle}
+        message={modalMessage}
+        buttons={modalButtons}
+        onClose={() => setModalVisible(false)}
+      />
+    </View >
   );
 };
 

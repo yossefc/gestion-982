@@ -16,10 +16,11 @@ interface AuthContextType {
   loading: boolean;
   authLoading: boolean; // Alias for loading
   userRole: string | null; // User's role
+  userCompany: string | null; // User's company (for RSP role)
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, name: string) => Promise<void>;
   signOut: () => Promise<void>;
-  hasPermission: (module: 'arme' | 'vetement' | 'admin') => boolean;
+  hasPermission: (module: 'arme' | 'vetement' | 'admin' | 'rsp') => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -57,6 +58,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               name: userData.name || '',
               phone: userData.phone,
               role: userData.role as UserRole,
+              company: userData.company,  // פלוגה pour RSP
               createdAt: userData.createdAt?.toDate() || new Date(),
             });
           } else {
@@ -151,18 +153,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   // Vérifier les permissions selon le rôle
-  const hasPermission = useCallback((module: 'arme' | 'vetement' | 'admin'): boolean => {
+  const hasPermission = useCallback((module: 'arme' | 'vetement' | 'admin' | 'rsp'): boolean => {
     if (!user) return false;
 
     switch (user.role) {
       case 'admin':
         return true; // Admin a accès à tout
       case 'both':
-        return module !== 'admin'; // Accès arme et vêtement, pas admin
+        return module !== 'admin' && module !== 'rsp'; // Accès arme et vêtement, pas admin ni rsp
       case 'arme':
         return module === 'arme';
       case 'vetement':
         return module === 'vetement';
+      case 'rsp':
+        return module === 'rsp'; // RSP a seulement accès au module RSP (lecture seule)
       default:
         return false;
     }
@@ -174,6 +178,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     loading,
     authLoading: loading, // Alias for compatibility
     userRole: user?.role || null,
+    userCompany: user?.company || null, // פלוגה pour RSP
     signIn,
     signUp,
     signOut,

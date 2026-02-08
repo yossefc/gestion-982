@@ -11,7 +11,6 @@ import {
     ScrollView,
     TouchableOpacity,
     TextInput,
-    Alert,
     ActivityIndicator,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
@@ -19,6 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
 import { rspEquipmentService } from '../../services/firebaseService';
 import { RspEquipment } from '../../types';
+import { AppModal, ModalType } from '../../components';
 
 const RspEquipmentScreen: React.FC = () => {
     const navigation = useNavigation();
@@ -29,6 +29,13 @@ const RspEquipmentScreen: React.FC = () => {
     const [newCategory, setNewCategory] = useState('ציוד רס"פ');
     const [newQuantity, setNewQuantity] = useState('0');
     const [editingId, setEditingId] = useState<string | null>(null);
+
+    // AppModal state
+    const [modalVisible, setModalVisible] = useState(false);
+    const [modalType, setModalType] = useState<ModalType>('info');
+    const [modalMessage, setModalMessage] = useState('');
+    const [modalTitle, setModalTitle] = useState<string | undefined>(undefined);
+    const [modalButtons, setModalButtons] = useState<any[]>([]);
 
     useEffect(() => {
         loadEquipment();
@@ -41,7 +48,11 @@ const RspEquipmentScreen: React.FC = () => {
             setEquipments(data);
         } catch (error) {
             console.error(error);
-            Alert.alert('שגיאה', 'לא ניתן לטעון את הציוד');
+            console.error(error);
+            setModalType('error');
+            setModalMessage('לא ניתן לטעון את הציוד');
+            setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+            setModalVisible(true);
         } finally {
             setLoading(false);
         }
@@ -63,7 +74,10 @@ const RspEquipmentScreen: React.FC = () => {
             setAddingNew(false);
             loadEquipment();
         } catch (error) {
-            Alert.alert('שגיאה', 'לא ניתן ליצור את הציוד');
+            setModalType('error');
+            setModalMessage('לא ניתן ליצור את הציוד');
+            setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+            setModalVisible(true);
         }
     };
 
@@ -84,31 +98,39 @@ const RspEquipmentScreen: React.FC = () => {
             await rspEquipmentService.update(id, { quantity: newQuantity });
         } catch (error) {
             // En cas d'erreur, recharger les vraies données
-            Alert.alert('שגיאה', 'לא ניתן לעדכן את הכמות');
+            // En cas d'erreur, recharger les vraies données
+            setModalType('error');
+            setModalMessage('לא ניתן לעדכן את הכמות');
+            setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+            setModalVisible(true);
             loadEquipment();
         }
     };
 
     const handleDelete = (id: string, name: string) => {
-        Alert.alert(
-            'מחיקה',
-            `למחוק את הציוד "${name}"?`,
-            [
-                { text: 'ביטול', style: 'cancel' },
-                {
-                    text: 'מחק',
-                    style: 'destructive',
-                    onPress: async () => {
-                        try {
-                            await rspEquipmentService.delete(id);
-                            loadEquipment();
-                        } catch (error) {
-                            Alert.alert('שגיאה', 'לא ניתן למחוק');
-                        }
+        setModalType('warning');
+        setModalTitle('מחיקה');
+        setModalMessage(`למחוק את הציוד "${name}"?`);
+        setModalButtons([
+            { text: 'ביטול', style: 'outline', onPress: () => setModalVisible(false) },
+            {
+                text: 'מחק',
+                style: 'destructive',
+                onPress: async () => {
+                    setModalVisible(false);
+                    try {
+                        await rspEquipmentService.delete(id);
+                        loadEquipment();
+                    } catch (error) {
+                        setModalType('error');
+                        setModalMessage('לא ניתן למחוק');
+                        setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+                        setModalVisible(true);
                     }
                 }
-            ]
-        );
+            }
+        ]);
+        setModalVisible(true);
     };
 
     return (
@@ -211,6 +233,16 @@ const RspEquipmentScreen: React.FC = () => {
                     </View>
                 )}
             </ScrollView>
+
+            {/* App Modal */}
+            <AppModal
+                visible={modalVisible}
+                type={modalType}
+                title={modalTitle}
+                message={modalMessage}
+                buttons={modalButtons}
+                onClose={() => setModalVisible(false)}
+            />
         </View>
     );
 };

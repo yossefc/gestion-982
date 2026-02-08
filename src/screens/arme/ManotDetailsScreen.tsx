@@ -8,12 +8,13 @@ import {
   StyleSheet,
   ScrollView,
   ActivityIndicator,
-  Alert,
+
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { RootStackParamList, Mana } from '../../types';
 import { manaService } from '../../services/firebaseService';
 import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
+import { AppModal, ModalType } from '../../components';
 
 type ManotDetailsRouteProp = RouteProp<RootStackParamList, 'ManotDetails'>;
 
@@ -25,6 +26,13 @@ const ManotDetailsScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [mana, setMana] = useState<Mana | null>(null);
 
+  // AppModal state
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalType, setModalType] = useState<ModalType>('info');
+  const [modalMessage, setModalMessage] = useState('');
+  const [modalTitle, setModalTitle] = useState<string | undefined>(undefined);
+  const [modalButtons, setModalButtons] = useState<any[]>([]);
+
   useEffect(() => {
     loadMana();
   }, [manaId]);
@@ -35,7 +43,10 @@ const ManotDetailsScreen: React.FC = () => {
       setMana(manaData);
     } catch (error) {
       console.error('Error loading mana:', error);
-      Alert.alert('שגיאה', 'נכשל בטעינת המנה');
+      setModalType('error');
+      setModalMessage('נכשל בטעינת המנה');
+      setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalVisible(true);
     } finally {
       setLoading(false);
     }
@@ -46,54 +57,69 @@ const ManotDetailsScreen: React.FC = () => {
   };
 
   const handleDelete = () => {
-    Alert.alert(
-      'מחיקת מנה',
-      `האם אתה בטוח שברצונך למחוק את "${mana?.name}"?`,
-      [
-        { text: 'ביטול', style: 'cancel' },
-        {
-          text: 'מחק',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await manaService.delete(manaId);
-              Alert.alert('הצלחה', 'המנה נמחקה בהצלחה');
-              navigation.goBack();
-            } catch (error) {
-              Alert.alert('שגיאה', 'נכשל במחיקת המנה');
-            }
-          },
+    setModalType('warning');
+    setModalTitle('מחיקת מנה');
+    setModalMessage(`האם אתה בטוח שברצונך למחוק את "${mana?.name}"?`);
+    setModalButtons([
+      { text: 'ביטול', style: 'outline', onPress: () => setModalVisible(false) },
+      {
+        text: 'מחק',
+        style: 'destructive',
+        onPress: async () => {
+          setModalVisible(false);
+          try {
+            await manaService.delete(manaId);
+            setModalType('success');
+            setModalTitle('הצלחה');
+            setModalMessage('המנה נמחקה בהצלחה');
+            setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => { setModalVisible(false); navigation.goBack(); } }]);
+            setModalVisible(true);
+          } catch (error) {
+            setModalType('error');
+            setModalMessage('נכשל במחיקת המנה');
+            setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+            setModalVisible(true);
+          }
         },
-      ]
-    );
+      },
+    ]);
+    setModalVisible(true);
   };
 
   const handleDuplicate = async () => {
     if (!mana) return;
 
-    Alert.alert(
-      'שכפול מנה',
-      `האם ליצור עותק של "${mana.name}"?`,
-      [
-        { text: 'ביטול', style: 'cancel' },
-        {
-          text: 'שכפל',
-          onPress: async () => {
-            try {
-              await manaService.create({
-                name: `${mana.name} (עותק)`,
-                type: mana.type,
-                equipments: mana.equipments,
-              });
-              Alert.alert('הצלחה', 'המנה שוכפלה בהצלחה');
-              navigation.goBack();
-            } catch (error) {
-              Alert.alert('שגיאה', 'נכשל בשכפול המנה');
-            }
-          },
+    setModalType('info');
+    setModalTitle('שכפול מנה');
+    setModalMessage(`האם ליצור עותק של "${mana.name}"?`);
+    setModalButtons([
+      { text: 'ביטול', style: 'outline', onPress: () => setModalVisible(false) },
+      {
+        text: 'שכפל',
+        style: 'primary',
+        onPress: async () => {
+          setModalVisible(false);
+          try {
+            await manaService.create({
+              name: `${mana.name} (עותק)`,
+              type: mana.type,
+              equipments: mana.equipments,
+            });
+            setModalType('success');
+            setModalTitle('הצלחה');
+            setModalMessage('המנה שוכפלה בהצלחה');
+            setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => { setModalVisible(false); navigation.goBack(); } }]);
+            setModalVisible(true);
+          } catch (error) {
+            setModalType('error');
+            setModalMessage('נכשל בשכפול המנה');
+            setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+            setModalVisible(true);
+          }
         },
-      ]
-    );
+      },
+    ]);
+    setModalVisible(true);
   };
 
   if (loading) {
@@ -274,7 +300,18 @@ const ManotDetailsScreen: React.FC = () => {
         </View>
 
         <View style={styles.bottomSpacer} />
+        <View style={styles.bottomSpacer} />
       </ScrollView>
+
+      {/* App Modal */}
+      <AppModal
+        visible={modalVisible}
+        type={modalType}
+        title={modalTitle}
+        message={modalMessage}
+        buttons={modalButtons}
+        onClose={() => setModalVisible(false)}
+      />
     </View>
   );
 };

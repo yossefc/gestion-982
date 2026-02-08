@@ -7,7 +7,6 @@ import {
   StyleSheet,
   ScrollView,
   ActivityIndicator,
-  Alert,
   Platform,
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -20,6 +19,7 @@ import { weaponInventoryService } from '../../services/weaponInventoryService';
 import { useAuth } from '../../contexts/AuthContext';
 import { Colors, Shadows } from '../../theme/Colors';
 import { openWhatsAppChat } from '../../services/whatsappService';
+import { AppModal, ModalType } from '../../components';
 
 type CombatStorageRouteProp = RouteProp<RootStackParamList, 'CombatStorage'>;
 
@@ -46,11 +46,27 @@ const CombatStorageScreen: React.FC = () => {
   const [showSignature, setShowSignature] = useState(false);
   const [scrollEnabled, setScrollEnabled] = useState(true);
 
+  // Modal state
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalType, setModalType] = useState<ModalType>('info');
+  const [modalMessage, setModalMessage] = useState('');
+  const [modalTitle, setModalTitle] = useState<string | undefined>(undefined);
+  const [modalButtons, setModalButtons] = useState<any[]>([]);
+
   useEffect(() => {
     if (!soldierId) {
       console.error('[CombatStorage] No soldierId provided in route params!');
-      Alert.alert('שגיאה', 'לא נמצא מזהה חייל');
-      navigation.goBack();
+      setModalType('error');
+      setModalMessage('לא נמצא מזהה חייל');
+      setModalButtons([{
+        text: 'סגור',
+        style: 'primary',
+        onPress: () => {
+          setModalVisible(false);
+          navigation.goBack();
+        },
+      }]);
+      setModalVisible(true);
       return;
     }
     loadData();
@@ -91,7 +107,10 @@ const CombatStorageScreen: React.FC = () => {
       setItems(storageItems);
     } catch (error) {
       console.error('Error loading data:', error);
-      Alert.alert('שגיאה', 'נכשל בטעינת הנתונים');
+      setModalType('error');
+      setModalMessage('נכשל בטעינת הנתונים');
+      setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalVisible(true);
     } finally {
       setLoading(false);
     }
@@ -199,145 +218,167 @@ const CombatStorageScreen: React.FC = () => {
     );
 
     if (selectedItems.length === 0) {
-      Alert.alert('שגיאה', 'אנא בחר לפחות פריט אחד לאפסון');
+      setModalType('error');
+      setModalMessage('אנא בחר לפחות פריט אחד לאפסון');
+      setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalVisible(true);
       return;
     }
 
     if (!signature) {
-      Alert.alert('שגיאה', 'אנא חתום לפני ביצוע האפסון');
+      setModalType('error');
+      setModalMessage('אנא חתום לפני ביצוע האפסון');
+      setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalVisible(true);
       return;
     }
 
     // Validation: s'il y a des serials disponibles, il faut en sélectionner autant que la quantité
     for (const item of selectedItems) {
       if (item.availableSerials.length > 0 && item.selectedSerials.length !== item.storageQuantity) {
-        Alert.alert(
-          'שגיאה',
-          `נא לבחור ${item.storageQuantity} מסטבים עבור ${item.equipmentName}`
-        );
+        setModalType('error');
+        setModalMessage(`נא לבחור ${item.storageQuantity} מסטבים עבור ${item.equipmentName}`);
+        setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
+        setModalVisible(true);
         return;
       }
     }
 
-    Alert.alert(
-      'אפסון ציוד',
-      `האם אתה בטוח שברצונך לאפסן ${selectedItems.length} פריטים?`,
-      [
-        { text: 'ביטול', style: 'cancel' },
-        {
-          text: 'אשר',
-          onPress: async () => {
-            setProcessing(true);
-            try {
-              // Créer l'assignment de type storage
-              const storageItems = selectedItems.map(item => {
-                const itemData: any = {
-                  equipmentId: item.equipmentId,
-                  equipmentName: item.equipmentName,
-                  quantity: item.storageQuantity,
-                };
+    setModalType('confirm');
+    setModalTitle('אפסון ציוד');
+    setModalMessage(`האם אתה בטוח שברצונך לאפסן ${selectedItems.length} פריטים?`);
+    setModalButtons([
+      { text: 'ביטול', style: 'outline', onPress: () => setModalVisible(false) },
+      {
+        text: 'אשר',
+        style: 'primary',
+        icon: 'archive' as const,
+        onPress: async () => {
+          setModalVisible(false);
+          setProcessing(true);
+          try {
+            // Créer l'assignment de type storage
+            const storageItems = selectedItems.map(item => {
+              const itemData: any = {
+                equipmentId: item.equipmentId,
+                equipmentName: item.equipmentName,
+                quantity: item.storageQuantity,
+              };
 
-                if (item.selectedSerials.length > 0) {
-                  itemData.serial = item.selectedSerials.join(', ');
-                }
+              if (item.selectedSerials.length > 0) {
+                itemData.serial = item.selectedSerials.join(', ');
+              }
 
-                return itemData;
-              });
+              return itemData;
+            });
 
-              // Create transactional storage assignment with requestId
-              console.log('[CombatStorage] Creating transactional storage assignment...');
+            // Create transactional storage assignment with requestId
+            console.log('[CombatStorage] Creating transactional storage assignment...');
 
-              const requestId = `combat_storage_${soldierId}_${Date.now()}`;
+            const requestId = `combat_storage_${soldierId}_${Date.now()}`;
 
-              const assignmentId = await transactionalAssignmentService.storageEquipment(
-                soldierId,
-                soldier?.name || '',
-                soldier?.personalNumber || '',
-                'combat',
-                storageItems,
-                user?.id || '',
-                requestId
-              );
+            const assignmentId = await transactionalAssignmentService.storageEquipment(
+              soldierId,
+              soldier?.name || '',
+              soldier?.personalNumber || '',
+              'combat',
+              storageItems,
+              user?.id || '',
+              requestId
+            );
 
-              console.log('[CombatStorage] Transactional storage assignment created:', assignmentId);
+            console.log('[CombatStorage] Transactional storage assignment created:', assignmentId);
 
-              // Mettre à jour weapons_inventory - passer en status 'storage'
-              console.log('[CombatStorage] Updating weapons_inventory to storage status...');
+            // Mettre à jour weapons_inventory - passer en status 'storage'
+            console.log('[CombatStorage] Updating weapons_inventory to storage status...');
 
-              const updatePromises = [];
-              for (const item of selectedItems) {
-                for (const serial of item.selectedSerials) {
-                  const serialToUpdate = serial.trim();
-                  if (!serialToUpdate) continue;
+            const updatePromises = [];
+            for (const item of selectedItems) {
+              for (const serial of item.selectedSerials) {
+                const serialToUpdate = serial.trim();
+                if (!serialToUpdate) continue;
 
-                  updatePromises.push((async () => {
-                    try {
-                      const weapon = await weaponInventoryService.getWeaponBySerialNumber(serialToUpdate);
-                      if (weapon) {
-                        await weaponInventoryService.moveWeaponToStorageWithSoldier(weapon.id, {
-                          soldierId: soldier!.id,
-                          soldierName: soldier!.name,
-                          soldierPersonalNumber: soldier!.personalNumber,
-                        });
-                        console.log(`[CombatStorage] ✅ Weapon ${serialToUpdate} moved to storage`);
-                      }
-                    } catch (err) {
-                      console.error(`[CombatStorage] Failed to update weapon ${serialToUpdate}:`, err);
+                updatePromises.push((async () => {
+                  try {
+                    const weapon = await weaponInventoryService.getWeaponBySerialNumber(serialToUpdate);
+                    if (weapon) {
+                      await weaponInventoryService.moveWeaponToStorageWithSoldier(weapon.id, {
+                        soldierId: soldier!.id,
+                        soldierName: soldier!.name,
+                        soldierPersonalNumber: soldier!.personalNumber,
+                      });
+                      console.log(`[CombatStorage] ✅ Weapon ${serialToUpdate} moved to storage`);
                     }
-                  })());
-                }
+                  } catch (err) {
+                    console.error(`[CombatStorage] Failed to update weapon ${serialToUpdate}:`, err);
+                  }
+                })());
               }
-
-              if (updatePromises.length > 0) {
-                await Promise.all(updatePromises);
-              }
-
-              // Message WhatsApp
-              let whatsappMessage = `שלום ${soldier?.name},\n\nהאפסון בוצע בהצלחה.\n\n`;
-              whatsappMessage += 'ציוד שאופסן:\n';
-              selectedItems.forEach(item => {
-                whatsappMessage += `• ${item.equipmentName} - כמות: ${item.storageQuantity}`;
-                if (item.selectedSerials && item.selectedSerials.length > 0) {
-                  whatsappMessage += ` (מסטב: ${item.selectedSerials.join(', ')})`;
-                }
-                whatsappMessage += '\n';
-              });
-              whatsappMessage += `\nהציוד שמור בנשקייה ורשום על שמך.\nתודה,\nגדוד 982`;
-
-              const storedCount = selectedItems.reduce((sum, item) => sum + item.storageQuantity, 0);
-
-              Alert.alert(
-                'הצלחה',
-                `האפסון בוצע בהצלחה!\n\n${storedCount} פריטים אופסנו בנשקייה.`,
-                [
-                  {
-                    text: 'שלח WhatsApp',
-                    onPress: async () => {
-                      if (soldier?.phone) {
-                        await openWhatsAppChat(soldier.phone, whatsappMessage);
-                      } else {
-                        Alert.alert('שגיאה', 'אין מספר טלפון לחייל');
-                      }
-                      navigation.goBack();
-                    },
-                  },
-                  {
-                    text: 'סגור',
-                    style: 'cancel',
-                    onPress: () => navigation.goBack(),
-                  },
-                ]
-              );
-            } catch (error) {
-              Alert.alert('שגיאה', 'נכשל באפסון הציוד');
-              console.error('Error storing equipment:', error);
-            } finally {
-              setProcessing(false);
             }
-          },
+
+            if (updatePromises.length > 0) {
+              await Promise.all(updatePromises);
+            }
+
+            // Message WhatsApp
+            let whatsappMessage = `שלום ${soldier?.name},\n\nהאפסון בוצע בהצלחה.\n\n`;
+            whatsappMessage += 'ציוד שאופסן:\n';
+            selectedItems.forEach(item => {
+              whatsappMessage += `• ${item.equipmentName} - כמות: ${item.storageQuantity}`;
+              if (item.selectedSerials && item.selectedSerials.length > 0) {
+                whatsappMessage += ` (מסטב: ${item.selectedSerials.join(', ')})`;
+              }
+              whatsappMessage += '\n';
+            });
+            whatsappMessage += `\nהציוד שמור בנשקייה ורשום על שמך.\nתודה,\nגדוד 982`;
+
+            const storedCount = selectedItems.reduce((sum, item) => sum + item.storageQuantity, 0);
+
+            setModalType('success');
+            setModalTitle('הצלחה');
+            setModalMessage(`האפסון בוצע בהצלחה!\n\n${storedCount} פריטים אופסנו בנשקייה.`);
+            setModalButtons([
+              {
+                text: 'שלח WhatsApp',
+                style: 'primary',
+                icon: 'logo-whatsapp' as const,
+                onPress: async () => {
+                  setModalVisible(false);
+                  if (soldier?.phone) {
+                    await openWhatsAppChat(soldier.phone, whatsappMessage);
+                  } else {
+                    setModalType('error');
+                    setModalMessage('אין מספר טלפון לחייל');
+                    setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
+                    setModalVisible(true);
+                    return;
+                  }
+                  navigation.goBack();
+                },
+              },
+              {
+                text: 'סגור',
+                style: 'outline',
+                onPress: () => {
+                  setModalVisible(false);
+                  navigation.goBack();
+                },
+              },
+            ]);
+            setModalVisible(true);
+          } catch (error) {
+            setModalType('error');
+            setModalMessage('נכשל באפסון הציוד');
+            setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
+            setModalVisible(true);
+            console.error('Error storing equipment:', error);
+          } finally {
+            setProcessing(false);
+          }
         },
-      ]
-    );
+      },
+    ]);
+    setModalVisible(true);
   };
 
   if (loading) {
@@ -441,6 +482,32 @@ const CombatStorageScreen: React.FC = () => {
               <Text style={styles.soldierMeta}>
                 {soldier.personalNumber} • {soldier.company}
               </Text>
+
+              {/* Status Badge */}
+              {(() => {
+                const status = soldier.status || 'pre_recruitment';
+                const statusConfig: Record<string, { label: string; color: string; bg: string }> = {
+                  pre_recruitment: { label: 'טרום גיוס', color: '#6B7280', bg: '#F3F4F6' },
+                  recruited: { label: 'מגויס', color: '#059669', bg: '#D1FAE5' },
+                  gimelim: { label: 'גימלים', color: '#8B5CF6', bg: '#EDE9FE' },
+                  pitzul: { label: 'פיצול', color: '#F59E0B', bg: '#FEF3C7' },
+                  rianun: { label: 'רענון', color: '#EC4899', bg: '#FCE7F3' },
+                  releasing_today: { label: 'משתחרר היום', color: '#D97706', bg: '#FEF3C7' },
+                  released: { label: 'משוחרר', color: '#3B82F6', bg: '#DBEAFE' },
+                };
+                const config = statusConfig[status];
+
+                if (status === 'recruited') return null; // Don't show for regular recruited
+
+                if (config) {
+                  return (
+                    <View style={[styles.statusBadge, { backgroundColor: config.bg, marginTop: 8 }]}>
+                      <Text style={[styles.statusText, { color: config.color }]}>{config.label}</Text>
+                    </View>
+                  );
+                }
+                return null;
+              })()}
             </View>
           </View>
         )}
@@ -622,6 +689,16 @@ const CombatStorageScreen: React.FC = () => {
           </TouchableOpacity>
         )}
       </ScrollView>
+
+      {/* App Modal */}
+      <AppModal
+        visible={modalVisible}
+        type={modalType}
+        title={modalTitle}
+        message={modalMessage}
+        buttons={modalButtons}
+        onClose={() => setModalVisible(false)}
+      />
     </View>
   );
 };
@@ -695,8 +772,17 @@ const styles = StyleSheet.create({
     marginBottom: 5,
   },
   soldierMeta: {
-    fontSize: 14,
     color: Colors.textSecondary,
+  },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: 'bold',
   },
   instructionsCard: {
     backgroundColor: '#FFF3E0',
@@ -987,3 +1073,4 @@ const styles = StyleSheet.create({
 });
 
 export default CombatStorageScreen;
+

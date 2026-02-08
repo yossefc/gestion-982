@@ -11,7 +11,6 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,12 +18,20 @@ import { useNavigation } from '@react-navigation/native';
 import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
 import { weaponInventoryService } from '../../services/weaponInventoryService';
 import { WeaponInventoryItem } from '../../types';
+import { AppModal, ModalType } from '../../components';
 
 const WeaponStorageScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [assignedWeapons, setAssignedWeapons] = useState<WeaponInventoryItem[]>([]);
+
+  // Modal state
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalType, setModalType] = useState<ModalType>('info');
+  const [modalMessage, setModalMessage] = useState('');
+  const [modalTitle, setModalTitle] = useState<string | undefined>(undefined);
+  const [modalButtons, setModalButtons] = useState<any[]>([]);
 
   useEffect(() => {
     loadAssignedWeapons();
@@ -37,7 +44,10 @@ const WeaponStorageScreen: React.FC = () => {
       setAssignedWeapons(weapons);
     } catch (error) {
       console.error('Error loading assigned weapons:', error);
-      Alert.alert('שגיאה', 'לא ניתן לטעון נשקים מוקצים');
+      setModalType('error');
+      setModalMessage('לא ניתן לטעון נשקים מוקצים');
+      setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalVisible(true);
     } finally {
       setLoading(false);
     }
@@ -46,29 +56,40 @@ const WeaponStorageScreen: React.FC = () => {
   const handleMoveToStorage = (weapon: WeaponInventoryItem) => {
     if (!weapon.assignedTo) return;
 
-    Alert.alert(
-      'העברה לאפסון',
-      `להעביר ${weapon.category} ${weapon.serialNumber} של ${weapon.assignedTo.soldierName} לאפסון?`,
-      [
-        { text: 'ביטול', style: 'cancel' },
-        {
-          text: 'אשר',
-          onPress: async () => {
-            try {
-              setProcessing(true);
-              await weaponInventoryService.moveWeaponToStorage(weapon.id);
-              Alert.alert('הצלחה', 'הנשק הועבר לאפסון');
-              loadAssignedWeapons();
-            } catch (error) {
-              console.error('Error moving to storage:', error);
-              Alert.alert('שגיאה', 'לא ניתן להעביר את הנשק לאפסון');
-            } finally {
-              setProcessing(false);
-            }
-          },
+    setModalType('confirm');
+    setModalTitle('העברה לאפסון');
+    setModalMessage(`להעביר ${weapon.category} ${weapon.serialNumber} של ${weapon.assignedTo.soldierName} לאפסון?`);
+    setModalButtons([
+      { text: 'ביטול', style: 'outline', onPress: () => setModalVisible(false) },
+      {
+        text: 'אשר',
+        style: 'primary',
+        icon: 'archive' as const,
+        onPress: async () => {
+          setModalVisible(false);
+          try {
+            setProcessing(true);
+            await weaponInventoryService.moveWeaponToStorage(weapon.id);
+            setModalType('success');
+            setModalTitle(undefined);
+            setModalMessage('הנשק הועבר לאפסון');
+            setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
+            setModalVisible(true);
+            loadAssignedWeapons();
+          } catch (error) {
+            console.error('Error moving to storage:', error);
+            setModalType('error');
+            setModalTitle(undefined);
+            setModalMessage('לא ניתן להעביר את הנשק לאפסון');
+            setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
+            setModalVisible(true);
+          } finally {
+            setProcessing(false);
+          }
         },
-      ]
-    );
+      },
+    ]);
+    setModalVisible(true);
   };
 
   if (loading) {
@@ -165,6 +186,16 @@ const WeaponStorageScreen: React.FC = () => {
           <Text style={styles.overlayText}>מעביר לאפסון...</Text>
         </View>
       )}
+
+      {/* App Modal */}
+      <AppModal
+        visible={modalVisible}
+        type={modalType}
+        title={modalTitle}
+        message={modalMessage}
+        buttons={modalButtons}
+        onClose={() => setModalVisible(false)}
+      />
     </View>
   );
 };

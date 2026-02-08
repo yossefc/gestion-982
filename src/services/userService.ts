@@ -99,6 +99,18 @@ export const updateUserRole = async (userId: string, role: UserRole): Promise<vo
 };
 
 /**
+ * Met à jour la compagnie (פלוגה) d'un utilisateur RSP
+ */
+export const updateUserCompany = async (userId: string, company: string): Promise<void> => {
+  try {
+    const userRef = doc(db, USERS_COLLECTION, userId);
+    await updateDoc(userRef, { company: company || null });
+  } catch (error) {
+    throw error;
+  }
+};
+
+/**
  * Supprime un utilisateur
  */
 export const deleteUser = async (userId: string): Promise<void> => {
@@ -173,6 +185,7 @@ export const userService = {
   add: addUser,
   update: updateUser,
   updateRole: updateUserRole,
+  updateCompany: updateUserCompany,
   delete: deleteUser,
   getByRole: getUsersByRole,
   getCount: getUserCount,

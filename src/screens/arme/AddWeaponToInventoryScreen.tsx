@@ -12,9 +12,9 @@ import {
   TouchableOpacity,
   TextInput,
   ActivityIndicator,
-  Alert,
   Platform,
 } from 'react-native';
+import { AppModal, ModalType } from '../../components';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
@@ -29,6 +29,13 @@ const AddWeaponToInventoryScreen: React.FC = () => {
   const [categories, setCategories] = useState<string[]>([]);
   const [category, setCategory] = useState('');
   const [serialNumbers, setSerialNumbers] = useState<string[]>(['']);
+
+  // AppModal state
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalType, setModalType] = useState<ModalType>('info');
+  const [modalMessage, setModalMessage] = useState('');
+  const [modalTitle, setModalTitle] = useState<string | undefined>(undefined);
+  const [modalButtons, setModalButtons] = useState<any[]>([]);
 
   useEffect(() => {
     loadCategories();
@@ -65,20 +72,29 @@ const AddWeaponToInventoryScreen: React.FC = () => {
 
   const handleSave = async () => {
     if (!category.trim()) {
-      Alert.alert('שגיאה', 'יש לבחור קטגוריה');
+      setModalType('error');
+      setModalMessage('יש לבחור קטגוריה');
+      setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalVisible(true);
       return;
     }
 
     const validSerials = serialNumbers.filter((s) => s.trim() !== '');
     if (validSerials.length === 0) {
-      Alert.alert('שגיאה', 'יש להזין לפחות מסטב אחד');
+      setModalType('error');
+      setModalMessage('יש להזין לפחות מסטב אחד');
+      setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalVisible(true);
       return;
     }
 
     // Vérifier les doublons
     const uniqueSerials = new Set(validSerials.map((s) => s.trim()));
     if (uniqueSerials.size !== validSerials.length) {
-      Alert.alert('שגיאה', 'יש מסטבים כפולים ברשימה');
+      setModalType('error');
+      setModalMessage('יש מסטבים כפולים ברשימה');
+      setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalVisible(true);
       return;
     }
 
@@ -104,19 +120,24 @@ const AddWeaponToInventoryScreen: React.FC = () => {
       }
 
       if (errorCount === 0) {
-        Alert.alert('הצלחה', `${successCount} נשקים נוספו למלאי בהצלחה`, [
-          { text: 'אישור', onPress: () => navigation.goBack() },
-        ]);
+        setModalType('success');
+        setModalTitle('הצלחה');
+        setModalMessage(`${successCount} נשקים נוספו למלאי בהצלחה`);
+        setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => { setModalVisible(false); navigation.goBack(); } }]);
+        setModalVisible(true);
       } else {
-        Alert.alert(
-          'הושלם חלקית',
-          `${successCount} נשקים נוספו בהצלחה\n${errorCount} נכשלו:\n${errors.join('\n')}`,
-          [{ text: 'אישור', onPress: () => navigation.goBack() }]
-        );
+        setModalType('warning');
+        setModalTitle('הושלם חלקית');
+        setModalMessage(`${successCount} נשקים נוספו בהצלחה\n${errorCount} נכשלו:\n${errors.join('\n')}`);
+        setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => { setModalVisible(false); navigation.goBack(); } }]);
+        setModalVisible(true);
       }
     } catch (error: any) {
       console.error('Error saving weapons:', error);
-      Alert.alert('שגיאה', 'לא ניתן לשמור את הנשקים');
+      setModalType('error');
+      setModalMessage('לא ניתן לשמור את הנשקים');
+      setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalVisible(true);
     } finally {
       setSaving(false);
     }
@@ -256,6 +277,16 @@ const AddWeaponToInventoryScreen: React.FC = () => {
           )}
         </TouchableOpacity>
       </View>
+
+      {/* App Modal */}
+      <AppModal
+        visible={modalVisible}
+        type={modalType}
+        title={modalTitle}
+        message={modalMessage}
+        buttons={modalButtons}
+        onClose={() => setModalVisible(false)}
+      />
     </View>
   );
 };

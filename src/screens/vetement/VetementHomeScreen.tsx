@@ -1,9 +1,10 @@
 /**
  * VetementHomeScreen.tsx - Écran d'accueil module Vêtements
  * Design militaire professionnel
+ * OPTIMISÉ: Utilise le cache centralisé au lieu d'appels Firebase directs
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -17,33 +18,34 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
-import { dashboardService } from '../../services/firebaseService';
+import { useData, useClothingStats } from '../../contexts/DataContext';
 
 const VetementHomeScreen: React.FC = () => {
   const navigation = useNavigation();
-  const [loading, setLoading] = useState(true);
+
+  // OPTIMISÉ: Utilisation du cache centralisé - plus d'appels Firebase à chaque navigation
+  const { refreshAll, isInitialized } = useData();
+  const { stats: clothingStats, loading: statsLoading } = useClothingStats();
+
   const [refreshing, setRefreshing] = useState(false);
-  const [stats, setStats] = useState({
-    signed: 0,
-    returned: 0,
-  });
 
-  useEffect(() => {
-    loadStats();
-  }, []);
+  // Calcul des stats depuis le cache
+  const stats = {
+    signed: clothingStats?.signedSoldiers || 0,
+    returned: clothingStats?.returnedEquipment || 0,
+  };
 
-  const loadStats = async () => {
+  // Loading optimisé - affiche le contenu dès que possible
+  const loading = !isInitialized;
+
+  // Refresh manuel uniquement
+  const onRefresh = async () => {
+    setRefreshing(true);
     try {
-      const dashboardStats = await dashboardService.getClothingStats();
-
-      setStats({
-        signed: dashboardStats.signedSoldiers || 0,
-        returned: dashboardStats.returnedEquipment || 0,
-      });
+      await refreshAll();
     } catch (error) {
-      console.error('Error loading stats:', error);
+      console.error('Error refreshing:', error);
     } finally {
-      setLoading(false);
       setRefreshing(false);
     }
   };
@@ -51,7 +53,7 @@ const VetementHomeScreen: React.FC = () => {
   const menuItems = [
     {
       title: 'החתמת חייל',
-      subtitle: 'הנפקת ציוד אפנאות',
+      subtitle: 'הנפקת ציוד אפסנאות',
       icon: 'create',
       color: Colors.success,
       lightColor: Colors.successLight,
@@ -59,14 +61,15 @@ const VetementHomeScreen: React.FC = () => {
     },
     {
       title: 'זיכוי חייל',
-      subtitle: 'החזרת ציוד אפנאות',
+      subtitle: 'החזרת ציוד אפסנאות',
       icon: 'return-down-back',
       color: Colors.warning,
       lightColor: Colors.warningLight,
       onPress: () => (navigation as any).navigate('SoldierSearch', { mode: 'return', type: 'clothing' }),
     },
+
     {
-      title: 'מלאי אפנאות',
+      title: 'מלאי אפסנאות',
       subtitle: 'פילוח לפי פלוגות',
       icon: 'cube',
       color: Colors.vetement,
@@ -89,14 +92,7 @@ const VetementHomeScreen: React.FC = () => {
       lightColor: Colors.olive + '20',
       onPress: () => navigation.navigate('ClothingEquipmentManagement' as never),
     },
-    {
-      title: 'הוספת חייל',
-      subtitle: 'רישום חייל חדש',
-      icon: 'person-add',
-      color: Colors.soldats,
-      lightColor: Colors.soldatsLight,
-      onPress: () => navigation.navigate('AddSoldier' as never),
-    },
+
     {
       title: 'ניהול רס"פים',
       subtitle: 'החתמה וניהול ציוד רס"פים',
@@ -185,7 +181,7 @@ const VetementHomeScreen: React.FC = () => {
 
         <TouchableOpacity
           style={styles.refreshButton}
-          onPress={loadStats}
+          onPress={onRefresh}
         >
           <Ionicons name="refresh" size={24} color={Colors.textWhite} />
         </TouchableOpacity>
@@ -198,10 +194,7 @@ const VetementHomeScreen: React.FC = () => {
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
-            onRefresh={() => {
-              setRefreshing(true);
-              loadStats();
-            }}
+            onRefresh={onRefresh}
             colors={[Colors.vetement]}
           />
         }
@@ -234,8 +227,8 @@ const VetementHomeScreen: React.FC = () => {
         <View style={styles.infoCard}>
           <Ionicons name="shirt-outline" size={24} color={Colors.vetement} />
           <View style={styles.infoContent}>
-            <Text style={styles.infoTitle}>מודול אפנאות</Text>
-            <Text style={styles.infoText}>ניהול ציוד אישי ואפנאות לחיילים</Text>
+            <Text style={styles.infoTitle}>מודול אפסנאות</Text>
+            <Text style={styles.infoText}>ניהול ציוד אישי ואפסנאות לחיילים</Text>
           </View>
         </View>
       </ScrollView>

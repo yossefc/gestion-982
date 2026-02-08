@@ -12,7 +12,6 @@ import {
   TextInput,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
   Platform,
   KeyboardAvoidingView,
   KeyboardTypeOptions,
@@ -22,7 +21,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
 import { soldierService } from '../../services/firebaseService';
-import { useSoldiers } from '../../contexts/SoldiersContext';
+import { useSoldiers } from '../../contexts/DataContext';
+import { AppModal, ModalType } from '../../components';
 
 const COMPANIES = ['פלוגה א', 'פלוגה ב', 'פלוגה ג', 'פלוגה ד', 'מפקדה/אגמ', 'מפקדה', 'ניוד'];
 
@@ -102,6 +102,13 @@ const EditSoldierScreen: React.FC = () => {
 
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  // Modal state
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalType, setModalType] = useState<ModalType>('info');
+  const [modalMessage, setModalMessage] = useState('');
+  const [modalTitle, setModalTitle] = useState<string | undefined>(undefined);
+  const [modalButtons, setModalButtons] = useState<any[]>([]);
+
   useEffect(() => {
     loadSoldier();
   }, [soldierId]);
@@ -121,13 +128,24 @@ const EditSoldierScreen: React.FC = () => {
           isRsp: soldier.isRsp || false,
         });
       } else {
-        Alert.alert('שגיאה', 'החייל לא נמצא', [
-          { text: 'אישור', onPress: () => navigation.goBack() }
-        ]);
+        setModalType('error');
+        setModalMessage('החייל לא נמצא');
+        setModalButtons([{
+          text: 'סגור',
+          style: 'primary',
+          onPress: () => {
+            setModalVisible(false);
+            navigation.goBack();
+          },
+        }]);
+        setModalVisible(true);
       }
     } catch (error) {
       console.error('Error loading soldier:', error);
-      Alert.alert('שגיאה', 'לא ניתן לטעון את פרטי החייל');
+      setModalType('error');
+      setModalMessage('לא ניתן לטעון את פרטי החייל');
+      setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalVisible(true);
     } finally {
       setLoading(false);
     }
@@ -160,44 +178,69 @@ const EditSoldierScreen: React.FC = () => {
       // Rafraîchir le cache des soldats après modification
       await refreshSoldiers();
 
-      Alert.alert('הצלחה', 'פרטי החייל עודכנו בהצלחה', [
-        { text: 'אישור', onPress: () => navigation.goBack() }
-      ]);
+      setModalType('success');
+      setModalMessage('פרטי החייל עודכנו בהצלחה');
+      setModalButtons([{
+        text: 'סגור',
+        style: 'primary',
+        icon: 'checkmark-circle' as const,
+        onPress: () => {
+          setModalVisible(false);
+          navigation.goBack();
+        },
+      }]);
+      setModalVisible(true);
     } catch (error: any) {
-      Alert.alert('שגיאה', error.message || 'לא ניתן לעדכן את פרטי החייל');
+      setModalType('error');
+      setModalMessage(error.message || 'לא ניתן לעדכן את פרטי החייל');
+      setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalVisible(true);
     } finally {
       setSaving(false);
     }
   };
 
   const handleDelete = () => {
-    Alert.alert(
-      'מחיקת חייל',
-      'האם אתה בטוח שברצונך למחוק את החייל? פעולה זו אינה ניתנת לביטול.',
-      [
-        { text: 'ביטול', style: 'cancel' },
-        {
-          text: 'מחק',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              setSaving(true);
-              await soldierService.delete(soldierId);
+    setModalType('warning');
+    setModalTitle('מחיקת חייל');
+    setModalMessage('האם אתה בטוח שברצונך למחוק את החייל? פעולה זו אינה ניתנת לביטול.');
+    setModalButtons([
+      { text: 'ביטול', style: 'outline', onPress: () => setModalVisible(false) },
+      {
+        text: 'מחק',
+        style: 'danger',
+        icon: 'trash' as const,
+        onPress: async () => {
+          setModalVisible(false);
+          try {
+            setSaving(true);
+            await soldierService.delete(soldierId);
+            await refreshSoldiers();
 
-              // Rafraîchir le cache après suppression
-              await refreshSoldiers();
-
-              Alert.alert('הצלחה', 'החייל נמחק בהצלחה', [
-                { text: 'אישור', onPress: () => navigation.goBack() }
-              ]);
-            } catch (error: any) {
-              Alert.alert('שגיאה', error.message || 'לא ניתן למחוק את החייל');
-              setSaving(false);
-            }
-          },
+            setModalType('success');
+            setModalTitle(undefined);
+            setModalMessage('החייל נמחק בהצלחה');
+            setModalButtons([{
+              text: 'סגור',
+              style: 'primary',
+              onPress: () => {
+                setModalVisible(false);
+                navigation.goBack();
+              },
+            }]);
+            setModalVisible(true);
+          } catch (error: any) {
+            setModalType('error');
+            setModalTitle(undefined);
+            setModalMessage(error.message || 'לא ניתן למחוק את החייל');
+            setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
+            setModalVisible(true);
+            setSaving(false);
+          }
         },
-      ]
-    );
+      },
+    ]);
+    setModalVisible(true);
   };
 
   const handleFieldChange = (field: keyof typeof formData, text: string) => {
@@ -363,6 +406,16 @@ const EditSoldierScreen: React.FC = () => {
           <View style={styles.bottomSpacer} />
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* App Modal */}
+      <AppModal
+        visible={modalVisible}
+        type={modalType}
+        title={modalTitle}
+        message={modalMessage}
+        buttons={modalButtons}
+        onClose={() => setModalVisible(false)}
+      />
     </View>
   );
 };

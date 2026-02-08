@@ -7,7 +7,6 @@ import {
   StyleSheet,
   ScrollView,
   ActivityIndicator,
-  Alert,
   TextInput,
   Platform,
 } from 'react-native';
@@ -21,8 +20,14 @@ import { weaponInventoryService } from '../../services/weaponInventoryService';
 import { useAuth } from '../../contexts/AuthContext';
 import { Colors, Shadows } from '../../theme/Colors';
 import { openWhatsAppChat } from '../../services/whatsappService';
+import { AppModal, ModalType } from '../../components';
 
-type CombatReturnRouteProp = RouteProp<RootStackParamList, 'CombatReturn'>;
+type CombatReturnRouteProp = RouteProp<RootStackParamList, 'CombatReturn'> & {
+  params: {
+    soldierId: string;
+    isClearance?: boolean;
+  };
+};
 
 interface ReturnItem extends AssignmentItem {
   selected: boolean;
@@ -35,7 +40,7 @@ interface ReturnItem extends AssignmentItem {
 const CombatReturnScreen: React.FC = () => {
   const navigation = useNavigation();
   const route = useRoute<CombatReturnRouteProp>();
-  const { soldierId } = route.params || {};
+  const { soldierId, isClearance } = route.params || {};
   const { user } = useAuth();
 
   const signatureRef = useRef<any>(null);
@@ -48,11 +53,27 @@ const CombatReturnScreen: React.FC = () => {
   const [showSignature, setShowSignature] = useState(false);
   const [scrollEnabled, setScrollEnabled] = useState(true);
 
+  // AppModal state
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalType, setModalType] = useState<ModalType>('info');
+  const [modalMessage, setModalMessage] = useState('');
+  const [modalTitle, setModalTitle] = useState<string | undefined>(undefined);
+  const [modalButtons, setModalButtons] = useState<any[]>([]);
+
   useEffect(() => {
     if (!soldierId) {
       console.error('[CombatReturn] No soldierId provided in route params!');
-      Alert.alert('שגיאה', 'לא נמצא מזהה חייל');
-      navigation.goBack();
+      setModalType('error');
+      setModalMessage('לא נמצא מזהה חייל');
+      setModalButtons([{
+        text: 'סגור',
+        style: 'primary',
+        onPress: () => {
+          setModalVisible(false);
+          navigation.goBack();
+        },
+      }]);
+      setModalVisible(true);
       return;
     }
     loadData();
@@ -102,7 +123,10 @@ const CombatReturnScreen: React.FC = () => {
       setItems(returnItems);
     } catch (error) {
       console.error('Error loading data:', error);
-      Alert.alert('שגיאה', 'נכשל בטעינת הנתונים');
+      setModalType('error');
+      setModalMessage('נכשל בטעינת הנתונים');
+      setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalVisible(true);
     } finally {
       setLoading(false);
     }
@@ -211,196 +235,218 @@ const CombatReturnScreen: React.FC = () => {
     );
 
     if (selectedItems.length === 0) {
-      Alert.alert('שגיאה', 'אנא בחר לפחות פריט אחד לזיכוי');
+      setModalType('error');
+      setModalMessage('אנא בחר לפחות פריט אחד לזיכוי');
+      setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalVisible(true);
       return;
     }
 
     if (!signature) {
-      Alert.alert('שגיאה', 'אנא חתום לפני ביצוע הזיכוי');
+      setModalType('warning');
+      setModalMessage('אנא חתום לפני ביצוע הזיכוי');
+      setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalVisible(true);
       return;
     }
 
-    Alert.alert(
-      'זיכוי ציוד',
-      `האם אתה בטוח שברצונך לזכות ${selectedItems.length} פריטים?`,
-      [
-        { text: 'ביטול', style: 'cancel' },
-        {
-          text: 'אשר',
-          onPress: async () => {
-            setProcessing(true);
-            try {
-              // Préparer les items pour le credit assignment
-              const creditItems = selectedItems.map(item => {
-                const itemData: any = {
-                  equipmentId: item.equipmentId,
-                  equipmentName: item.equipmentName,
-                  quantity: item.returnQuantity,
-                };
+    setModalType('confirm');
+    setModalTitle('זיכוי ציוד');
+    setModalMessage(`האם אתה בטוח שברצונך לזכות ${selectedItems.length} פריטים?`);
+    setModalButtons([
+      { text: 'ביטול', style: 'outline', onPress: () => setModalVisible(false) },
+      {
+        text: 'אשר',
+        style: 'primary',
+        icon: 'checkmark-circle' as const,
+        onPress: async () => {
+          setModalVisible(false);
+          setProcessing(true);
+          try {
+            // Préparer les items pour le credit assignment
+            const creditItems = selectedItems.map(item => {
+              const itemData: any = {
+                equipmentId: item.equipmentId,
+                equipmentName: item.equipmentName,
+                quantity: item.returnQuantity,
+              };
 
-                // Ajouter serial seulement s'il y a des serials sélectionnés
-                if (item.selectedSerials.length > 0) {
-                  itemData.serial = item.selectedSerials.join(', ');
-                }
-
-                console.log('[CombatReturn] Credit item prepared:', {
-                  equipmentId: itemData.equipmentId,
-                  equipmentName: itemData.equipmentName,
-                  quantity: itemData.quantity,
-                  serial: itemData.serial,
-                });
-
-                return itemData;
-              });
-
-              // Create transactional return assignment with requestId
-              console.log('[CombatReturn] Creating transactional return assignment...');
-
-              const requestId = `combat_return_${soldierId}_${Date.now()}`;
-
-              const assignmentId = await transactionalAssignmentService.returnEquipment({
-                soldierId,
-                soldierName: soldier?.name || '',
-                soldierPersonalNumber: soldier?.personalNumber || '',
-                type: 'combat',
-                items: creditItems,
-                returnedBy: user?.id || '',
-                requestId,
-              });
-
-              console.log('[CombatReturn] Transactional return assignment created:', assignmentId);
-
-              // Update weapon inventory status for returned weapons
-              console.log('[CombatReturn] =====================================');
-              console.log('[CombatReturn] DÉBUT MISE À JOUR weapons_inventory');
-              console.log('[CombatReturn] =====================================');
-              console.log('[CombatReturn] Selected items:', selectedItems.length);
-
-              for (const item of selectedItems) {
-                console.log(`[CombatReturn] Item: ${item.equipmentName}`);
-                console.log(`[CombatReturn]   - selectedSerials:`, item.selectedSerials);
-                console.log(`[CombatReturn]   - availableSerials:`, item.availableSerials);
-
-                if (item.selectedSerials && item.selectedSerials.length > 0) {
-                  for (const serial of item.selectedSerials) {
-                    console.log(`[CombatReturn] Processing serial: "${serial}" (trimmed: "${serial.trim()}")`);
-
-                    if (serial.trim()) {
-                      try {
-                        // Find the weapon by serial number
-                        console.log(`[CombatReturn] Searching weapon with serial: ${serial.trim()}`);
-                        const weapon = await weaponInventoryService.getWeaponBySerialNumber(serial.trim());
-
-                        if (weapon) {
-                          console.log(`[CombatReturn] ✅ Weapon FOUND: ${weapon.serialNumber} (ID: ${weapon.id}, Status: ${weapon.status})`);
-                          console.log(`[CombatReturn] Calling returnWeapon(${weapon.id})...`);
-
-                          await weaponInventoryService.returnWeapon(weapon.id);
-
-                          console.log(`[CombatReturn] ✅ Weapon ${weapon.serialNumber} status updated to 'available'`);
-                        } else {
-                          console.warn(`[CombatReturn] ⚠️ Weapon NOT FOUND for serial: ${serial}`);
-                        }
-                      } catch (error) {
-                        console.error(`[CombatReturn] ❌ ERROR finding/updating weapon with serial ${serial}:`, error);
-                      }
-                    } else {
-                      console.log(`[CombatReturn] ⚠️ Serial vide après trim, skip`);
-                    }
-                  }
-                } else {
-                  console.log(`[CombatReturn] Pas de serials sélectionnés pour ${item.equipmentName}`);
-                }
+              // Ajouter serial seulement s'il y a des serials sélectionnés
+              if (item.selectedSerials.length > 0) {
+                itemData.serial = item.selectedSerials.join(', ');
               }
 
-              console.log('[CombatReturn] =====================================');
-              console.log('[CombatReturn] FIN MISE À JOUR weapons_inventory');
-              console.log('[CombatReturn] =====================================');
+              console.log('[CombatReturn] Credit item prepared:', {
+                equipmentId: itemData.equipmentId,
+                equipmentName: itemData.equipmentName,
+                quantity: itemData.quantity,
+                serial: itemData.serial,
+              });
 
-              // Recalculer les holdings pour voir s'il reste quelque chose
-              console.log('[CombatReturn] Final check of remaining items...');
-              const remainingItems = await transactionalAssignmentService.getCurrentHoldings(
-                soldierId,
-                'combat'
-              );
+              return itemData;
+            });
 
-              console.log('[CombatReturn] Remaining items after credit:', remainingItems.length);
-              console.log('[CombatReturn] Remaining items details:', remainingItems.map((i: any) => ({
-                name: i.equipmentName,
-                qty: i.quantity,
-                serial: (i.serials || []).join(','),
-              })));
+            // Create transactional return assignment with requestId
+            console.log('[CombatReturn] Creating transactional return assignment...');
 
-              const hasRemainingItems = remainingItems.length > 0;
-              console.log('[CombatReturn] hasRemainingItems:', hasRemainingItems);
+            const requestId = `combat_return_${soldierId}_${Date.now()}`;
 
-              // Générer message WhatsApp
-              let whatsappMessage = `שלום ${soldier?.name},\n\nהזיכוי בוצע בהצלחה.\n\n`;
+            const assignmentId = await transactionalAssignmentService.returnEquipment({
+              soldierId,
+              soldierName: soldier?.name || '',
+              soldierPersonalNumber: soldier?.personalNumber || '',
+              type: 'combat',
+              items: creditItems,
+              returnedBy: user?.id || '',
+              requestId,
+            });
 
-              // Montrer ce qui a été retourné
-              whatsappMessage += 'ציוד שהוחזר:\n';
-              selectedItems.forEach(item => {
-                whatsappMessage += `• ${item.equipmentName} - כמות: ${item.returnQuantity}`;
-                if (item.selectedSerials && item.selectedSerials.length > 0) {
-                  whatsappMessage += ` (מסטב: ${item.selectedSerials.join(', ')})`;
+            console.log('[CombatReturn] Transactional return assignment created:', assignmentId);
+
+            // Update weapon inventory status for returned weapons
+            console.log('[CombatReturn] =====================================');
+            console.log('[CombatReturn] DÉBUT MISE À JOUR weapons_inventory');
+            console.log('[CombatReturn] =====================================');
+            console.log('[CombatReturn] Selected items:', selectedItems.length);
+
+            for (const item of selectedItems) {
+              console.log(`[CombatReturn] Item: ${item.equipmentName}`);
+              console.log(`[CombatReturn]   - selectedSerials:`, item.selectedSerials);
+              console.log(`[CombatReturn]   - availableSerials:`, item.availableSerials);
+
+              if (item.selectedSerials && item.selectedSerials.length > 0) {
+                for (const serial of item.selectedSerials) {
+                  console.log(`[CombatReturn] Processing serial: "${serial}" (trimmed: "${serial.trim()}")`);
+
+                  if (serial.trim()) {
+                    try {
+                      // Find the weapon by serial number
+                      console.log(`[CombatReturn] Searching weapon with serial: ${serial.trim()}`);
+                      const weapon = await weaponInventoryService.getWeaponBySerialNumber(serial.trim());
+
+                      if (weapon) {
+                        console.log(`[CombatReturn] ✅ Weapon FOUND: ${weapon.serialNumber} (ID: ${weapon.id}, Status: ${weapon.status})`);
+                        console.log(`[CombatReturn] Calling returnWeapon(${weapon.id})...`);
+
+                        await weaponInventoryService.returnWeapon(weapon.id);
+
+                        console.log(`[CombatReturn] ✅ Weapon ${weapon.serialNumber} status updated to 'available'`);
+                      } else {
+                        console.warn(`[CombatReturn] ⚠️ Weapon NOT FOUND for serial: ${serial}`);
+                      }
+                    } catch (error) {
+                      console.error(`[CombatReturn] ❌ ERROR finding/updating weapon with serial ${serial}:`, error);
+                    }
+                  } else {
+                    console.log(`[CombatReturn] ⚠️ Serial vide après trim, skip`);
+                  }
+                }
+              } else {
+                console.log(`[CombatReturn] Pas de serials sélectionnés pour ${item.equipmentName}`);
+              }
+            }
+
+            console.log('[CombatReturn] =====================================');
+            console.log('[CombatReturn] FIN MISE À JOUR weapons_inventory');
+            console.log('[CombatReturn] =====================================');
+
+            // Recalculer les holdings pour voir s'il reste quelque chose
+            console.log('[CombatReturn] Final check of remaining items...');
+            const remainingItems = await transactionalAssignmentService.getCurrentHoldings(
+              soldierId,
+              'combat'
+            );
+
+            console.log('[CombatReturn] Remaining items after credit:', remainingItems.length);
+            console.log('[CombatReturn] Remaining items details:', remainingItems.map((i: any) => ({
+              name: i.equipmentName,
+              qty: i.quantity,
+              serial: (i.serials || []).join(','),
+            })));
+
+            const hasRemainingItems = remainingItems.length > 0;
+            console.log('[CombatReturn] hasRemainingItems:', hasRemainingItems);
+
+            // Générer message WhatsApp
+            let whatsappMessage = `שלום ${soldier?.name},\n\nהזיכוי בוצע בהצלחה.\n\n`;
+
+            // Montrer ce qui a été retourné
+            whatsappMessage += 'ציוד שהוחזר:\n';
+            selectedItems.forEach(item => {
+              whatsappMessage += `• ${item.equipmentName} - כמות: ${item.returnQuantity}`;
+              if (item.selectedSerials && item.selectedSerials.length > 0) {
+                whatsappMessage += ` (מסטב: ${item.selectedSerials.join(', ')})`;
+              }
+              whatsappMessage += '\n';
+            });
+
+            // Montrer ce qui reste (s'il reste quelque chose)
+            if (hasRemainingItems) {
+              whatsappMessage += '\nציוד שנותר בידיך:\n';
+              remainingItems.forEach((item: any) => {
+                whatsappMessage += `• ${item.equipmentName} - כמות: ${item.quantity}`;
+                const serialStr = (item.serials || []).join(',');
+                if (serialStr) {
+                  whatsappMessage += ` (מסטב: ${serialStr})`;
                 }
                 whatsappMessage += '\n';
               });
-
-              // Montrer ce qui reste (s'il reste quelque chose)
-              if (hasRemainingItems) {
-                whatsappMessage += '\nציוד שנותר בידיך:\n';
-                remainingItems.forEach((item: any) => {
-                  whatsappMessage += `• ${item.equipmentName} - כמות: ${item.quantity}`;
-                  const serialStr = (item.serials || []).join(',');
-                  if (serialStr) {
-                    whatsappMessage += ` (מסטב: ${serialStr})`;
-                  }
-                  whatsappMessage += '\n';
-                });
-              } else {
-                whatsappMessage += '\nכל הציוד הוחזר. תודה!\n';
-              }
-
-              whatsappMessage += `\nתודה,\nגדוד 982`;
-
-              // Afficher succès avec options WhatsApp
-              const returnedCount = selectedItems.reduce((sum, item) => sum + item.returnQuantity, 0);
-
-              Alert.alert(
-                'הצלחה',
-                hasRemainingItems
-                  ? `הזיכוי בוצע בהצלחה!\n\n${returnedCount} פריטים הוחזרו.\nנותרו ${remainingItems.length} פריטים בידי החייל.`
-                  : `הזיכוי בוצע בהצלחה!\n\n${returnedCount} פריטים הוחזרו.\nהחייל החזיר את כל הציוד.`,
-                [
-                  {
-                    text: 'שלח WhatsApp',
-                    onPress: async () => {
-                      if (soldier?.phone) {
-                        await openWhatsAppChat(soldier.phone, whatsappMessage);
-                      } else {
-                        Alert.alert('שגיאה', 'אין מספר טלפון לחייל');
-                      }
-                      navigation.goBack();
-                    },
-                  },
-                  {
-                    text: 'סגור',
-                    style: 'cancel',
-                    onPress: () => navigation.goBack(),
-                  },
-                ]
-              );
-            } catch (error) {
-              Alert.alert('שגיאה', 'נכשל בזיכוי הציוד');
-              console.error('Error returning equipment:', error);
-            } finally {
-              setProcessing(false);
+            } else {
+              whatsappMessage += '\nכל הציוד הוחזר. תודה!\n';
             }
-          },
+
+            whatsappMessage += `\nתודה,\nגדוד 982`;
+
+            // Afficher succès avec options WhatsApp
+            const returnedCount = selectedItems.reduce((sum, item) => sum + item.returnQuantity, 0);
+
+            setModalType('success');
+            setModalTitle('הצלחה');
+            setModalMessage(hasRemainingItems
+              ? `הזיכוי בוצע בהצלחה!\n\n${returnedCount} פריטים הוחזרו.\nנותרו ${remainingItems.length} פריטים בידי החייל.`
+              : `הזיכוי בוצע בהצלחה!\n\n${returnedCount} פריטים הוחזרו.\nהחייל החזיר את כל הציוד.`);
+            setModalButtons([
+              {
+                text: 'שלח WhatsApp',
+                style: 'primary',
+                icon: 'logo-whatsapp' as const,
+                onPress: async () => {
+                  setModalVisible(false);
+                  if (soldier?.phone) {
+                    await openWhatsAppChat(soldier.phone, whatsappMessage);
+                  } else {
+                    setModalType('error');
+                    setModalMessage('אין מספר טלפון לחייל');
+                    setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
+                    setModalVisible(true);
+                    return;
+                  }
+                  navigation.goBack();
+                },
+              },
+              {
+                text: 'סגור',
+                style: 'outline',
+                onPress: () => {
+                  setModalVisible(false);
+                  navigation.goBack();
+                },
+              },
+            ]);
+            setModalVisible(true);
+          } catch (error) {
+            setModalType('error');
+            setModalMessage('נכשל בזיכוי הציוד');
+            setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
+            setModalVisible(true);
+            console.error('Error returning equipment:', error);
+          } finally {
+            setProcessing(false);
+          }
         },
-      ]
-    );
+      },
+    ]);
+    setModalVisible(true);
   };
 
   if (loading) {
@@ -672,6 +718,35 @@ const CombatReturnScreen: React.FC = () => {
         )}
 
         {/* Action Button */}
+        {/* If Clearance Mode and NO items, show Confirm Clearance Button */}
+        {isClearance && items.length === 0 && (
+          <TouchableOpacity
+            style={[styles.returnButton, { backgroundColor: Colors.success }]}
+            onPress={async () => {
+              try {
+                setProcessing(true);
+                await soldierService.updateClearance(soldierId, 'armory', true);
+                setModalType('success');
+                setModalTitle('זיכוי הושלם');
+                setModalMessage('החייל זוכה בהצלחה בנשקייה.');
+                setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => { setModalVisible(false); navigation.goBack(); } }]);
+                setModalVisible(true);
+              } catch (err) {
+                console.error(err);
+                setModalType('error');
+                setModalMessage('שגיאה בביצוע זיכוי');
+                setModalVisible(true);
+              } finally {
+                setProcessing(false);
+              }
+            }}
+            disabled={processing}
+          >
+            <Text style={styles.returnButtonText}>✓ אשר זיכוי סופי (Armory Clearance)</Text>
+          </TouchableOpacity>
+        )}
+
+        {/* Regular Return Button (or Return & Clear if isClearance) */}
         {items.some(i => i.selected && i.returnQuantity > 0) && (
           <TouchableOpacity
             style={[
@@ -685,12 +760,22 @@ const CombatReturnScreen: React.FC = () => {
               <ActivityIndicator color="#fff" />
             ) : (
               <Text style={styles.returnButtonText}>
-                ↩️ זכה ({items.filter(i => i.selected).length})
+                {isClearance ? `↩️ החזר פריטים (לפני זיכוי)` : `↩️ זכה (${items.filter(i => i.selected).length})`}
               </Text>
             )}
           </TouchableOpacity>
         )}
       </ScrollView>
+
+      {/* App Modal */}
+      <AppModal
+        visible={modalVisible}
+        type={modalType}
+        title={modalTitle}
+        message={modalMessage}
+        buttons={modalButtons}
+        onClose={() => setModalVisible(false)}
+      />
     </View>
   );
 };

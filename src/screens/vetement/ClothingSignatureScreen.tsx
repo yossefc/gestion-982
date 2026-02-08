@@ -11,7 +11,6 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
   Platform,
   TextInput,
 } from 'react-native';
@@ -19,12 +18,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import SignatureCanvas from 'react-native-signature-canvas';
 import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
-import { clothingEquipmentService } from '../../services/firebaseService';
 import { assignmentService } from '../../services/assignmentService';
 import { transactionalAssignmentService } from '../../services/transactionalAssignmentService';
 import { clothingStockService, EquipmentStock } from '../../services/clothingStockService';
 import { useAuth } from '../../contexts/AuthContext';
+import { useData } from '../../contexts/DataContext';
 import { openWhatsAppChat } from '../../services/whatsappService';
+import { AppModal, ModalType } from '../../components';
 
 interface Equipment {
   id: string;
@@ -48,6 +48,9 @@ const ClothingSignatureScreen: React.FC = () => {
   const { user, authLoading } = useAuth();
   const signatureRef = useRef<any>(null);
 
+  // OPTIMISÉ: Utiliser le cache centralisé pour les équipements
+  const { clothingEquipment, isInitialized } = useData();
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [equipment, setEquipment] = useState<Equipment[]>([]);
@@ -56,35 +59,76 @@ const ClothingSignatureScreen: React.FC = () => {
   const [scrollEnabled, setScrollEnabled] = useState(true);
   const [showSignature, setShowSignature] = useState(false);
   const [stockData, setStockData] = useState<Map<string, EquipmentStock>>(new Map());
+  const [isOfflineMode, setIsOfflineMode] = useState(false);
+  const [dataLoaded, setDataLoaded] = useState(false);
 
+  // Modal state
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalType, setModalType] = useState<ModalType>('info');
+  const [modalMessage, setModalMessage] = useState('');
+  const [modalButtons, setModalButtons] = useState<any[]>([]);
+
+  // OPTIMISE: Utiliser les donnees du cache des qu'elles sont disponibles
+  // Mode offline: continuer meme si pas completement initialise
   useEffect(() => {
-    if (!authLoading) {
-      loadData();
-    }
-  }, [authLoading]);
+    // Ne pas recharger si deja en mode offline ou si donnees deja chargees
+    if (isOfflineMode || dataLoaded) return;
 
-  const loadData = async () => {
+    // Charger des qu'on a des donnees OU que le cache est initialise
+    if (clothingEquipment.length > 0 || isInitialized) {
+      setEquipment(clothingEquipment as Equipment[]);
+      loadSoldierSpecificData();
+      setDataLoaded(true);
+    }
+  }, [isInitialized, clothingEquipment, isOfflineMode, dataLoaded]);
+
+  // Timeout de securite: apres 3 secondes, continuer quand meme (mode offline)
+  // Ce timeout gere TOUS les cas de blocage: authLoading, Firebase lent, etc.
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      if (loading) {
+        console.log('[ClothingSignature] Timeout (3s) - proceeding in offline mode');
+        setIsOfflineMode(true);
+        setEquipment(clothingEquipment as Equipment[]);
+        setLoading(false);
+      }
+    }, 3000); // Reduit a 3 secondes pour une meilleure UX
+    return () => clearTimeout(timeout);
+  }, [loading, clothingEquipment]);
+
+  // Charger uniquement les données spécifiques au soldat (pas en cache global)
+  const loadSoldierSpecificData = async () => {
     try {
       setLoading(true);
-      const equipmentData = await clothingEquipmentService.getAll();
-      setEquipment(equipmentData);
 
-      // Charger les stocks disponibles
-      const stocks = await clothingStockService.getAllEquipmentStocks();
+      // Mode offline: charger ce qu'on peut, ignorer les erreurs
+      let stocks: EquipmentStock[] = [];
+      let currentHoldings: any[] = [];
+
+      try {
+        stocks = await clothingStockService.getAllEquipmentStocks();
+      } catch (error) {
+        console.warn('[ClothingSignature] Could not load stocks (offline?):', error);
+      }
+
+      try {
+        currentHoldings = await transactionalAssignmentService.getCurrentHoldings(soldier.id, 'clothing');
+      } catch (error) {
+        console.warn('[ClothingSignature] Could not load holdings (offline?):', error);
+      }
+
       const stockMap = new Map<string, EquipmentStock>();
       stocks.forEach(stock => stockMap.set(stock.equipmentId, stock));
       setStockData(stockMap);
 
-      // Charger ce que le soldat a actuellement pour pré-remplir depuis soldier_holdings
-      const currentHoldings = await transactionalAssignmentService.getCurrentHoldings(soldier.id, 'clothing');
-
+      // Pré-remplir avec les holdings actuels du soldat
       if (currentHoldings && currentHoldings.length > 0) {
         const preSelected = new Map<string, SelectedItem>();
         currentHoldings.forEach((item: any) => {
-          const eq = equipmentData.find((e: any) => e.id === item.equipmentId);
+          const eq = clothingEquipment.find((e: any) => e.id === item.equipmentId);
           if (eq) {
             preSelected.set(eq.id, {
-              equipment: eq,
+              equipment: eq as Equipment,
               quantity: item.quantity,
               serial: item.serial,
             });
@@ -94,7 +138,7 @@ const ClothingSignatureScreen: React.FC = () => {
       }
     } catch (error) {
       console.error('Error loading data:', error);
-      Alert.alert('שגיאה', 'לא ניתן לטעון את הנתונים');
+      // En mode offline, ne pas afficher d'erreur - continuer avec ce qu'on a
     } finally {
       setLoading(false);
     }
@@ -169,14 +213,20 @@ const ClothingSignatureScreen: React.FC = () => {
 
   const validateAndSubmit = () => {
     if (selectedItems.size === 0) {
-      Alert.alert('שגיאה', 'יש לבחור לפחות פריט אחד');
+      setModalType('error');
+      setModalMessage('יש לבחור לפחות פריט אחד');
+      setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalVisible(true);
       return;
     }
 
     // Check serial numbers
     for (const [id, item] of selectedItems) {
       if (requiresSerial(item.equipment.name) && !item.serial?.trim()) {
-        Alert.alert('שגיאה', `יש להזין מספר סידורי עבור ${item.equipment.name}`);
+        setModalType('error');
+        setModalMessage(`יש להזין מספר סידורי עבור ${item.equipment.name}`);
+        setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
+        setModalVisible(true);
         return;
       }
     }
@@ -187,7 +237,10 @@ const ClothingSignatureScreen: React.FC = () => {
 
   const handleSubmit = async () => {
     if (!signatureData) {
-      Alert.alert('שגיאה', 'יש לחתום על הטופס');
+      setModalType('error');
+      setModalMessage('יש לחתום על הטופס');
+      setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalVisible(true);
       return;
     }
 
@@ -240,44 +293,56 @@ const ClothingSignatureScreen: React.FC = () => {
       }
       whatsappMessage += `\nהציוד רשום על שמך ובאחריותך.\nתודה,\nגדוד 982`;
 
-      // Show success with WhatsApp option
+      // Show success modal
+      setModalType('success');
+      setModalMessage('ההחתמה בוצעה בהצלחה');
+      const buttons: any[] = [
+        {
+          text: 'סגור',
+          style: 'primary',
+          icon: 'checkmark-circle' as const,
+          onPress: () => {
+            setModalVisible(false);
+            navigation.goBack();
+          },
+        },
+      ];
       if (soldier.phone) {
-        Alert.alert(
-          'הצלחה',
-          'ההחתמה בוצעה בהצלחה',
-          [
-            { text: 'סגור', onPress: () => navigation.goBack(), style: 'cancel' },
-            {
-              text: 'שלח WhatsApp',
-              onPress: async () => {
-                try {
-                  await openWhatsAppChat(soldier.phone, whatsappMessage);
-                } catch (e) {
-                  console.error('WhatsApp error:', e);
-                }
-                navigation.goBack();
-              },
-            },
-          ]
-        );
-      } else {
-        Alert.alert('הצלחה', 'ההחתמה בוצעה בהצלחה', [
-          { text: 'אישור', onPress: () => navigation.goBack() }
-        ]);
+        buttons.push({
+          text: 'שלח WhatsApp',
+          style: 'outline',
+          icon: 'logo-whatsapp' as const,
+          onPress: async () => {
+            try {
+              await openWhatsAppChat(soldier.phone, whatsappMessage);
+            } catch (e) {
+              console.error('WhatsApp error:', e);
+            }
+            setModalVisible(false);
+            navigation.goBack();
+          },
+        });
       }
+      setModalButtons(buttons);
+      setModalVisible(true);
     } catch (error) {
       console.error('[ClothingSignature] Error saving:', error);
-      Alert.alert('שגיאה', 'לא ניתן לשמור את ההחתמה: ' + (error as Error).message);
+      setModalType('error');
+      setModalMessage('לא ניתן לשמור את ההחתמה: ' + (error as Error).message);
+      setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalVisible(true);
     } finally {
       setSaving(false);
     }
   };
 
-  if (loading || authLoading) {
+  // Afficher le loading seulement si on charge ET qu'on n'est pas en mode offline
+  // Le timeout de 3s garantit qu'on ne reste jamais bloque indefiniment
+  if (loading && !isOfflineMode) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={Colors.vetement} />
-        <Text style={styles.loadingText}>טוען נתונים...</Text>
+        <Text style={styles.loadingText}>טוען ציוד...</Text>
       </View>
     );
   }
@@ -294,7 +359,7 @@ const ClothingSignatureScreen: React.FC = () => {
         </TouchableOpacity>
 
         <View style={styles.headerTitleContainer}>
-          <Text style={styles.headerTitle}>החתמת אפנאות</Text>
+          <Text style={styles.headerTitle}>זיכוי אפסנאות</Text>
           <Text style={styles.headerSubtitle}>{soldier.name}</Text>
         </View>
 
@@ -535,6 +600,15 @@ const ClothingSignatureScreen: React.FC = () => {
           </>
         )}
       </ScrollView>
+
+      {/* App Modal */}
+      <AppModal
+        visible={modalVisible}
+        type={modalType}
+        message={modalMessage}
+        buttons={modalButtons}
+        onClose={() => setModalVisible(false)}
+      />
     </View>
   );
 };

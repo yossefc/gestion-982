@@ -14,15 +14,19 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  Alert,
   Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
 import { useAuth } from '../../contexts/AuthContext';
+import { useGoogleSignIn } from '../../hooks/useGoogleSignIn';
+import { useAppleSignIn } from '../../hooks/useAppleSignIn';
+import { AppModal, ModalType } from '../../components';
 
 const LoginScreen: React.FC = () => {
   const { signIn, signUp } = useAuth();
+  const { signInWithGoogle, googleLoading, googleReady, googleError, clearGoogleError } = useGoogleSignIn();
+  const { signInWithApple, appleLoading, appleAvailable, appleError, clearAppleError } = useAppleSignIn();
   const [isRegister, setIsRegister] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -31,9 +35,18 @@ const LoginScreen: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [focusedInput, setFocusedInput] = useState<string | null>(null);
 
+  // Modal state
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalType, setModalType] = useState<ModalType>('info');
+  const [modalMessage, setModalMessage] = useState('');
+  const [modalButtons, setModalButtons] = useState<any[]>([]);
+
   const handleAction = async () => {
     if (!email.trim() || !password.trim() || (isRegister && !name.trim())) {
-      Alert.alert('שגיאה', 'נא למלא את כל השדות');
+      setModalType('error');
+      setModalMessage('נא למלא את כל השדות');
+      setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalVisible(true);
       return;
     }
 
@@ -45,11 +58,34 @@ const LoginScreen: React.FC = () => {
         await signIn(email.trim(), password);
       }
     } catch (error: any) {
-      Alert.alert('שגיאה', error.message || 'פעולה נכשלה');
+      setModalType('error');
+      setModalMessage(error.message || 'פעולה נכשלה');
+      setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalVisible(true);
     } finally {
       setLoading(false);
     }
   };
+
+  // Afficher l'erreur Google via modal si elle apparaît
+  React.useEffect(() => {
+    if (googleError) {
+      setModalType('error');
+      setModalMessage(googleError);
+      setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => { setModalVisible(false); clearGoogleError(); } }]);
+      setModalVisible(true);
+    }
+  }, [googleError]);
+
+  // Afficher l'erreur Apple via modal si elle apparaît
+  React.useEffect(() => {
+    if (appleError) {
+      setModalType('error');
+      setModalMessage(appleError);
+      setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => { setModalVisible(false); clearAppleError(); } }]);
+      setModalVisible(true);
+    }
+  }, [appleError]);
 
   return (
     <KeyboardAvoidingView
@@ -202,6 +238,51 @@ const LoginScreen: React.FC = () => {
               )}
             </TouchableOpacity>
 
+            {/* Séparateur "ou" */}
+            <View style={styles.dividerContainer}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>or</Text>
+              <View style={styles.dividerLine} />
+            </View>
+
+            {/* Google Sign In Button */}
+            <TouchableOpacity
+              style={[styles.socialButton, (googleLoading || !googleReady) && styles.socialButtonDisabled]}
+              onPress={signInWithGoogle}
+              disabled={googleLoading || !googleReady}
+              activeOpacity={0.8}
+            >
+              {googleLoading ? (
+                <ActivityIndicator size="small" color="#4285F4" />
+              ) : (
+                <>
+                  <View style={styles.googleIconContainer}>
+                    <Text style={styles.googleIconText}>G</Text>
+                  </View>
+                  <Text style={styles.socialButtonText}>התחבר עם Google</Text>
+                </>
+              )}
+            </TouchableOpacity>
+
+            {/* Apple Sign In Button — iOS uniquement */}
+            {appleAvailable && (
+              <TouchableOpacity
+                style={[styles.socialButton, styles.appleButton, appleLoading && styles.socialButtonDisabled]}
+                onPress={signInWithApple}
+                disabled={appleLoading}
+                activeOpacity={0.8}
+              >
+                {appleLoading ? (
+                  <ActivityIndicator size="small" color="#FFF" />
+                ) : (
+                  <>
+                    <Ionicons name="logo-apple" size={20} color="#FFF" />
+                    <Text style={styles.appleButtonText}>התחבר עם Apple</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
+
             {/* Switch Mode Link */}
             <TouchableOpacity
               style={styles.forgotPassword}
@@ -220,6 +301,15 @@ const LoginScreen: React.FC = () => {
           <Text style={styles.versionText}>גרסה 1.0.1</Text>
         </View>
       </ScrollView>
+
+      {/* App Modal */}
+      <AppModal
+        visible={modalVisible}
+        type={modalType}
+        message={modalMessage}
+        buttons={modalButtons}
+        onClose={() => setModalVisible(false)}
+      />
     </KeyboardAvoidingView>
   );
 };
@@ -396,6 +486,79 @@ const styles = StyleSheet.create({
     fontSize: FontSize.lg,
     fontWeight: '600',
     color: Colors.textWhite,
+  },
+
+  // Divider "ou"
+  dividerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: Spacing.lg,
+    marginBottom: Spacing.sm,
+  },
+
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: Colors.border,
+  },
+
+  dividerText: {
+    fontSize: FontSize.sm,
+    color: Colors.textSecondary,
+    marginHorizontal: Spacing.md,
+    fontWeight: '500',
+  },
+
+  // Social Sign In Buttons
+  socialButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.sm,
+    backgroundColor: Colors.backgroundCard,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    borderRadius: BorderRadius.md,
+    paddingVertical: Spacing.md,
+    marginTop: Spacing.sm,
+    ...Shadows.xs,
+  },
+
+  socialButtonDisabled: {
+    opacity: 0.5,
+  },
+
+  socialButtonText: {
+    fontSize: FontSize.base,
+    fontWeight: '600',
+    color: Colors.text,
+  },
+
+  googleIconContainer: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#4285F4',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  googleIconText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFF',
+  },
+
+  // Apple Sign In
+  appleButton: {
+    backgroundColor: '#000000',
+    borderColor: '#000000',
+  },
+
+  appleButtonText: {
+    fontSize: FontSize.base,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
 
   forgotPassword: {

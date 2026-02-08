@@ -5,6 +5,7 @@ import { combatEquipmentService } from './firebaseService';
 import { soldierService } from './soldierService';
 import { transactionalAssignmentService } from './transactionalAssignmentService';
 import { weaponInventoryService } from './weaponInventoryService';
+import cacheService from './cacheService';
 
 export interface CompanyDistribution {
   company: string;
@@ -27,17 +28,21 @@ export interface EquipmentStock {
 
 /**
  * Calcule les stocks pour tous les équipements de combat
+ * OPTIMISÉ: Utilise le cache pour soldats et équipements
  */
 export const getAllEquipmentStocks = async (): Promise<EquipmentStock[]> => {
   try {
 
-    // 1. Charger toutes les données nécessaires en parallèle
-    const [allSoldiers, allWeapons, allGear, allHoldings] = await Promise.all([
-      soldierService.getAll(),
-      weaponInventoryService.getAllWeapons(),
-      combatEquipmentService.getAll(),
-      transactionalAssignmentService.getAllHoldings('combat')
+    // 1. Charger les données - OPTIMISÉ avec cache pour soldats et équipements
+    const [soldiersResult, gearResult, allWeapons, allHoldings] = await Promise.all([
+      cacheService.get<Soldier>('soldiers'),           // CACHE
+      cacheService.get<CombatEquipment>('combatEquipment'), // CACHE
+      weaponInventoryService.getAllWeapons(),           // Firebase (données volatiles)
+      transactionalAssignmentService.getAllHoldings('combat') // Firebase (données volatiles)
     ]);
+
+    const allSoldiers = soldiersResult.data;
+    const allGear = gearResult.data;
 
     const soldierMap = new Map<string, Soldier>(allSoldiers.map((s: Soldier) => [s.id, s]));
 

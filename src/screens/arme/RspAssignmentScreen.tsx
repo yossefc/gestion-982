@@ -13,7 +13,7 @@ import {
     ScrollView,
     TouchableOpacity,
     ActivityIndicator,
-    Alert,
+
     TextInput,
     Modal,
     KeyboardAvoidingView,
@@ -26,6 +26,7 @@ import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Co
 import { rspEquipmentService, rspAssignmentService } from '../../services/firebaseService';
 import { RspEquipment, Soldier, RspAssignment } from '../../types';
 import { openWhatsAppChat } from '../../services/whatsappService';
+import { AppModal, ModalType } from '../../components';
 
 interface RouteParams {
     soldier: Soldier;
@@ -57,6 +58,13 @@ const RspAssignmentScreen: React.FC = () => {
     const [newEquipmentName, setNewEquipmentName] = useState('');
     const [addingEquipment, setAddingEquipment] = useState(false);
 
+    // AppModal state
+    const [modalVisible, setModalVisible] = useState(false);
+    const [modalType, setModalType] = useState<ModalType>('info');
+    const [modalMessage, setModalMessage] = useState('');
+    const [modalTitle, setModalTitle] = useState<string | undefined>(undefined);
+    const [modalButtons, setModalButtons] = useState<any[]>([]);
+
     useEffect(() => {
         loadData();
     }, []);
@@ -82,7 +90,11 @@ const RspAssignmentScreen: React.FC = () => {
 
         } catch (error) {
             console.error(error);
-            Alert.alert('שגיאה', 'לא ניתן לטעון את הנתונים');
+            console.error(error);
+            setModalType('error');
+            setModalMessage('לא ניתן לטעון את הנתונים');
+            setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+            setModalVisible(true);
         } finally {
             setLoading(false);
         }
@@ -142,7 +154,11 @@ const RspAssignmentScreen: React.FC = () => {
 
     const proceedToSignature = () => {
         if (selectedItems.size === 0) {
-            Alert.alert('שים לב', 'יש לבחור לפחות פריט ציוד אחד');
+            setModalType('warning');
+            setModalTitle('שים לב');
+            setModalMessage('יש לבחור לפחות פריט ציוד אחד');
+            setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+            setModalVisible(true);
             return;
         }
         setStep('signature');
@@ -150,7 +166,10 @@ const RspAssignmentScreen: React.FC = () => {
 
     const handleAddEquipment = async () => {
         if (!newEquipmentName.trim()) {
-            Alert.alert('שגיאה', 'יש להזין שם לציוד');
+            setModalType('error');
+            setModalMessage('יש להזין שם לציוד');
+            setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+            setModalVisible(true);
             return;
         }
 
@@ -165,7 +184,10 @@ const RspAssignmentScreen: React.FC = () => {
             // Recharger la liste
             await loadData();
         } catch (error) {
-            Alert.alert('שגיאה', 'לא ניתן להוסיף את הציוד');
+            setModalType('error');
+            setModalMessage('לא ניתן להוסיף את הציוד');
+            setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+            setModalVisible(true);
         } finally {
             setAddingEquipment(false);
         }
@@ -173,7 +195,11 @@ const RspAssignmentScreen: React.FC = () => {
 
     const handleSubmit = async () => {
         if (!signatureData) {
-            Alert.alert('שים לב', 'יש לחתום לפני האישור');
+            setModalType('warning');
+            setModalTitle('שים לב');
+            setModalMessage('יש לחתום לפני האישור');
+            setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+            setModalVisible(true);
             return;
         }
 
@@ -209,34 +235,39 @@ const RspAssignmentScreen: React.FC = () => {
 
             // Show success with WhatsApp option
             if (soldier.phone) {
-                Alert.alert(
-                    'הצלחה',
-                    `הפעולה נרשמה בהצלחה עבור ${soldier.name}`,
-                    [
-                        { text: 'סגור', onPress: () => navigation.goBack(), style: 'cancel' },
-                        {
-                            text: 'שלח WhatsApp',
-                            onPress: async () => {
-                                try {
-                                    await openWhatsAppChat(soldier.phone!, whatsappMessage);
-                                } catch (e) {
-                                    console.error('WhatsApp error:', e);
-                                }
-                                navigation.goBack();
-                            },
+                setModalType('success');
+                setModalTitle('הצלחה');
+                setModalMessage(`הפעולה נרשמה בהצלחה עבור ${soldier.name}`);
+                setModalButtons([
+                    { text: 'סגור', style: 'outline', onPress: () => { setModalVisible(false); navigation.goBack(); } },
+                    {
+                        text: 'שלח WhatsApp',
+                        style: 'primary',
+                        onPress: async () => {
+                            setModalVisible(false);
+                            try {
+                                await openWhatsAppChat(soldier.phone!, whatsappMessage);
+                            } catch (e) {
+                                console.error('WhatsApp error:', e);
+                            }
+                            navigation.goBack();
                         },
-                    ]
-                );
+                    },
+                ]);
+                setModalVisible(true);
             } else {
-                Alert.alert(
-                    'הצלחה',
-                    `הפעולה נרשמה בהצלחה עבור ${soldier.name}`,
-                    [{ text: 'אישור', onPress: () => navigation.goBack() }]
-                );
+                setModalType('success');
+                setModalTitle('הצלחה');
+                setModalMessage(`הפעולה נרשמה בהצלחה עבור ${soldier.name}`);
+                setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => { setModalVisible(false); navigation.goBack(); } }]);
+                setModalVisible(true);
             }
         } catch (error) {
             console.error(error);
-            Alert.alert('שגיאה', 'אירעה שגיאה בעת השמירה');
+            setModalType('error');
+            setModalMessage('אירעה שגיאה בעת השמירה');
+            setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+            setModalVisible(true);
         } finally {
             setSubmitting(false);
         }
@@ -466,8 +497,19 @@ const RspAssignmentScreen: React.FC = () => {
                         </View>
                     </View>
                 </KeyboardAvoidingView>
+
             </Modal>
-        </View>
+
+            {/* App Modal */}
+            <AppModal
+                visible={modalVisible}
+                type={modalType}
+                title={modalTitle}
+                message={modalMessage}
+                buttons={modalButtons}
+                onClose={() => setModalVisible(false)}
+            />
+        </View >
     );
 };
 

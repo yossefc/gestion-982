@@ -35,6 +35,14 @@ const RspHomeScreen: React.FC = () => {
 
     const menuItems = [
         {
+            id: 'dashboard',
+            title: 'דאשבורד רס"פ',
+            subtitle: 'צפייה בציוד חיילי פלוגה',
+            icon: 'eye',
+            color: Colors.warning,
+            action: () => navigation.navigate('RspDashboard', {}),
+        },
+        {
             id: 'equipment',
             title: 'ציוד רס"פ',
             subtitle: 'ניהול פריטי ציוד רס"פ',

@@ -1,0 +1,20 @@
+{
+  "name": "gestion-982-printer-service",
+  "version": "1.0.0",
+  "description": "Service d'impression automatique pour Gestion-982",
+  "main": "impression-service.js",
+  "scripts": {
+    "start": "node impression-service.js",
+    "install-service": "npm install"
+  },
+  "keywords": [
+    "printer",
+    "firebase",
+    "automation"
+  ],
+  "author": "Gestion-982",
+  "license": "ISC",
+  "dependencies": {
+    "firebase-admin": "^13.6.0"
+  }
+}
