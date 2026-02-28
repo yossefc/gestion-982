@@ -497,8 +497,6 @@ const CombatStorageScreen: React.FC = () => {
                 };
                 const config = statusConfig[status];
 
-                if (status === 'recruited') return null; // Don't show for regular recruited
-
                 if (config) {
                   return (
                     <View style={[styles.statusBadge, { backgroundColor: config.bg, marginTop: 8 }]}>

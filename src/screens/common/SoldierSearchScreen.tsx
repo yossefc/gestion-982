@@ -230,8 +230,7 @@ const SoldierSearchScreen: React.FC = () => {
   const renderSoldierItem = ({ item }: { item: Soldier }) => {
     const status = item.status || 'pre_recruitment';
     const statusConfig = STATUS_CONFIG[status];
-    const showStatus = statusConfig && status !== 'recruited'; // Don't show badge for regular recruited soldiers to reduce noise, or show for all?
-    // Let's show for all special statuses including releasing_today, gimelim, etc.
+    const showStatus = !!statusConfig;
 
     return (
       <View style={styles.soldierCardContainer}>
@@ -255,7 +254,7 @@ const SoldierSearchScreen: React.FC = () => {
             )}
 
             {/* Status Badge */}
-            {statusConfig && status !== 'recruited' && (
+            {statusConfig && (
               <View style={[styles.statusBadge, { backgroundColor: statusConfig.bg }]}>
                 <Text style={[styles.statusText, { color: statusConfig.color }]}>{statusConfig.label}</Text>
               </View>
