@@ -227,6 +227,7 @@ const CombatReturnScreen: React.FC = () => {
   const handleClear = () => {
     signatureRef.current?.clearSignature();
     setSignature(null);
+    setScrollEnabled(true);
   };
 
   const handleReturnEquipment = async () => {

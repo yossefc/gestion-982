@@ -139,16 +139,19 @@ const RspAssignmentScreen: React.FC = () => {
         if (signature && signature !== 'data:image/png;base64,') {
             setSignatureData(signature);
         }
+        setScrollEnabled(true);
     };
 
     const handleClearSignature = () => {
         signatureRef.current?.clearSignature();
         setSignatureData(null);
+        setScrollEnabled(true);
     };
 
     // Bouton manuel de secours
     const handleConfirmSignature = () => {
         signatureRef.current?.readSignature();
+        setScrollEnabled(true);
     };
 
 

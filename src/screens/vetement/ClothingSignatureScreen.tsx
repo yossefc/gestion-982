@@ -39,7 +39,7 @@ interface SelectedItem {
   serial?: string;
 }
 
-const SERIAL_REQUIRED_ITEMS = ['קסדה', 'וסט לוחם', 'וסט קרמי'];
+const SERIAL_REQUIRED_ITEMS: string[] = [];
 
 const ClothingSignatureScreen: React.FC = () => {
   const navigation = useNavigation();
@@ -196,19 +196,23 @@ const ClothingSignatureScreen: React.FC = () => {
 
   const handleSignatureEnd = () => {
     signatureRef.current?.readSignature();
+    setScrollEnabled(true);
   };
 
   const handleSignatureChange = (signature: string) => {
     setSignatureData(signature);
+    setScrollEnabled(true);
   };
 
   const handleClearSignature = () => {
     signatureRef.current?.clearSignature();
     setSignatureData(null);
+    setScrollEnabled(true);
   };
 
   const handleConfirmSignature = () => {
     signatureRef.current?.readSignature();
+    setScrollEnabled(true);
   };
 
   const validateAndSubmit = () => {

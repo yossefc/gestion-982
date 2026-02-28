@@ -292,19 +292,23 @@ const CombatAssignmentScreen: React.FC = () => {
 
   const handleSignatureEnd = () => {
     signatureRef.current?.readSignature();
+    setScrollEnabled(true);
   };
 
   const handleSignatureChange = (signature: string) => {
     setSignatureData(signature);
+    setScrollEnabled(true);
   };
 
   const handleClearSignature = () => {
     signatureRef.current?.clearSignature();
     setSignatureData(null);
+    setScrollEnabled(true);
   };
 
   const handleConfirmSignature = () => {
     signatureRef.current?.readSignature();
+    setScrollEnabled(true);
   };
 
   const selectPrinter = async () => {

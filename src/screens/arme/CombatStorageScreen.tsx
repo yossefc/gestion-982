@@ -210,6 +210,7 @@ const CombatStorageScreen: React.FC = () => {
   const handleClear = () => {
     signatureRef.current?.clearSignature();
     setSignature(null);
+    setScrollEnabled(true);
   };
 
   const handleStorageEquipment = async () => {
