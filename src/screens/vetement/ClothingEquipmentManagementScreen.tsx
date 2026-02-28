@@ -20,6 +20,7 @@ import { useNavigation } from '@react-navigation/native';
 import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
 import { clothingEquipmentService } from '../../services/clothingEquipmentService';
 import { AppModal, ModalType } from '../../components';
+import { useData } from '../../contexts/DataContext';
 
 interface Equipment {
   id: string;
@@ -34,6 +35,7 @@ const CATEGORIES = ['כללי', 'אפסנאות עליון', 'אפסנאות ת�
 
 const ClothingEquipmentManagementScreen: React.FC = () => {
   const navigation = useNavigation();
+  const { refreshClothingEquipment } = useData();
   const [loading, setLoading] = useState(true);
   const [equipment, setEquipment] = useState<Equipment[]>([]);
   const [filteredEquipment, setFilteredEquipment] = useState<Equipment[]>([]);
@@ -160,6 +162,9 @@ const ClothingEquipmentManagementScreen: React.FC = () => {
         setEquipment(prev => [...prev, newItem]);
       }
 
+      // Mettre à jour le cache global pour que les écrans de signature aient les nouvelles données
+      refreshClothingEquipment().catch(console.error);
+
       setModalVisible(false);
       setAppModalType('success');
       setAppModalMessage(editingItem ? 'הציוד עודכן בהצלחה' : 'הציוד נוסף בהצלחה');
@@ -190,6 +195,10 @@ const ClothingEquipmentManagementScreen: React.FC = () => {
           try {
             await clothingEquipmentService.delete(item.id);
             setEquipment(prev => prev.filter(eq => eq.id !== item.id));
+
+            // Mettre à jour le cache global
+            refreshClothingEquipment().catch(console.error);
+
             setAppModalType('success');
             setAppModalTitle(undefined);
             setAppModalMessage('הציוד נמחק בהצלחה');

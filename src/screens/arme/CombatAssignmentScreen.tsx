@@ -853,29 +853,29 @@ const CombatAssignmentScreen: React.FC = () => {
 
       const assignmentId = hasExistingHoldings
         ? await transactionalAssignmentService.addEquipment({
-            soldierId: soldier.id,
-            soldierName: soldier.name,
-            soldierPersonalNumber: soldier.personalNumber,
-            soldierPhone: soldier.phone,
-            soldierCompany: soldier.company,
-            type: 'combat',
-            items,
-            signature: signatureData,
-            addedBy: user?.id || '',
-            requestId,
-          })
+          soldierId: soldier.id,
+          soldierName: soldier.name,
+          soldierPersonalNumber: soldier.personalNumber,
+          soldierPhone: soldier.phone,
+          soldierCompany: soldier.company,
+          type: 'combat',
+          items,
+          signature: signatureData,
+          addedBy: user?.id || '',
+          requestId,
+        })
         : await transactionalAssignmentService.issueEquipment({
-            soldierId: soldier.id,
-            soldierName: soldier.name,
-            soldierPersonalNumber: soldier.personalNumber,
-            soldierPhone: soldier.phone,
-            soldierCompany: soldier.company,
-            type: 'combat',
-            items,
-            signature: signatureData,
-            assignedBy: user?.id || '',
-            requestId,
-          });
+          soldierId: soldier.id,
+          soldierName: soldier.name,
+          soldierPersonalNumber: soldier.personalNumber,
+          soldierPhone: soldier.phone,
+          soldierCompany: soldier.company,
+          type: 'combat',
+          items,
+          signature: signatureData,
+          assignedBy: user?.id || '',
+          requestId,
+        });
 
       const isQueuedOffline = assignmentId.startsWith('LOCAL_');
       console.log('[CombatAssignment] Transactional assignment created:', assignmentId, isQueuedOffline ? '(QUEUED OFFLINE)' : '');
@@ -1834,7 +1834,7 @@ const styles = StyleSheet.create({
 
   scrollContent: {
     padding: Spacing.lg,
-    paddingBottom: 100,
+    paddingBottom: 200,
   },
 
   sectionTitle: {

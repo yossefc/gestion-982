@@ -19,6 +19,7 @@ import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Co
 import { AppModal, ModalType } from '../../components';
 import { RootStackParamList, SubEquipment } from '../../types';
 import { combatEquipmentService } from '../../services/firebaseService';
+import { useData } from '../../contexts/DataContext';
 
 type AddCombatEquipmentRouteProp = RouteProp<RootStackParamList, 'AddCombatEquipment'>;
 
@@ -36,6 +37,7 @@ const AddCombatEquipmentScreen: React.FC = () => {
   const route = useRoute<AddCombatEquipmentRouteProp>();
   const equipmentId = route.params?.equipmentId;
   const isEditMode = !!equipmentId;
+  const { refreshCombatEquipment } = useData();
 
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(isEditMode);
@@ -137,6 +139,7 @@ const AddCombatEquipmentScreen: React.FC = () => {
 
       if (isEditMode && equipmentId) {
         await combatEquipmentService.update(equipmentId, equipmentData);
+        refreshCombatEquipment().catch(console.error);
         setModalType('success');
         setModalTitle('הצלחה');
         setModalMessage('הציוד עודכן בהצלחה');
@@ -144,6 +147,7 @@ const AddCombatEquipmentScreen: React.FC = () => {
         setModalVisible(true);
       } else {
         await combatEquipmentService.create(equipmentData);
+        refreshCombatEquipment().catch(console.error);
         setModalType('success');
         setModalTitle('הצלחה');
         setModalMessage('הציוד נוסף בהצלחה');

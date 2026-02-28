@@ -17,6 +17,7 @@ import { CombatEquipment } from '../../types';
 import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
 import { AppModal, ModalType } from '../../components';
 import { combatEquipmentService, DEFAULT_COMBAT_EQUIPMENT } from '../../services/firebaseService';
+import { useData } from '../../contexts/DataContext';
 
 const CATEGORY_CONFIG: { [key: string]: { icon: string; color: string } } = {
   'נשק': { icon: '🔫', color: '#E53935' },
@@ -29,6 +30,7 @@ const CATEGORY_CONFIG: { [key: string]: { icon: string; color: string } } = {
 
 const CombatEquipmentListScreen: React.FC = () => {
   const navigation = useNavigation<any>();
+  const { refreshCombatEquipment } = useData();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [equipment, setEquipment] = useState<CombatEquipment[]>([]);
@@ -67,6 +69,7 @@ const CombatEquipmentListScreen: React.FC = () => {
                 for (const eq of DEFAULT_COMBAT_EQUIPMENT) {
                   await combatEquipmentService.create(eq);
                 }
+                refreshCombatEquipment().catch(console.error);
                 loadEquipment();
               } catch (error) {
                 console.error('Error adding default equipment:', error);
@@ -135,6 +138,7 @@ const CombatEquipmentListScreen: React.FC = () => {
           setModalVisible(false);
           try {
             await combatEquipmentService.delete(item.id);
+            refreshCombatEquipment().catch(console.error);
             setModalType('success');
             setModalTitle('הצלחה');
             setModalMessage('הציוד נמחק בהצלחה');
