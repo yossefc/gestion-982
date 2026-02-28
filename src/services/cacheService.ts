@@ -287,6 +287,13 @@ export function invalidateCache(key: CacheKey | CacheKey[]): void {
 }
 
 /**
+ * Met a jour le timestamp d'un cache (utile pour updates offline)
+ */
+export function touchCache(key: CacheKey): void {
+  cache[key].timestamp = Date.now();
+}
+
+/**
  * Invalide tous les caches
  */
 export function invalidateAllCaches(): void {
@@ -572,6 +579,14 @@ export async function persistAllToStorage(): Promise<void> {
 }
 
 /**
+ * Persiste un cache sp׼cifique vers AsyncStorage
+ * Utile pour les updates offline (optimistes)
+ */
+export async function persistCacheKey(key: CacheKey): Promise<void> {
+  await persistToStorage(key);
+}
+
+/**
  * Vide tout le storage de cache
  */
 export async function clearStorage(): Promise<void> {
@@ -627,6 +642,7 @@ export const cacheService = {
   get: getCached,
   invalidate: invalidateCache,
   invalidateAll: invalidateAllCaches,
+  touch: touchCache,
   update: updateCacheOptimistically,
   subscribe: subscribeToCache,
   startRealtime: startRealtimeListener,
@@ -642,6 +658,7 @@ export const cacheService = {
   // Fonctions de persistence
   hydrate: hydrateFromStorage,
   persistAll: persistAllToStorage,
+  persistKey: persistCacheKey,
   clearStorage,
   // Pour les tests
   resetAll: resetAllCacheData,

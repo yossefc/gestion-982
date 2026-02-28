@@ -131,34 +131,31 @@ const CombatAssignmentScreen: React.FC = () => {
     try {
       setLoading(true);
 
-      // Charger chaque donnée individuellement pour gérer le mode hors ligne
-      let currentItems: any[] = [];
-      let weaponsData: WeaponInventoryItem[] = [];
+      const currentHoldingsPromise = transactionalAssignmentService
+        .getCurrentHoldings(soldier.id, 'combat')
+        .catch((error) => {
+          console.warn('Could not load current holdings (offline?):', error);
+          return [];
+        });
 
-      // Essayer de charger les affectations actuelles
-      try {
-        currentItems = await transactionalAssignmentService.getCurrentHoldings(soldier.id, 'combat');
-        console.log('Current items:', currentItems.length, 'items');
-      } catch (error) {
-        console.warn('Could not load current holdings (offline?):', error);
-        // Continuer même si ça échoue (mode hors ligne)
-      }
+      const availableWeaponsPromise = weaponInventoryService
+        .getAvailableWeapons()
+        .catch((error) => {
+          console.warn('Could not load available weapons (offline?):', error);
+          return [];
+        });
 
-      // Essayer de charger les armes disponibles
-      try {
-        weaponsData = await weaponInventoryService.getAvailableWeapons();
-        console.log('Loaded available weapons:', weaponsData.length, 'items');
-      } catch (error) {
-        console.warn('Could not load available weapons (offline?):', error);
-        // Continuer même si ça échoue (mode hors ligne)
-      }
-
-      setAvailableWeapons(weaponsData);
+      const currentItems = await currentHoldingsPromise;
       setExistingAssignments(currentItems);
+      console.log('Current items:', currentItems.length, 'items');
+
+      const weaponsData = await availableWeaponsPromise;
+      setAvailableWeapons(weaponsData as WeaponInventoryItem[]);
+      console.log('Loaded available weapons:', weaponsData.length, 'items');
     } catch (error) {
       console.error('Error loading data:', error);
       // Ne pas afficher d'erreur si on est en mode hors ligne
-      // L'utilisateur peut quand même continuer avec les données en cache
+      // L'utilisateur peut quand m?me continuer avec les donn?es en cache
     } finally {
       setLoading(false);
     }
@@ -850,27 +847,41 @@ const CombatAssignmentScreen: React.FC = () => {
       // Create assignment using transactional service with requestId
       console.log('[CombatAssignment] Creating transactional assignment...');
 
-      const requestId = `combat_issue_${soldier.id}_${Date.now()}`;
+      const hasExistingHoldings = existingAssignments.some((holding) => (holding?.quantity || 0) > 0);
+      const operation = hasExistingHoldings ? 'add' : 'issue';
+      const requestId = `combat_${operation}_${soldier.id}_${Date.now()}`;
 
-      const assignmentId = await transactionalAssignmentService.issueEquipment({
-        soldierId: soldier.id,
-        soldierName: soldier.name,
-        soldierPersonalNumber: soldier.personalNumber,
-        soldierPhone: soldier.phone,
-        soldierCompany: soldier.company,
-        type: 'combat',
-        items,
-        signature: signatureData,
-        assignedBy: user?.id || '',
-        requestId,
-      });
+      const assignmentId = hasExistingHoldings
+        ? await transactionalAssignmentService.addEquipment({
+            soldierId: soldier.id,
+            soldierName: soldier.name,
+            soldierPersonalNumber: soldier.personalNumber,
+            soldierPhone: soldier.phone,
+            soldierCompany: soldier.company,
+            type: 'combat',
+            items,
+            signature: signatureData,
+            addedBy: user?.id || '',
+            requestId,
+          })
+        : await transactionalAssignmentService.issueEquipment({
+            soldierId: soldier.id,
+            soldierName: soldier.name,
+            soldierPersonalNumber: soldier.personalNumber,
+            soldierPhone: soldier.phone,
+            soldierCompany: soldier.company,
+            type: 'combat',
+            items,
+            signature: signatureData,
+            assignedBy: user?.id || '',
+            requestId,
+          });
 
-      // Vérifier si l'opération a été mise en queue (mode offline)
       const isQueuedOffline = assignmentId.startsWith('LOCAL_');
       console.log('[CombatAssignment] Transactional assignment created:', assignmentId, isQueuedOffline ? '(QUEUED OFFLINE)' : '');
 
       // Update weapon inventory status for each weapon with serial number
-      const weaponUpdatePromises: Promise<void>[] = [];
+      const weaponUpdatePromises: Promise<any>[] = [];
 
       console.log('[CombatAssignment] Processing weapon status updates...');
       for (const item of Array.from(selectedItems.values())) {
@@ -885,9 +896,8 @@ const CombatAssignmentScreen: React.FC = () => {
               if (weapon) {
                 console.log(`[CombatAssignment] Queuing weapon update: ${weapon.serialNumber} (${weapon.id})`);
                 weaponUpdatePromises.push(
-                  // OPTIMIZATION: Use setWeaponAssignedStatusOnly to avoid redundant soldier holdings updates
-                  // The main issueEquipment call above already handles the soldier's holdings.
-                  weaponInventoryService.setWeaponAssignedStatusOnly(weapon.id, {
+                  // Offline-aware: queues if offline
+                  weaponInventoryService.setWeaponAssignedStatusOnlyOffline(weapon.id, {
                     soldierId: soldier.id,
                     soldierName: soldier.name,
                     soldierPersonalNumber: soldier.personalNumber,
@@ -901,11 +911,18 @@ const CombatAssignmentScreen: React.FC = () => {
         }
       }
 
-      // Wait for all weapon updates
+      // Wait for all weapon updates / queues
       if (weaponUpdatePromises.length > 0) {
         console.log(`[CombatAssignment] Updating ${weaponUpdatePromises.length} weapons...`);
-        await Promise.all(weaponUpdatePromises);
-        console.log(`[CombatAssignment] Updated ${weaponUpdatePromises.length} weapons to assigned status`);
+        if (isOnline) {
+          await Promise.all(weaponUpdatePromises);
+          console.log(`[CombatAssignment] Updated/queued ${weaponUpdatePromises.length} weapons`);
+        } else {
+          // Offline: fire-and-forget to avoid blocking UI
+          Promise.allSettled(weaponUpdatePromises).then(() => {
+            console.log(`[CombatAssignment] Queued ${weaponUpdatePromises.length} weapons (offline)`);
+          });
+        }
       }
 
       console.log('[CombatAssignment] Save completed successfully');
@@ -924,21 +941,26 @@ const CombatAssignmentScreen: React.FC = () => {
       */
 
       // Envoyer à la file d'attente EN ARRIÈRE-PLAN (ne bloque pas l'affichage)
-      // On lance la promesse sans await pour ne pas bloquer
-      sendToPrintQueue({
-        soldierName: soldier.name,
-        soldierPersonalNumber: soldier.personalNumber,
-        soldierPhone: soldier.phone,
-        soldierCompany: soldier.company,
-        items,
-        signature: signatureData,
-        timestamp: new Date(),
-      }).then(() => {
-        console.log('[CombatAssignment] Print queue sent successfully (background)');
-      }).catch((printError) => {
-        console.error('[CombatAssignment] Print queue error (background):', printError);
-        // On ne bloque pas l'utilisateur, juste un log
-      });
+      // Si offline, ne pas lancer la génération PDF (trop lent / timeout)
+      if (!isQueuedOffline && isOnline) {
+        // On lance la promesse sans await pour ne pas bloquer
+        sendToPrintQueue({
+          soldierName: soldier.name,
+          soldierPersonalNumber: soldier.personalNumber,
+          soldierPhone: soldier.phone,
+          soldierCompany: soldier.company,
+          items,
+          signature: signatureData,
+          timestamp: new Date(),
+        }).then(() => {
+          console.log('[CombatAssignment] Print queue sent successfully (background)');
+        }).catch((printError) => {
+          console.error('[CombatAssignment] Print queue error (background):', printError);
+          // On ne bloque pas l'utilisateur, juste un log
+        });
+      } else {
+        console.log('[CombatAssignment] Offline - skipping print queue generation');
+      }
 
       // Generate WhatsApp message
       let whatsappMessage = `שלום ${soldier.name},\n\nההחתמה בוצעה בהצלחה.\n\n`;

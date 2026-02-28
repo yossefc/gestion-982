@@ -1,40 +1,43 @@
-/**
+﻿/**
  * Service de synchronisation offline pour Gestion 982
  *
- * Fonctionnalités:
- * - Queue persistante des opérations en attente (AsyncStorage)
- * - Sync automatique au retour du réseau
+ * Fonctionnalitֳ©s:
+ * - Queue persistante des opֳ©rations en attente (AsyncStorage)
+ * - Sync automatique au retour du rֳ©seau
  * - Support complet pour les signatures offline
  * - Gestion des conflits avec requestId (idempotence)
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo, { NetInfoState } from '@react-native-community/netinfo';
+import cacheService, { persistCacheKey } from './cacheService';
+import { Assignment } from '../types';
 
-// Clés AsyncStorage
+// Clֳ©s AsyncStorage
 const STORAGE_KEYS = {
   PENDING_QUEUE: '@gestion982/offline/pendingQueue',
   FAILED_QUEUE: '@gestion982/offline/failedQueue',
   LAST_SYNC: '@gestion982/offline/lastSync',
 };
 
-// Types d'opérations supportées
+// Types d'opֳ©rations supportֳ©es
 export type OperationType =
-  | 'issue'      // החתמה
-  | 'return'     // החזרה
-  | 'add'        // הוספה
-  | 'credit'     // זיכוי
-  | 'storage'    // אפסון
-  | 'retrieve';  // שחרור מאפסון
+  | 'issue'      // ׳”׳—׳×׳׳”
+  | 'return'     // ׳”׳—׳–׳¨׳”
+  | 'add'        // ׳”׳•׳¡׳₪׳”
+  | 'credit'     // ׳–׳™׳›׳•׳™
+  | 'storage'    // ׳׳₪׳¡׳•׳
+  | 'retrieve'
+  | 'weaponAssign';
 
 export interface PendingOperation {
   id: string;                    // UUID unique
   type: OperationType;
-  params: any;                   // Paramètres de l'opération
-  timestamp: number;             // Timestamp de création
+  params: any;                   // Paramֳ¨tres de l'opֳ©ration
+  timestamp: number;             // Timestamp de crֳ©ation
   retryCount: number;            // Nombre de tentatives
   status: 'pending' | 'syncing' | 'failed';
-  errorMessage?: string;         // Message d'erreur si échec
+  errorMessage?: string;         // Message d'erreur si ֳ©chec
   localResult?: string;          // ID local temporaire
 }
 
@@ -44,12 +47,14 @@ export interface OfflineState {
   failedCount: number;
   syncStatus: 'idle' | 'syncing' | 'error';
   lastSyncTime: Date | null;
+  lastSyncSuccessCount: number;
+  lastSyncFailedCount: number;
 }
 
 // Flag pour savoir si le service a ete initialise
 let initialized = false;
 
-// État global - isOnline est false par defaut pour etre conservatif
+// ֳ‰tat global - isOnline est false par defaut pour etre conservatif
 // (mieux vaut queue une operation que d'echouer)
 let currentState: OfflineState = {
   isOnline: false, // Conservatif: suppose offline jusqu'a preuve du contraire
@@ -57,34 +62,42 @@ let currentState: OfflineState = {
   failedCount: 0,
   syncStatus: 'idle',
   lastSyncTime: null,
+  lastSyncSuccessCount: 0,
+  lastSyncFailedCount: 0,
 };
 
-// Callbacks pour notifier les changements d'état
+// Callbacks pour notifier les changements d'ֳ©tat
 const stateListeners: Set<(state: OfflineState) => void> = new Set();
 
-// Reference aux fonctions transactionnelles (injectées pour éviter circular dependency)
-let transactionFunctions: Record<OperationType, (params: any) => Promise<string>> = {} as any;
+// Cache mémoire des opérations pour éviter les lectures AsyncStorage répétées
+let pendingOpsCache: PendingOperation[] = [];
+let failedOpsCache: PendingOperation[] = [];
+let opsCacheLoaded = false;
+
+// Reference aux fonctions transactionnelles (injectֳ©es pour ֳ©viter circular dependency)
+type TransactionFn = (params: any) => Promise<string>;
+let transactionFunctions: Partial<Record<OperationType, TransactionFn>> = {};
 
 /**
  * Initialise le service offline
  */
 export async function initOfflineService(): Promise<void> {
-  // Charger l'état initial
+  // Charger l'ֳ©tat initial
   await loadQueueCounts();
 
-  // Écouter les changements de connectivité
+  // ֳ‰couter les changements de connectivitֳ©
   NetInfo.addEventListener(handleConnectivityChange);
 
-  // Vérifier l'état initial
+  // Vֳ©rifier l'ֳ©tat initial
   const netState = await NetInfo.fetch();
   currentState.isOnline = netState.isConnected ?? true;
   initialized = true;
 
   console.log(`[OfflineService] Initialized - online: ${currentState.isOnline}`);
 
-  // NOTE: Auto-sync désactivé au démarrage pour éviter de bloquer l'app
-  // La sync se fera automatiquement lors des changements de connectivité
-  // ou peut être déclenchée manuellement via offlineService.process()
+  // NOTE: Auto-sync dֳ©sactivֳ© au dֳ©marrage pour ֳ©viter de bloquer l'app
+  // La sync se fera automatiquement lors des changements de connectivitֳ©
+  // ou peut ֳ×tre dֳ©clenchֳ©e manuellement via offlineService.process()
 
   // if (currentState.isOnline) {
   //   processQueue();
@@ -94,14 +107,14 @@ export async function initOfflineService(): Promise<void> {
 }
 
 /**
- * Injecte les fonctions transactionnelles (appelé depuis transactionalAssignmentService)
+ * Injecte les fonctions transactionnelles (appelֳ© depuis transactionalAssignmentService)
  */
 export function setTransactionFunctions(functions: typeof transactionFunctions): void {
-  transactionFunctions = functions;
+  transactionFunctions = { ...transactionFunctions, ...functions };
 }
 
 /**
- * Gère les changements de connectivité
+ * Gֳ¨re les changements de connectivitֳ©
  */
 async function handleConnectivityChange(state: NetInfoState): Promise<void> {
   const wasOffline = !currentState.isOnline;
@@ -117,7 +130,7 @@ async function handleConnectivityChange(state: NetInfoState): Promise<void> {
 }
 
 /**
- * Charge les compteurs de queue depuis AsyncStorage
+ * Charge les compteurs de queue depuis AsyncStorage + cache mémoire
  */
 async function loadQueueCounts(): Promise<void> {
   try {
@@ -127,11 +140,12 @@ async function loadQueueCounts(): Promise<void> {
       AsyncStorage.getItem(STORAGE_KEYS.LAST_SYNC),
     ]);
 
-    const pending: PendingOperation[] = pendingJson ? JSON.parse(pendingJson) : [];
-    const failed: PendingOperation[] = failedJson ? JSON.parse(failedJson) : [];
+    pendingOpsCache = pendingJson ? JSON.parse(pendingJson) : [];
+    failedOpsCache = failedJson ? JSON.parse(failedJson) : [];
+    opsCacheLoaded = true;
 
-    currentState.pendingCount = pending.length;
-    currentState.failedCount = failed.length;
+    currentState.pendingCount = pendingOpsCache.length;
+    currentState.failedCount = failedOpsCache.length;
     currentState.lastSyncTime = lastSyncJson ? new Date(JSON.parse(lastSyncJson)) : null;
   } catch (error) {
     console.error('[OfflineService] Error loading queue counts:', error);
@@ -139,25 +153,33 @@ async function loadQueueCounts(): Promise<void> {
 }
 
 /**
- * Sauvegarde la queue pending
+ * Sauvegarde la queue pending (cache mémoire + AsyncStorage)
  */
 async function savePendingQueue(queue: PendingOperation[]): Promise<void> {
-  await AsyncStorage.setItem(STORAGE_KEYS.PENDING_QUEUE, JSON.stringify(queue));
+  pendingOpsCache = queue;
   currentState.pendingCount = queue.length;
   notifyListeners();
+  // Persist en arrière-plan sans bloquer
+  AsyncStorage.setItem(STORAGE_KEYS.PENDING_QUEUE, JSON.stringify(queue)).catch(err => {
+    console.warn('[OfflineService] Failed to persist pending queue:', err);
+  });
 }
 
 /**
- * Sauvegarde la queue failed
+ * Sauvegarde la queue failed (cache mémoire + AsyncStorage)
  */
 async function saveFailedQueue(queue: PendingOperation[]): Promise<void> {
-  await AsyncStorage.setItem(STORAGE_KEYS.FAILED_QUEUE, JSON.stringify(queue));
+  failedOpsCache = queue;
   currentState.failedCount = queue.length;
   notifyListeners();
+  // Persist en arrière-plan sans bloquer
+  AsyncStorage.setItem(STORAGE_KEYS.FAILED_QUEUE, JSON.stringify(queue)).catch(err => {
+    console.warn('[OfflineService] Failed to persist failed queue:', err);
+  });
 }
 
 /**
- * Ajoute une opération à la queue
+ * Ajoute une opֳ©ration ֳ  la queue
  * Retourne un ID local temporaire
  */
 export async function queueOperation(
@@ -174,24 +196,24 @@ export async function queueOperation(
     localResult: `LOCAL_${params.requestId || Date.now()}`,
   };
 
+  // OPTIMISÉ: Utiliser le cache mémoire au lieu de lire AsyncStorage (RAPIDE)
+  pendingOpsCache.push(operation);
+  savePendingQueue([...pendingOpsCache]); // Fire-and-forget pour ne pas bloquer
+
+  console.log(`[OfflineService] Queued operation: ${type} (${operation.id})`);
+
+  // Update cache optimistically so offline UI reflects the operation immediately
   try {
-    const queueJson = await AsyncStorage.getItem(STORAGE_KEYS.PENDING_QUEUE);
-    const queue: PendingOperation[] = queueJson ? JSON.parse(queueJson) : [];
-
-    queue.push(operation);
-    await savePendingQueue(queue);
-
-    console.log(`[OfflineService] Queued operation: ${type} (${operation.id})`);
-
-    return operation.localResult!;
-  } catch (error) {
-    console.error('[OfflineService] Error queuing operation:', error);
-    throw error;
+    await updateAssignmentsCache(type, params, operation);
+  } catch (cacheError) {
+    console.warn('[OfflineService] Failed to update cache optimistically:', cacheError);
   }
+
+  return operation.localResult!;
 }
 
 /**
- * Traite toutes les opérations en attente
+ * Traite toutes les opֳ©rations en attente
  */
 export async function processQueue(): Promise<{ success: number; failed: number }> {
   if (currentState.syncStatus === 'syncing') {
@@ -226,7 +248,7 @@ export async function processQueue(): Promise<{ success: number; failed: number 
     const existingFailedJson = await AsyncStorage.getItem(STORAGE_KEYS.FAILED_QUEUE);
     const existingFailed: PendingOperation[] = existingFailedJson ? JSON.parse(existingFailedJson) : [];
 
-    // Traiter chaque opération dans l'ordre
+    // Traiter chaque opֳ©ration dans l'ordre
     for (const op of queue) {
       try {
         op.status = 'syncing';
@@ -237,7 +259,7 @@ export async function processQueue(): Promise<{ success: number; failed: number 
           throw new Error(`Unknown operation type: ${op.type}`);
         }
 
-        // Exécuter l'opération Firebase
+        // Exֳ©cuter l'opֳ©ration Firebase
         const result = await transactionFn(op.params);
 
         console.log(`[OfflineService] Success: ${op.type} -> ${result}`);
@@ -262,18 +284,20 @@ export async function processQueue(): Promise<{ success: number; failed: number 
       }
     }
 
-    // Sauvegarder les états
+    // Sauvegarder les ֳ©tats
     await savePendingQueue([]); // Vider la queue pending
     await saveFailedQueue([...existingFailed, ...failedOps.filter(o => o.retryCount >= 3)]);
 
-    // Les opérations avec retry < 3 retournent dans pending
+    // Les opֳ©rations avec retry < 3 retournent dans pending
     const retryOps = failedOps.filter(o => o.retryCount < 3);
     if (retryOps.length > 0) {
       await savePendingQueue(retryOps);
     }
 
-    // Mettre à jour lastSync
+    // Mettre ֳ  jour lastSync
     currentState.lastSyncTime = new Date();
+    currentState.lastSyncSuccessCount = successCount;
+    currentState.lastSyncFailedCount = failedCount;
     await AsyncStorage.setItem(STORAGE_KEYS.LAST_SYNC, JSON.stringify(currentState.lastSyncTime.toISOString()));
 
     currentState.syncStatus = failedCount > 0 ? 'error' : 'idle';
@@ -288,16 +312,16 @@ export async function processQueue(): Promise<{ success: number; failed: number 
 }
 
 /**
- * Récupère l'état actuel
+ * Rֳ©cupֳ¨re l'ֳ©tat actuel
  */
 export function getOfflineState(): OfflineState {
   return { ...currentState };
 }
 
 /**
- * Vérifie si on est online
- * Si le service n'est pas initialisé, retourne false (conservatif)
- * pour éviter des échecs de requêtes
+ * Vֳ©rifie si on est online
+ * Si le service n'est pas initialisֳ©, retourne false (conservatif)
+ * pour ֳ©viter des ֳ©checs de requֳ×tes
  */
 export function isOnline(): boolean {
   if (!initialized) {
@@ -308,41 +332,39 @@ export function isOnline(): boolean {
 }
 
 /**
- * Récupère le nombre d'opérations en attente
+ * Rֳ©cupֳ¨re le nombre d'opֳ©rations en attente
  */
 export function getPendingCount(): number {
   return currentState.pendingCount;
 }
 
 /**
- * Récupère toutes les opérations en attente
+ * Rֳ©cupֳ¨re toutes les opֳ©rations en attente
+ * OPTIMISÉ: Utilise le cache mémoire (synchrone et rapide)
  */
-export async function getPendingOperations(): Promise<PendingOperation[]> {
-  const queueJson = await AsyncStorage.getItem(STORAGE_KEYS.PENDING_QUEUE);
-  return queueJson ? JSON.parse(queueJson) : [];
+export function getPendingOperations(): PendingOperation[] {
+  return [...pendingOpsCache];
 }
 
 /**
- * Récupère toutes les opérations échouées
+ * Rֳ©cupֳ¨re toutes les opֳ©rations ֳ©chouֳ©es
+ * OPTIMISÉ: Utilise le cache mémoire (synchrone et rapide)
  */
-export async function getFailedOperations(): Promise<PendingOperation[]> {
-  const queueJson = await AsyncStorage.getItem(STORAGE_KEYS.FAILED_QUEUE);
-  return queueJson ? JSON.parse(queueJson) : [];
+export function getFailedOperations(): PendingOperation[] {
+  return [...failedOpsCache];
 }
 
 /**
- * Supprime une opération échouée
+ * Supprime une opֳ©ration ֳ©chouֳ©e
+ * OPTIMISÉ: Utilise le cache mémoire
  */
 export async function removeFailedOperation(operationId: string): Promise<void> {
-  const failedJson = await AsyncStorage.getItem(STORAGE_KEYS.FAILED_QUEUE);
-  const failed: PendingOperation[] = failedJson ? JSON.parse(failedJson) : [];
-
-  const filtered = failed.filter(op => op.id !== operationId);
+  const filtered = failedOpsCache.filter(op => op.id !== operationId);
   await saveFailedQueue(filtered);
 }
 
 /**
- * Réessaie une opération échouée
+ * Rֳ©essaie une opֳ©ration ֳ©chouֳ©e
  */
 export async function retryFailedOperation(operationId: string): Promise<void> {
   const failedJson = await AsyncStorage.getItem(STORAGE_KEYS.FAILED_QUEUE);
@@ -356,7 +378,7 @@ export async function retryFailedOperation(operationId: string): Promise<void> {
   op.status = 'pending';
   op.errorMessage = undefined;
 
-  // Retirer de failed et ajouter à pending
+  // Retirer de failed et ajouter ֳ  pending
   failed.splice(opIndex, 1);
   await saveFailedQueue(failed);
 
@@ -372,7 +394,7 @@ export async function retryFailedOperation(operationId: string): Promise<void> {
 }
 
 /**
- * Vide toutes les opérations échouées
+ * Vide toutes les opֳ©rations ֳ©chouֳ©es
  */
 export async function clearFailedOperations(): Promise<void> {
   await saveFailedQueue([]);
@@ -389,11 +411,11 @@ export async function clearAllQueues(): Promise<void> {
 }
 
 /**
- * S'abonne aux changements d'état
+ * S'abonne aux changements d'ֳ©tat
  */
 export function subscribeToOfflineState(callback: (state: OfflineState) => void): () => void {
   stateListeners.add(callback);
-  // Envoyer l'état actuel immédiatement
+  // Envoyer l'ֳ©tat actuel immֳ©diatement
   callback(currentState);
 
   return () => {
@@ -427,3 +449,75 @@ export const offlineService = {
 };
 
 export default offlineService;
+
+// ============================================
+// OPTIMISTIC CACHE UPDATE (OFFLINE)
+// ============================================
+
+function getStatusForAction(action: OperationType): string {
+  switch (action) {
+    case 'issue':
+      return '׳³ֲ ׳³ג€¢׳³ג‚×׳³ֲ§ ׳³ֲ׳³ג€”׳³ג„¢׳³ג„¢׳³ֲ';
+    case 'return':
+      return '׳³ג€׳³ג€¢׳³ג€”׳³ג€“׳³ֲ¨';
+    case 'add':
+      return '׳³ֲ ׳³ג€¢׳³ֲ¡׳³ֲ£';
+    case 'credit':
+      return '׳³ג€“׳³ג€¢׳³ג€÷׳³ג€';
+    case 'storage':
+      return '׳³ג€׳³ג€¢׳³ג‚×׳³ֲ§׳³ג€';
+    case 'retrieve':
+      return '׳³ֲ©׳³ג€¢׳³ג€”׳³ֲ¨׳³ֲ¨ ׳³ֲ׳³ֲ׳³ג‚×׳³ֲ¡׳³ג€¢׳³ֲ';
+    default:
+      return '';
+  }
+}
+
+async function updateAssignmentsCache(
+  type: OperationType,
+  params: any,
+  operation: PendingOperation
+): Promise<void> {
+  const assignmentType = params?.type as 'combat' | 'clothing' | undefined;
+  if (!assignmentType) return;
+
+  const cacheKey = assignmentType === 'combat' ? 'combatAssignments' : 'clothingAssignments';
+
+  const assignmentId = params?.requestId || operation.localResult || operation.id;
+  const existing = cacheService.getImmediate<Assignment>(cacheKey);
+  if (existing.some(a => a.id === assignmentId)) {
+    return;
+  }
+
+  const assignedBy =
+    params?.assignedBy ||
+    params?.returnedBy ||
+    params?.addedBy ||
+    params?.creditedBy ||
+    params?.storedBy ||
+    params?.retrievedBy ||
+    '';
+
+  const assignmentAction = type === 'weaponAssign' ? 'add' : type;
+
+  const assignment: Assignment = {
+    id: assignmentId,
+    soldierId: params?.soldierId,
+    soldierName: params?.soldierName,
+    soldierPersonalNumber: params?.soldierPersonalNumber,
+    soldierPhone: params?.soldierPhone,
+    soldierCompany: params?.soldierCompany,
+    type: assignmentType,
+    action: assignmentAction,
+    items: params?.items || [],
+    signature: params?.signature,
+    status: getStatusForAction(assignmentAction) as any,
+    timestamp: new Date(operation.timestamp),
+    assignedBy: assignedBy,
+  };
+
+  cacheService.update(cacheKey, 'add', assignment as any);
+  cacheService.touch(cacheKey);
+  await persistCacheKey(cacheKey).catch(() => {});
+}
+

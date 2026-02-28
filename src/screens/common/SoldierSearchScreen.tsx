@@ -61,10 +61,12 @@ const SoldierSearchScreen: React.FC = () => {
   };
 
   const loadSoldiers = async () => {
+    let fallbackData = [...cachedSoldiers];
     try {
       setLoading(true);
       // Utiliser les soldats du cache au lieu de charger depuis le service
       let data = [...cachedSoldiers];
+      fallbackData = data;
 
       if (mode === 'retrieve' && type === 'combat') {
         // Pour le mode retrieve, afficher uniquement les soldats avec des armes en storage
@@ -104,11 +106,6 @@ const SoldierSearchScreen: React.FC = () => {
         data.sort((a: any, b: any) => (b.outstandingCount || 0) - (a.outstandingCount || 0));
       }
 
-      // Filtrer par RSP si nécessaire
-      if (mode === 'rsp_issue' || mode === 'rsp_credit') {
-        data = data.filter((s: any) => s.isRsp === true);
-      }
-
       if (mode === 'rsp_issue' || mode === 'rsp_credit') {
         data = data.filter((s: any) => s.isRsp === true);
       }
@@ -125,10 +122,10 @@ const SoldierSearchScreen: React.FC = () => {
       if (isOnline) {
         // ONLINE: Apply normal status filtering
         if (isArmoryOrLogistics) {
-          // In armory/logistics: only show soldiers with status 'recruited', 'releasing_today', 'gimelim', 'pitzul', 'rianun'
+          // In armory/logistics: show soldiers with status 'pre_recruitment', 'recruited', 'releasing_today', 'gimelim', 'pitzul', 'rianun'
           data = data.filter((s: any) => {
             const status = s.status || 'pre_recruitment';
-            return ['recruited', 'releasing_today', 'gimelim', 'pitzul', 'rianun'].includes(status);
+            return ['pre_recruitment', 'recruited', 'releasing_today', 'gimelim', 'pitzul', 'rianun'].includes(status);
           });
         } else {
           // For non-type modes (like Shlishut), check user role
@@ -138,17 +135,18 @@ const SoldierSearchScreen: React.FC = () => {
           }
         }
 
-        // For return mode (זיכוי חייל), only show soldiers in 'releasing_today' status
-        if (mode === 'return' && isArmoryOrLogistics) {
-          data = data.filter((s: any) => s.status === 'releasing_today');
-        }
+        // No extra restriction for return mode: any visible soldier can be credited
       }
       // OFFLINE: No status filtering - show all soldiers
       // Status updates from Shlishut are not available offline
 
+      setSoldiers(data);
       setFilteredSoldiers(data);
     } catch (error) {
       console.error('Error loading soldiers:', error);
+      // Fallback: afficher au moins la liste de base
+      setSoldiers(fallbackData);
+      setFilteredSoldiers(fallbackData);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -635,3 +633,4 @@ const styles = StyleSheet.create({
 });
 
 export default SoldierSearchScreen;
+

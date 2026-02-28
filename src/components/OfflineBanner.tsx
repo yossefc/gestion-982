@@ -13,6 +13,8 @@ import {
   TouchableOpacity,
   Animated,
   ActivityIndicator,
+  Platform,
+  StatusBar,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useOffline } from '../contexts/OfflineContext';
@@ -32,23 +34,34 @@ export const OfflineBanner: React.FC<OfflineBannerProps> = ({
     pendingCount,
     syncStatus,
     syncNow,
+    lastSyncTime,
+    lastSyncSuccessCount,
+    lastSyncFailedCount,
   } = useOffline();
 
   const [fadeAnim] = useState(new Animated.Value(0));
+  const [showRecentSync, setShowRecentSync] = useState(false);
+  const RECENT_SYNC_MS = 15000;
 
   // Animation d'apparition/disparition
   useEffect(() => {
-    const shouldShow = !isOnline || pendingCount > 0;
+    const isRecent =
+      !!lastSyncTime &&
+      lastSyncSuccessCount > 0 &&
+      Date.now() - lastSyncTime.getTime() < RECENT_SYNC_MS;
+    setShowRecentSync(isRecent);
+
+    const shouldShow = !isOnline || pendingCount > 0 || isRecent;
 
     Animated.timing(fadeAnim, {
       toValue: shouldShow ? 1 : 0,
       duration: 300,
       useNativeDriver: true,
     }).start();
-  }, [isOnline, pendingCount, fadeAnim]);
+  }, [isOnline, pendingCount, fadeAnim, lastSyncTime, lastSyncSuccessCount]);
 
   // Ne rien afficher si online et pas d'opérations en attente
-  if (isOnline && pendingCount === 0) {
+  if (isOnline && pendingCount === 0 && !showRecentSync) {
     return null;
   }
 
@@ -67,28 +80,37 @@ export const OfflineBanner: React.FC<OfflineBannerProps> = ({
       return {
         backgroundColor: Colors.warning,
         icon: 'cloud-offline' as const,
-        text: 'אין חיבור לאינטרנט',
+        text: pendingCount > 0
+          ? `אין חיבור לאינטרנט • בתור: ${pendingCount}`
+          : 'אין חיבור לאינטרנט',
       };
     }
     if (syncStatus === 'syncing') {
       return {
         backgroundColor: Colors.info,
         icon: 'sync' as const,
-        text: 'מסנכרן נתונים...',
+        text: `מסנכרן נתונים... (${pendingCount})`,
       };
     }
     if (syncStatus === 'error') {
       return {
         backgroundColor: Colors.danger,
         icon: 'alert-circle' as const,
-        text: `${pendingCount} פעולות ממתינות - לחץ לסנכרון`,
+        text: `שגיאה בסנכרון • בתור: ${pendingCount} • נכנס: ${lastSyncSuccessCount}`,
       };
     }
     if (pendingCount > 0) {
       return {
         backgroundColor: Colors.info,
         icon: 'time' as const,
-        text: `${pendingCount} פעולות ממתינות לסנכרון`,
+        text: `בתור: ${pendingCount} • נכנס: ${lastSyncSuccessCount}`,
+      };
+    }
+    if (showRecentSync) {
+      return {
+        backgroundColor: Colors.success || Colors.info,
+        icon: 'checkmark-circle' as const,
+        text: `סונכרן בהצלחה: ${lastSyncSuccessCount}`,
       };
     }
     return null;
@@ -161,6 +183,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 1000,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) : 0,
   },
   banner: {
     flexDirection: 'row',

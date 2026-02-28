@@ -27,6 +27,8 @@ interface OfflineContextType {
   failedCount: number;
   syncStatus: 'idle' | 'syncing' | 'error';
   lastSyncTime: Date | null;
+  lastSyncSuccessCount: number;
+  lastSyncFailedCount: number;
 
   // Opérations en attente
   pendingOperations: PendingOperation[];
@@ -75,6 +77,8 @@ export const OfflineProvider: React.FC<OfflineProviderProps> = ({ children }) =>
     failedCount: 0,
     syncStatus: 'idle',
     lastSyncTime: null,
+    lastSyncSuccessCount: 0,
+    lastSyncFailedCount: 0,
   });
 
   const [pendingOperations, setPendingOperations] = useState<PendingOperation[]>([]);
@@ -137,6 +141,8 @@ export const OfflineProvider: React.FC<OfflineProviderProps> = ({ children }) =>
     failedCount: state.failedCount,
     syncStatus: state.syncStatus,
     lastSyncTime: state.lastSyncTime,
+    lastSyncSuccessCount: state.lastSyncSuccessCount,
+    lastSyncFailedCount: state.lastSyncFailedCount,
     pendingOperations,
     failedOperations,
     syncNow,

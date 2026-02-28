@@ -17,8 +17,21 @@ import { db } from '../config/firebase';
 import { WeaponInventoryItem, WeaponStatus } from '../types';
 import { transactionalAssignmentService } from './transactionalAssignmentService';
 import cacheService from './cacheService';
+import { offlineService, isOnline, setTransactionFunctions } from './offlineService';
 
 const COLLECTION = 'weapons_inventory';
+
+async function runWithTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  let timeoutId: any;
+  const timeoutPromise = new Promise<T>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error('timeout')), timeoutMs);
+  });
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
 
 // =============== CRUD OPERATIONS ===============
 
@@ -185,12 +198,24 @@ export const deleteWeapon = async (id: string): Promise<void> => {
  * AMÉLIORÉ: Utilise le cache en mode offline
  */
 export const getAvailableWeapons = async (): Promise<WeaponInventoryItem[]> => {
+  // En mode offline, utiliser directement le cache mémoire
+  if (!isOnline()) {
+    console.log('[WeaponInventory] Offline mode - using cached weapons');
+    const cached = cacheService.getImmediate<WeaponInventoryItem>('weaponsInventory') || [];
+    const available = cached.filter(w => w.status === 'available');
+    return available.sort((a, b) => {
+      const catCompare = a.category.localeCompare(b.category);
+      if (catCompare !== 0) return catCompare;
+      return a.serialNumber.localeCompare(b.serialNumber);
+    });
+  }
+
   try {
     const q = query(
       collection(db, COLLECTION),
       where('status', '==', 'available')
     );
-    const snapshot = await getDocs(q);
+    const snapshot = await runWithTimeout(getDocs(q), 1500);
     const weapons = snapshot.docs.map((doc) => {
       const data = doc.data();
       return {
@@ -208,20 +233,15 @@ export const getAvailableWeapons = async (): Promise<WeaponInventoryItem[]> => {
       return a.serialNumber.localeCompare(b.serialNumber);
     });
   } catch (error) {
-    // Mode offline: utiliser le cache et filtrer localement
+    // Fallback au cache si erreur réseau
     console.warn('[WeaponInventory] Firebase error, using cache:', error);
-    try {
-      const cached = await cacheService.get<WeaponInventoryItem>('weaponsInventory');
-      const available = cached.data.filter(w => w.status === 'available');
-      return available.sort((a, b) => {
-        const catCompare = a.category.localeCompare(b.category);
-        if (catCompare !== 0) return catCompare;
-        return a.serialNumber.localeCompare(b.serialNumber);
-      });
-    } catch (cacheError) {
-      console.warn('[WeaponInventory] Cache also failed:', cacheError);
-      return []; // Retourner liste vide si tout échoue
-    }
+    const cached = cacheService.getImmediate<WeaponInventoryItem>('weaponsInventory') || [];
+    const available = cached.filter(w => w.status === 'available');
+    return available.sort((a, b) => {
+      const catCompare = a.category.localeCompare(b.category);
+      if (catCompare !== 0) return catCompare;
+      return a.serialNumber.localeCompare(b.serialNumber);
+    });
   }
 };
 
@@ -230,6 +250,14 @@ export const getAvailableWeapons = async (): Promise<WeaponInventoryItem[]> => {
  * AMÉLIORÉ: Utilise le cache en mode offline
  */
 export const getAssignedWeapons = async (): Promise<WeaponInventoryItem[]> => {
+  // En mode offline, utiliser directement le cache mémoire
+  if (!isOnline()) {
+    console.log('[WeaponInventory] Offline mode - using cached assigned weapons');
+    const cached = cacheService.getImmediate<WeaponInventoryItem>('weaponsInventory') || [];
+    const assigned = cached.filter(w => w.status === 'assigned');
+    return assigned.sort((a, b) => a.category.localeCompare(b.category));
+  }
+
   try {
     const q = query(
       collection(db, COLLECTION),
@@ -255,16 +283,11 @@ export const getAssignedWeapons = async (): Promise<WeaponInventoryItem[]> => {
     // Trier en mémoire
     return weapons.sort((a, b) => a.category.localeCompare(b.category));
   } catch (error) {
-    // Mode offline: utiliser le cache et filtrer localement
+    // Fallback au cache si erreur réseau
     console.warn('[WeaponInventory] Firebase error, using cache for assigned:', error);
-    try {
-      const cached = await cacheService.get<WeaponInventoryItem>('weaponsInventory');
-      const assigned = cached.data.filter(w => w.status === 'assigned');
-      return assigned.sort((a, b) => a.category.localeCompare(b.category));
-    } catch (cacheError) {
-      console.warn('[WeaponInventory] Cache also failed:', cacheError);
-      return [];
-    }
+    const cached = cacheService.getImmediate<WeaponInventoryItem>('weaponsInventory') || [];
+    const assigned = cached.filter(w => w.status === 'assigned');
+    return assigned.sort((a, b) => a.category.localeCompare(b.category));
   }
 };
 
@@ -273,6 +296,14 @@ export const getAssignedWeapons = async (): Promise<WeaponInventoryItem[]> => {
  * AMÉLIORÉ: Utilise le cache en mode offline
  */
 export const getStorageWeapons = async (): Promise<WeaponInventoryItem[]> => {
+  // En mode offline, utiliser directement le cache mémoire
+  if (!isOnline()) {
+    console.log('[WeaponInventory] Offline mode - using cached stored weapons');
+    const cached = cacheService.getImmediate<WeaponInventoryItem>('weaponsInventory') || [];
+    const stored = cached.filter(w => w.status === 'stored');
+    return stored.sort((a, b) => a.category.localeCompare(b.category));
+  }
+
   try {
     const q = query(
       collection(db, COLLECTION),
@@ -293,16 +324,11 @@ export const getStorageWeapons = async (): Promise<WeaponInventoryItem[]> => {
     // Trier en mémoire
     return weapons.sort((a, b) => a.category.localeCompare(b.category));
   } catch (error) {
-    // Mode offline: utiliser le cache et filtrer localement
+    // Fallback au cache si erreur réseau
     console.warn('[WeaponInventory] Firebase error, using cache for stored:', error);
-    try {
-      const cached = await cacheService.get<WeaponInventoryItem>('weaponsInventory');
-      const stored = cached.data.filter(w => w.status === 'stored');
-      return stored.sort((a, b) => a.category.localeCompare(b.category));
-    } catch (cacheError) {
-      console.warn('[WeaponInventory] Cache also failed:', cacheError);
-      return [];
-    }
+    const cached = cacheService.getImmediate<WeaponInventoryItem>('weaponsInventory') || [];
+    const stored = cached.filter(w => w.status === 'stored');
+    return stored.sort((a, b) => a.category.localeCompare(b.category));
   }
 };
 
@@ -493,6 +519,43 @@ export const setWeaponAssignedStatusOnly = async (
       storageDate: deleteField() as any,
     });
   } catch (error) {
+    throw error;
+  }
+};
+
+/**
+ * Version offline-aware: queue l'update si hors ligne
+ */
+export const setWeaponAssignedStatusOnlyOffline = async (
+  weaponId: string,
+  soldier: {
+    soldierId: string;
+    soldierName: string;
+    soldierPersonalNumber: string;
+  }
+): Promise<string> => {
+  const params = { weaponId, soldier };
+
+  if (!isOnline()) {
+    return await offlineService.queue('weaponAssign', params);
+  }
+
+  try {
+    await setWeaponAssignedStatusOnly(weaponId, soldier);
+    return weaponId;
+  } catch (error: any) {
+    const isNetworkError =
+      error?.code === 'unavailable' ||
+      error?.code === 'failed-precondition' ||
+      error?.message?.includes('network') ||
+      error?.message?.includes('offline') ||
+      error?.message?.includes('Failed to get document') ||
+      error?.message?.includes('Could not reach Cloud Firestore');
+
+    if (isNetworkError) {
+      return await offlineService.queue('weaponAssign', params);
+    }
+
     throw error;
   }
 };
@@ -798,6 +861,14 @@ export const deleteWeaponsByCategory = async (
   }
 };
 
+// Register offline replay handler for weapon assignment
+setTransactionFunctions({
+  weaponAssign: async (params: any) => {
+    await setWeaponAssignedStatusOnly(params.weaponId, params.soldier);
+    return params.weaponId;
+  },
+});
+
 export const weaponInventoryService = {
   // CRUD
   getAllWeapons,
@@ -813,10 +884,11 @@ export const weaponInventoryService = {
   getWeaponBySerialNumber,
   getWeaponsBySoldier,
   getSoldiersWithStoredWeapons,
-  // Actions
-  assignWeaponToSoldier,
-  setWeaponAssignedStatusOnly,
-  returnWeapon,
+    // Actions
+    assignWeaponToSoldier,
+    setWeaponAssignedStatusOnly,
+    setWeaponAssignedStatusOnlyOffline,
+    returnWeapon,
   moveWeaponToStorage,
   moveWeaponToStorageWithSoldier,
   removeWeaponFromStorage,
