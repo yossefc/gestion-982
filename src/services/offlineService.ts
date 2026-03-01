@@ -153,16 +153,31 @@ async function loadQueueCounts(): Promise<void> {
 }
 
 /**
+ * Tente d'écrire dans AsyncStorage avec un retry unique en cas d'échec.
+ * Throw si les deux tentatives échouent.
+ */
+async function persistToStorage(key: string, value: string): Promise<void> {
+  try {
+    await AsyncStorage.setItem(key, value);
+  } catch (firstErr) {
+    console.warn(`[OfflineService] AsyncStorage write failed (attempt 1) for ${key}:`, firstErr);
+    try {
+      await AsyncStorage.setItem(key, value);
+    } catch (secondErr) {
+      console.error(`[OfflineService] CRITICAL: AsyncStorage write failed after retry for ${key}. Data may be lost on restart:`, secondErr);
+      throw secondErr;
+    }
+  }
+}
+
+/**
  * Sauvegarde la queue pending (cache mémoire + AsyncStorage)
  */
 async function savePendingQueue(queue: PendingOperation[]): Promise<void> {
   pendingOpsCache = queue;
   currentState.pendingCount = queue.length;
   notifyListeners();
-  // Persist en arrière-plan sans bloquer
-  AsyncStorage.setItem(STORAGE_KEYS.PENDING_QUEUE, JSON.stringify(queue)).catch(err => {
-    console.warn('[OfflineService] Failed to persist pending queue:', err);
-  });
+  await persistToStorage(STORAGE_KEYS.PENDING_QUEUE, JSON.stringify(queue));
 }
 
 /**
@@ -172,10 +187,7 @@ async function saveFailedQueue(queue: PendingOperation[]): Promise<void> {
   failedOpsCache = queue;
   currentState.failedCount = queue.length;
   notifyListeners();
-  // Persist en arrière-plan sans bloquer
-  AsyncStorage.setItem(STORAGE_KEYS.FAILED_QUEUE, JSON.stringify(queue)).catch(err => {
-    console.warn('[OfflineService] Failed to persist failed queue:', err);
-  });
+  await persistToStorage(STORAGE_KEYS.FAILED_QUEUE, JSON.stringify(queue));
 }
 
 /**
@@ -198,7 +210,10 @@ export async function queueOperation(
 
   // OPTIMISÉ: Utiliser le cache mémoire au lieu de lire AsyncStorage (RAPIDE)
   pendingOpsCache.push(operation);
-  savePendingQueue([...pendingOpsCache]); // Fire-and-forget pour ne pas bloquer
+  // Fire-and-forget pour ne pas bloquer l'UI — l'erreur est loggée si AsyncStorage échoue après retry
+  savePendingQueue([...pendingOpsCache]).catch(err => {
+    console.error(`[OfflineService] Operation ${operation.id} queued in memory but could not be persisted:`, err);
+  });
 
   console.log(`[OfflineService] Queued operation: ${type} (${operation.id})`);
 

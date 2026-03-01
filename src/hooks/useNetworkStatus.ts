@@ -9,6 +9,10 @@ import { useState, useEffect, useCallback } from 'react';
 import NetInfo, { NetInfoState, NetInfoStateType } from '@react-native-community/netinfo';
 import { offlineService, processQueue } from '../services/offlineService';
 
+// NOTE: le sync automatique au retour du réseau est géré exclusivement
+// par offlineService (handleConnectivityChange). Ce hook ne doit PAS
+// déclencher processQueue() pour éviter un double sync.
+
 export interface NetworkStatus {
   isConnected: boolean;
   isInternetReachable: boolean | null;
@@ -43,11 +47,6 @@ export function useNetworkStatus(): UseNetworkStatusResult {
     // S'abonner aux changements
     const unsubscribe = NetInfo.addEventListener(state => {
       setNetworkState(state);
-
-      // Si on vient de revenir online, tenter de sync
-      if (state.isConnected && state.isInternetReachable) {
-        processQueue().catch(console.error);
-      }
     });
 
     return () => unsubscribe();
