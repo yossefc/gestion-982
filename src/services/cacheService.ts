@@ -29,55 +29,56 @@ const STORAGE_PREFIX = '@gestion982/cache/';
 
 const db = getFirestore(app);
 
-// Configuration du cache avec TTL différenciés selon la volatilité des données
-// TTL plus longs pour les données stables, plus courts pour les données volatiles
+// TTL mémoire court (5 min) : quand online, on rafraîchit souvent depuis Firebase.
+// maxStorageAge long : quand offline, on utilise les données persistées en AsyncStorage
+// même si elles sont plus vieilles que le TTL mémoire.
+const ONLINE_TTL = 5 * 60 * 1000; // 5 minutes
+
 const CACHE_CONFIG = {
-  // Données stables - TTL long (24h pour soldats, 12h pour équipements)
   soldiers: {
-    ttl: 24 * 60 * 60 * 1000,  // 24 heures - les soldats changent rarement
+    ttl: ONLINE_TTL,
     collection: 'soldiers',
-    priority: 1,  // Chargé en premier
+    priority: 1,
     maxStorageAge: 7 * 24 * 60 * 60 * 1000,  // 7 jours en storage offline
   },
   combatEquipment: {
-    ttl: 12 * 60 * 60 * 1000,  // 12 heures - équipements relativement stables
+    ttl: ONLINE_TTL,
     collection: 'combatEquipment',
     priority: 2,
     maxStorageAge: 7 * 24 * 60 * 60 * 1000,
   },
   clothingEquipment: {
-    ttl: 12 * 60 * 60 * 1000,  // 12 heures
+    ttl: ONLINE_TTL,
     collection: 'clothingEquipment',
     priority: 2,
     maxStorageAge: 7 * 24 * 60 * 60 * 1000,
   },
   manot: {
-    ttl: 12 * 60 * 60 * 1000,  // 12 heures - les manot changent peu
+    ttl: ONLINE_TTL,
     collection: 'manot',
     priority: 3,
     maxStorageAge: 7 * 24 * 60 * 60 * 1000,
   },
   rspEquipment: {
-    ttl: 12 * 60 * 60 * 1000,  // 12 heures
+    ttl: ONLINE_TTL,
     collection: 'rsp_equipment',
     priority: 3,
     maxStorageAge: 7 * 24 * 60 * 60 * 1000,
   },
-  // Données volatiles - TTL court (1-2h pour signatures/assignments)
   combatAssignments: {
-    ttl: 1 * 60 * 60 * 1000,  // 1 heure - signatures changent fréquemment
+    ttl: ONLINE_TTL,
     collection: 'assignments',
     priority: 4,
     maxStorageAge: 24 * 60 * 60 * 1000,  // 24h en storage offline
   },
   clothingAssignments: {
-    ttl: 1 * 60 * 60 * 1000,  // 1 heure
+    ttl: ONLINE_TTL,
     collection: 'assignments',
     priority: 4,
     maxStorageAge: 24 * 60 * 60 * 1000,
   },
   weaponsInventory: {
-    ttl: 2 * 60 * 60 * 1000,  // 2 heures - inventaire d'armes
+    ttl: ONLINE_TTL,
     collection: 'weapons_inventory',
     priority: 5,
     maxStorageAge: 24 * 60 * 60 * 1000,
