@@ -232,19 +232,25 @@ const CombatAssignmentScreen: React.FC = () => {
       const newMap = new Map(prev);
       const item = newMap.get(id);
       if (item) {
-        const newQty = Math.max(1, item.quantity + delta);
-        // Adjust serials array if equipment requires serial
-        let newSerials = item.serials;
-        if (item.equipment.requiresSerial) {
-          if (newQty > item.quantity) {
-            // Add more empty slots
-            newSerials = [...(item.serials || []), ...Array(newQty - item.quantity).fill('')];
-          } else if (newQty < item.quantity) {
-            // Remove extra serials
-            newSerials = (item.serials || []).slice(0, newQty);
+        const newQty = item.quantity + delta;
+
+        if (newQty <= 0) {
+          // Si la quantité tombe à 0, on décoche l'article
+          newMap.delete(id);
+        } else {
+          // Adjust serials array if equipment requires serial
+          let newSerials = item.serials;
+          if (item.equipment.requiresSerial) {
+            if (newQty > item.quantity) {
+              // Add more empty slots
+              newSerials = [...(item.serials || []), ...Array(newQty - item.quantity).fill('')];
+            } else if (newQty < item.quantity) {
+              // Remove extra serials
+              newSerials = (item.serials || []).slice(0, newQty);
+            }
           }
+          newMap.set(id, { ...item, quantity: newQty, serials: newSerials });
         }
-        newMap.set(id, { ...item, quantity: newQty, serials: newSerials });
       }
       return newMap;
     });
@@ -1361,9 +1367,9 @@ const CombatAssignmentScreen: React.FC = () => {
                 )}
                 {Object.entries(groupedEquipment).map(([category, items]) => {
                   // In manual mode, show all items
-                  // In mana mode with selection, show only selected items
+                  // In mana mode with selection, show all items that are originally part of the mana
                   const displayItems = (selectionMode === 'mana' && selectedMana)
-                    ? items.filter(eq => selectedItems.has(eq.id))
+                    ? items.filter(eq => selectedMana.equipments.some(mEq => mEq.equipmentId === eq.id || mEq.equipmentName === eq.name))
                     : items;
 
                   // Skip empty categories

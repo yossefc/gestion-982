@@ -18,6 +18,10 @@ module.exports = {
       googleServicesFile: process.env.GOOGLE_SERVICES_PLIST || "./GoogleService-Info.plist",
       entitlements: {
         "com.apple.developer.authentication": true
+      },
+      infoPlist: {
+        NSLocalNetworkUsageDescription: "האפליקציה זקוקה לגישה לרשת המקומית לצורך זיהוי חיבור האינטרנט.",
+        NSBonjourServices: ["_http._tcp"]
       }
     },
     android: {

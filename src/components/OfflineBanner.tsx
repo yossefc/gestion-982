@@ -17,6 +17,7 @@ import {
   StatusBar,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useOffline } from '../contexts/OfflineContext';
 import { Colors } from '../theme/Colors';
 
@@ -29,6 +30,7 @@ export const OfflineBanner: React.FC<OfflineBannerProps> = ({
   showPendingCount = true,
   onPress,
 }) => {
+  const insets = useSafeAreaInsets();
   const {
     isOnline,
     pendingCount,
@@ -119,8 +121,13 @@ export const OfflineBanner: React.FC<OfflineBannerProps> = ({
   const bannerStyle = getBannerStyle();
   if (!bannerStyle) return null;
 
+  // Compute top padding: on Android use StatusBar height; on iOS use safe area inset
+  const topPadding = Platform.OS === 'android'
+    ? (StatusBar.currentHeight || 0)
+    : insets.top;
+
   return (
-    <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
+    <Animated.View style={[styles.container, { opacity: fadeAnim, paddingTop: topPadding }]}>
       <TouchableOpacity
         style={[styles.banner, { backgroundColor: bannerStyle.backgroundColor }]}
         onPress={handlePress}
@@ -183,7 +190,6 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 1000,
-    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) : 0,
   },
   banner: {
     flexDirection: 'row',

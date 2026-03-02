@@ -10,6 +10,7 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo, { NetInfoState } from '@react-native-community/netinfo';
+import { Platform } from 'react-native';
 import cacheService, { persistCacheKey } from './cacheService';
 import { Assignment } from '../types';
 
@@ -57,6 +58,9 @@ let initialized = false;
 let initializing = false;
 // Référence à l'unsubscribe NetInfo pour ne jamais enregistrer deux listeners
 let netInfoUnsubscribe: (() => void) | null = null;
+// Polling interval ID (iOS only — NetInfo addEventListener is unreliable on iOS)
+let iosPollingIntervalId: ReturnType<typeof setInterval> | null = null;
+const IOS_POLLING_INTERVAL_MS = 30_000; // 30 seconds
 
 // ֳ‰tat global - isOnline est false par defaut pour etre conservatif
 // (mieux vaut queue une operation que d'echouer)
@@ -113,6 +117,19 @@ export async function initOfflineService(): Promise<void> {
     // (stocker l'unsubscribe pour éviter les doublons si jamais appelé de nouveau)
     if (!netInfoUnsubscribe) {
       netInfoUnsubscribe = NetInfo.addEventListener(handleConnectivityChange);
+    }
+
+    // Sur iOS, addEventListener peut rater des changements de connectivité.
+    // On lance un polling toutes les 30 secondes comme filet de sécurité.
+    if (Platform.OS === 'ios' && !iosPollingIntervalId) {
+      iosPollingIntervalId = setInterval(async () => {
+        try {
+          const netState = await NetInfo.fetch();
+          await handleConnectivityChange(netState);
+        } catch {
+          // Silently ignore — polling is best-effort
+        }
+      }, IOS_POLLING_INTERVAL_MS);
     }
 
     console.log(`[OfflineService] Initialized - online: ${currentState.isOnline}`);
