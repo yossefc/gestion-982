@@ -69,6 +69,33 @@ const ArmeHomeScreen: React.FC = () => {
     }
   };
 
+  const primaryActions = [
+    {
+      id: 'signature',
+      title: 'החתמת חייל',
+      color: Colors.success,
+      action: () => navigation.navigate('SoldierSearch', { mode: 'signature', type: 'combat' }),
+    },
+    {
+      id: 'return',
+      title: 'זיכוי חייל',
+      color: Colors.warning,
+      action: () => navigation.navigate('SoldierSearch', { mode: 'return', type: 'combat' }),
+    },
+    {
+      id: 'storage',
+      title: 'אפסון ציוד',
+      color: '#FF6F00',
+      action: () => navigation.navigate('SoldierSearch', { mode: 'storage', type: 'combat' }),
+    },
+    {
+      id: 'retrieve',
+      title: 'החזרת ציוד\nמאפסון',
+      color: '#00897B',
+      action: () => navigation.navigate('SoldierSearch', { mode: 'retrieve', type: 'combat' }),
+    },
+  ];
+
   const menuItems: MenuItemProps[] = [
     {
       id: 'manot',
@@ -95,39 +122,6 @@ const ArmeHomeScreen: React.FC = () => {
       icon: '📋',
       color: '#9C27B0',
       action: () => navigation.navigate('WeaponInventoryList'),
-    },
-    {
-      id: 'signature',
-      title: 'החתמת חייל',
-      subtitle: 'הנפקת ציוד לחימה',
-      icon: '✍️',
-      color: Colors.success,
-      action: () => navigation.navigate('SoldierSearch', { mode: 'signature', type: 'combat' }),
-    },
-    {
-      id: 'return',
-      title: 'זיכוי חייל',
-      subtitle: 'החזרת ציוד לחימה',
-      icon: '↩️',
-      color: Colors.warning,
-      action: () => navigation.navigate('SoldierSearch', { mode: 'return', type: 'combat' }),
-    },
-
-    {
-      id: 'storage',
-      title: 'אפסון ציוד',
-      subtitle: 'שמירת ציוד בנשקייה',
-      icon: '🏦',
-      color: '#FF6F00',
-      action: () => navigation.navigate('SoldierSearch', { mode: 'storage', type: 'combat' }),
-    },
-    {
-      id: 'retrieve',
-      title: 'החזרת ציוד מאפסון',
-      subtitle: 'החזרה לחייל מהנשקייה',
-      icon: '📤',
-      color: '#00897B',
-      action: () => navigation.navigate('SoldierSearch', { mode: 'retrieve', type: 'combat' }),
     },
   ];
 
@@ -234,8 +228,23 @@ const ArmeHomeScreen: React.FC = () => {
           ))}
         </View>
 
+        {/* Primary Actions Grid */}
+        <Text style={styles.sectionTitle}>פעולות אפסנאות</Text>
+        <View style={styles.primaryGridContainer}>
+          {primaryActions.map((action) => (
+            <TouchableOpacity
+              key={action.id}
+              style={[styles.primaryGridCard, { backgroundColor: action.color }]}
+              onPress={action.action}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.primaryGridTitle}>{action.title}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
         {/* Main Menu */}
-        <Text style={styles.sectionTitle}>פעולות עיקריות</Text>
+        <Text style={styles.sectionTitle}>ניהול</Text>
         <View style={styles.menuContainer}>
           {menuItems.map((item) => (
             <TouchableOpacity
@@ -526,6 +535,30 @@ const styles = StyleSheet.create({
   menuChevron: {
     fontSize: 24,
     color: Colors.textLight,
+  },
+
+  // Primary Actions Grid
+  primaryGridContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginBottom: Spacing.xl,
+  },
+  primaryGridCard: {
+    width: '48%',
+    aspectRatio: 1.5,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.lg,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: Spacing.md,
+    ...Shadows.medium,
+  },
+  primaryGridTitle: {
+    fontSize: FontSize.lg,
+    fontWeight: 'bold',
+    color: Colors.textWhite,
+    textAlign: 'center',
   },
 
   // Info Card

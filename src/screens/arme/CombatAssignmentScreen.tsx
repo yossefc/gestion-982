@@ -57,6 +57,7 @@ const CombatAssignmentScreen: React.FC = () => {
   const { soldier } = route.params as { soldier: any };
   const { user } = useAuth();
   const signatureRef = useRef<any>(null);
+  const operatorSignatureRef = useRef<any>(null);
 
   // OPTIMISÉ: Utiliser le cache centralisé pour équipements et manot
   const { combatEquipment, manot: cachedManot, isInitialized } = useData();
@@ -70,6 +71,8 @@ const CombatAssignmentScreen: React.FC = () => {
   const [selectedMana, setSelectedMana] = useState<Mana | null>(null);
   const [selectedItems, setSelectedItems] = useState<Map<string, SelectedItem>>(new Map());
   const [signatureData, setSignatureData] = useState<string | null>(null);
+  const [operatorSignatureData, setOperatorSignatureData] = useState<string | null>(null);
+  const [signatureStep, setSignatureStep] = useState<'soldier' | 'operator'>('soldier');
   const [scrollEnabled, setScrollEnabled] = useState(true);
   const [showSignature, setShowSignature] = useState(false);
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
@@ -320,6 +323,27 @@ const CombatAssignmentScreen: React.FC = () => {
     setScrollEnabled(true);
   };
 
+  const handleOperatorSignatureEnd = () => {
+    operatorSignatureRef.current?.readSignature();
+    setScrollEnabled(true);
+  };
+
+  const handleOperatorSignatureChange = (signature: string) => {
+    setOperatorSignatureData(signature);
+    setScrollEnabled(true);
+  };
+
+  const handleClearOperatorSignature = () => {
+    operatorSignatureRef.current?.clearSignature();
+    setOperatorSignatureData(null);
+    setScrollEnabled(true);
+  };
+
+  const handleConfirmOperatorSignature = () => {
+    operatorSignatureRef.current?.readSignature();
+    setScrollEnabled(true);
+  };
+
   const selectPrinter = async () => {
     try {
       const printer = await Print.selectPrinterAsync();
@@ -338,6 +362,7 @@ const CombatAssignmentScreen: React.FC = () => {
     soldierCompany?: string;
     items: any[];
     signature: string;
+    operatorSignature?: string;
     timestamp: Date;
     assignmentId?: string;
   }) => {
@@ -386,6 +411,7 @@ const CombatAssignmentScreen: React.FC = () => {
     soldierCompany?: string;
     items: any[];
     signature: string;
+    operatorSignature?: string;
     timestamp: Date;
     assignmentId?: string;
   }) => {
@@ -636,7 +662,7 @@ const CombatAssignmentScreen: React.FC = () => {
     <div class="header-center">
       <div class="doc-title">טופס החתמה על ציוד לחימה</div>
       <div class="doc-subtitle">גדוד 982</div>
-      <div class="voucher-number">מספר שובר: ${assignmentData.assignmentId || '_______________'}</div>
+      <div class="voucher-number">מספר שובר: ${assignmentData.assignmentId ? String(assignmentData.assignmentId).slice(-6).padStart(6, '0') : '______'}</div>
     </div>
     <div class="header-left">
       <div style="font-size: 10px;">תאריך: ${dateStr}</div>
@@ -686,7 +712,9 @@ const CombatAssignmentScreen: React.FC = () => {
         <span class="signature-label">חתימה:</span>
       </div>
       <div class="signature-area">
-        <div class="signature-placeholder">חתימת המנפק</div>
+        ${assignmentData.operatorSignature
+          ? `<img src="${assignmentData.operatorSignature}" class="signature-img" />`
+          : '<div class="signature-placeholder">חתימת המנפק</div>'}
       </div>
     </div>
 
@@ -748,6 +776,7 @@ const CombatAssignmentScreen: React.FC = () => {
     soldierCompany?: string;
     items: any[];
     signature: string;
+    operatorSignature?: string;
     timestamp: Date;
     assignmentId?: string;
   }, askForPrinter: boolean = false) => {
@@ -825,11 +854,14 @@ const CombatAssignmentScreen: React.FC = () => {
       }
     }
 
+    setSignatureStep('soldier');
+    setSignatureData(null);
+    setOperatorSignatureData(null);
     setShowSignature(true);
   };
 
   const handleSubmit = async () => {
-    if (!signatureData) {
+    if (!signatureData || !operatorSignatureData) {
       setModalType('error');
       setModalMessage('יש לחתום על הטופס');
       setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
@@ -972,6 +1004,7 @@ const CombatAssignmentScreen: React.FC = () => {
           soldierCompany: soldier.company,
           items,
           signature: signatureData,
+          operatorSignature: operatorSignatureData || undefined,
           timestamp: new Date(),
           assignmentId,
         }).then(() => {
@@ -1004,6 +1037,7 @@ const CombatAssignmentScreen: React.FC = () => {
         soldierCompany: soldier.company,
         items,
         signature: signatureData,
+        operatorSignature: operatorSignatureData || undefined,
         timestamp: new Date(),
         assignmentId,
       };
@@ -1525,76 +1559,123 @@ const CombatAssignmentScreen: React.FC = () => {
               ))}
             </View>
 
-            {/* Signature */}
-            <Text style={styles.sectionTitle}>חתימת החייל</Text>
-
-            <View style={styles.signatureContainer}>
-              <View style={styles.signatureWrapper}>
-                <SignatureCanvas
-                  ref={signatureRef}
-                  onEnd={handleSignatureEnd}
-                  onOK={handleSignatureChange}
-                  onBegin={() => setScrollEnabled(false)}
-                  onEmpty={() => setSignatureData(null)}
-                  descriptionText=""
-                  clearText="נקה"
-                  confirmText="אישור"
-                  webStyle={`
-                    .m-signature-pad { box-shadow: none; border: none; }
-                    .m-signature-pad--body { border: none; }
-                    .m-signature-pad--footer { display: none; }
-                  `}
-                  backgroundColor={Colors.backgroundCard}
-                  penColor={Colors.text}
-                  style={styles.signatureCanvas}
-                />
+            {/* Step indicator */}
+            <View style={styles.stepIndicator}>
+              <View style={[styles.stepDot, signatureStep === 'soldier' && styles.stepDotActive]}>
+                <Text style={styles.stepDotText}>1</Text>
               </View>
-
-              <View style={styles.excludeSignatureActions}>
-                <TouchableOpacity
-                  style={styles.clearSignatureButton}
-                  onPress={handleClearSignature}
-                >
-                  <Ionicons name="trash-outline" size={20} color={Colors.danger} />
-                  <Text style={styles.clearSignatureText}>נקה חתימה</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.confirmSignatureButton}
-                  onPress={handleConfirmSignature}
-                >
-                  <Ionicons name="create-outline" size={20} color={Colors.textWhite} />
-                  <Text style={styles.confirmSignatureText}>קלוט חתימה</Text>
-                </TouchableOpacity>
+              <View style={styles.stepLine} />
+              <View style={[styles.stepDot, signatureStep === 'operator' && styles.stepDotActive]}>
+                <Text style={styles.stepDotText}>2</Text>
               </View>
             </View>
 
-            {/* Action Buttons */}
-            <View style={styles.actionButtons}>
-              <TouchableOpacity
-                style={styles.backButton2}
-                onPress={() => setShowSignature(false)}
-              >
-                <Text style={styles.backButton2Text}>חזור לבחירת ציוד</Text>
-              </TouchableOpacity>
+            {/* STEP 1 - Soldier signature */}
+            {signatureStep === 'soldier' && (
+              <>
+                <Text style={styles.sectionTitle}>שלב 1 — חתימת החייל</Text>
+                <View style={styles.signatureContainer}>
+                  <View style={styles.signatureWrapper}>
+                    <SignatureCanvas
+                      ref={signatureRef}
+                      onEnd={handleSignatureEnd}
+                      onOK={handleSignatureChange}
+                      onBegin={() => setScrollEnabled(false)}
+                      onEmpty={() => setSignatureData(null)}
+                      descriptionText=""
+                      clearText="נקה"
+                      confirmText="אישור"
+                      webStyle={`
+                        .m-signature-pad { box-shadow: none; border: none; }
+                        .m-signature-pad--body { border: none; }
+                        .m-signature-pad--footer { display: none; }
+                      `}
+                      backgroundColor={Colors.backgroundCard}
+                      penColor={Colors.text}
+                      style={styles.signatureCanvas}
+                    />
+                  </View>
+                  <View style={styles.excludeSignatureActions}>
+                    <TouchableOpacity style={styles.clearSignatureButton} onPress={handleClearSignature}>
+                      <Ionicons name="trash-outline" size={20} color={Colors.danger} />
+                      <Text style={styles.clearSignatureText}>נקה חתימה</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.confirmSignatureButton} onPress={handleConfirmSignature}>
+                      <Ionicons name="create-outline" size={20} color={Colors.textWhite} />
+                      <Text style={styles.confirmSignatureText}>קלוט חתימה</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+                <View style={styles.actionButtons}>
+                  <TouchableOpacity style={styles.backButton2} onPress={() => setShowSignature(false)}>
+                    <Text style={styles.backButton2Text}>חזור לבחירת ציוד</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.submitButton, !signatureData && styles.buttonDisabled]}
+                    onPress={() => setSignatureStep('operator')}
+                    disabled={!signatureData}
+                  >
+                    <Ionicons name="arrow-back" size={20} color={Colors.textWhite} />
+                    <Text style={styles.submitButtonText}>חתימת המנפק</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
 
-              <TouchableOpacity
-                style={[
-                  styles.submitButton,
-                  (!signatureData || saving) && styles.buttonDisabled,
-                ]}
-                onPress={handleSubmit}
-                disabled={!signatureData || saving}
-              >
-                {saving ? (
-                  <ActivityIndicator size="small" color={Colors.textWhite} />
-                ) : (
-                  <>
-                    <Ionicons name="checkmark-circle" size={24} color={Colors.textWhite} />
-                    <Text style={styles.submitButtonText}>שמור החתמה</Text>
-                  </>
-                )}
-              </TouchableOpacity>
+            {/* STEP 2 - Operator signature */}
+            {signatureStep === 'operator' && (
+              <>
+                <Text style={styles.sectionTitle}>שלב 2 — חתימת המנפק</Text>
+                <View style={styles.signatureContainer}>
+                  <View style={styles.signatureWrapper}>
+                    <SignatureCanvas
+                      ref={operatorSignatureRef}
+                      onEnd={handleOperatorSignatureEnd}
+                      onOK={handleOperatorSignatureChange}
+                      onBegin={() => setScrollEnabled(false)}
+                      onEmpty={() => setOperatorSignatureData(null)}
+                      descriptionText=""
+                      clearText="נקה"
+                      confirmText="אישור"
+                      webStyle={`
+                        .m-signature-pad { box-shadow: none; border: none; }
+                        .m-signature-pad--body { border: none; }
+                        .m-signature-pad--footer { display: none; }
+                      `}
+                      backgroundColor={Colors.backgroundCard}
+                      penColor={Colors.text}
+                      style={styles.signatureCanvas}
+                    />
+                  </View>
+                  <View style={styles.excludeSignatureActions}>
+                    <TouchableOpacity style={styles.clearSignatureButton} onPress={handleClearOperatorSignature}>
+                      <Ionicons name="trash-outline" size={20} color={Colors.danger} />
+                      <Text style={styles.clearSignatureText}>נקה חתימה</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.confirmSignatureButton} onPress={handleConfirmOperatorSignature}>
+                      <Ionicons name="create-outline" size={20} color={Colors.textWhite} />
+                      <Text style={styles.confirmSignatureText}>קלוט חתימה</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+                <View style={styles.actionButtons}>
+                  <TouchableOpacity style={styles.backButton2} onPress={() => setSignatureStep('soldier')}>
+                    <Text style={styles.backButton2Text}>חזור לחתימת החייל</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.submitButton, (!operatorSignatureData || saving) && styles.buttonDisabled]}
+                    onPress={handleSubmit}
+                    disabled={!operatorSignatureData || saving}
+                  >
+                    {saving ? (
+                      <ActivityIndicator size="small" color={Colors.textWhite} />
+                    ) : (
+                      <>
+                        <Ionicons name="checkmark-circle" size={24} color={Colors.textWhite} />
+                        <Text style={styles.submitButtonText}>שמור החתמה</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
             </View>
           </>
         )}
@@ -2661,6 +2742,41 @@ const styles = StyleSheet.create({
     fontSize: FontSize.lg,
     fontWeight: '600',
     color: Colors.textWhite,
+  },
+
+  // Step Indicator
+  stepIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: Spacing.lg,
+    gap: Spacing.sm,
+  },
+
+  stepDot: {
+    width: 32,
+    height: 32,
+    borderRadius: BorderRadius.full,
+    backgroundColor: Colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  stepDotActive: {
+    backgroundColor: Colors.arme,
+  },
+
+  stepDotText: {
+    fontSize: FontSize.base,
+    fontWeight: '700',
+    color: Colors.textWhite,
+  },
+
+  stepLine: {
+    flex: 1,
+    height: 2,
+    backgroundColor: Colors.border,
+    maxWidth: 60,
   },
 });
 
