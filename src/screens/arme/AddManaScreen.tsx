@@ -18,6 +18,7 @@ import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Co
 import { AppModal, ModalType } from '../../components';
 import { PackageType, CombatEquipment, RootStackParamList } from '../../types';
 import { manaService, combatEquipmentService } from '../../services/firebaseService';
+import cacheService from '../../services/cacheService';
 
 type AddManaRouteProp = RouteProp<RootStackParamList, 'AddMana'>;
 
@@ -152,6 +153,7 @@ const AddManaScreen: React.FC = () => {
           type,
           equipments: selectedEquipments,
         });
+        cacheService.invalidate('manot');
 
         setModalType('success');
         setModalTitle('הצלחה');
@@ -164,6 +166,7 @@ const AddManaScreen: React.FC = () => {
           type,
           equipments: selectedEquipments,
         });
+        cacheService.invalidate('manot');
 
         setModalType('success');
         setModalTitle('הצלחה');

@@ -13,6 +13,7 @@ import {
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { RootStackParamList, Mana } from '../../types';
 import { manaService } from '../../services/firebaseService';
+import cacheService from '../../services/cacheService';
 import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
 import { AppModal, ModalType } from '../../components';
 
@@ -69,6 +70,7 @@ const ManotDetailsScreen: React.FC = () => {
           setModalVisible(false);
           try {
             await manaService.delete(manaId);
+            cacheService.invalidate('manot');
             setModalType('success');
             setModalTitle('הצלחה');
             setModalMessage('המנה נמחקה בהצלחה');
@@ -105,6 +107,7 @@ const ManotDetailsScreen: React.FC = () => {
               type: mana.type,
               equipments: mana.equipments,
             });
+            cacheService.invalidate('manot');
             setModalType('success');
             setModalTitle('הצלחה');
             setModalMessage('המנה שוכפלה בהצלחה');

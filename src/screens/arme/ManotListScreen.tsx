@@ -14,13 +14,19 @@ import {
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { Mana } from '../../types';
 import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
-import { manaService } from '../../services/firebaseService';
+import { useData } from '../../contexts/DataContext';
 
 const ManotListScreen: React.FC = () => {
   const navigation = useNavigation<any>();
+  const { manot: cachedManot, refreshManot } = useData();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [manot, setManot] = useState<Mana[]>([]);
+
+  // Sync local state from DataContext whenever cachedManot changes
+  useEffect(() => {
+    setManot(cachedManot);
+  }, [cachedManot]);
 
   useFocusEffect(
     useCallback(() => {
@@ -30,8 +36,7 @@ const ManotListScreen: React.FC = () => {
 
   const loadManot = async () => {
     try {
-      const data = await manaService.getAll();
-      setManot(data);
+      await refreshManot(); // force-fetches Firestore + updates DataContext cache
     } catch (error) {
       console.error('Error loading manot:', error);
       Alert.alert('שגיאה', 'נכשל בטעינת המנות');
