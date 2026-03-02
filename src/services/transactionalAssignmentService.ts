@@ -243,17 +243,17 @@ function getAssignmentTimestampMs(assignment: Assignment): number {
 function getStatusForAction(action: OperationType): string {
   switch (action) {
     case 'issue':
-      return '׳³ֲ ׳³ג€¢׳³ג‚×׳³ֲ§ ׳³ֲ׳³ג€”׳³ג„¢׳³ג„¢׳³ֲ';
+      return 'נופק לחייל';
     case 'return':
-      return '׳³ג€׳³ג€¢׳³ג€”׳³ג€“׳³ֲ¨';
+      return 'הוחזר';
     case 'add':
-      return '׳³ֲ ׳³ג€¢׳³ֲ¡׳³ֲ£';
+      return 'נוסף';
     case 'credit':
-      return '׳³ג€“׳³ג€¢׳³ג€÷׳³ג€';
+      return 'זוכה';
     case 'storage':
-      return '׳³ג€׳³ג€¢׳³ג‚×׳³ֲ§׳³ג€';
+      return 'הופקד';
     case 'retrieve':
-      return '׳³ֲ©׳³ג€¢׳³ג€”׳³ֲ¨׳³ֲ¨ ׳³ֲ׳³ֲ׳³ג‚×׳³ֲ¡׳³ג€¢׳³ֲ';
+      return 'שוחרר מאפסון';
     default:
       return '';
   }
@@ -454,7 +454,7 @@ export async function issueEquipment(params: IssueEquipmentParams): Promise<stri
       type,
       action: 'issue',
       items,
-      status: '׳ ׳•׳₪׳§ ׳׳—׳™׳™׳',
+      status: 'נופק לחייל',
       timestamp: Timestamp.now(),
       assignedBy,
       requestId,
@@ -542,7 +542,7 @@ export async function returnEquipment(params: ReturnEquipmentParams): Promise<st
       type,
       action: 'return',
       items,
-      status: '׳”׳•׳—׳–׳¨',
+      status: 'הוחזר',
       timestamp: Timestamp.now(),
       assignedBy: returnedBy,
       requestId,
@@ -646,7 +646,7 @@ export async function addEquipment(params: AddEquipmentParams): Promise<string> 
       type,
       action: 'add',
       items,
-      status: '׳ ׳•׳¡׳£',
+      status: 'נוסף',
       timestamp: Timestamp.now(),
       assignedBy: addedBy,
       requestId,
@@ -735,7 +735,7 @@ export async function creditEquipment(
       type,
       action: 'credit',
       items: currentHoldings,
-      status: '׳–׳•׳›׳”',
+      status: 'זוכה',
       timestamp: Timestamp.now(),
       assignedBy: creditedBy,
       requestId,
@@ -822,7 +822,7 @@ export async function storageEquipment(
       type,
       action: 'storage',
       items,
-      status: '׳”׳•׳₪׳§׳“',
+      status: 'הופקד',
       timestamp: Timestamp.now(),
       assignedBy: storedBy,
       requestId,
@@ -889,7 +889,7 @@ export async function retrieveEquipment(
       type,
       action: 'retrieve',
       items,
-      status: '׳©׳•׳—׳¨׳¨ ׳׳׳₪׳¡׳•׳',
+      status: 'שוחרר מאפסון',
       timestamp: Timestamp.now(),
       assignedBy: retrievedBy,
       requestId,

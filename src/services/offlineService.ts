@@ -472,17 +472,17 @@ export default offlineService;
 function getStatusForAction(action: OperationType): string {
   switch (action) {
     case 'issue':
-      return '׳³ֲ ׳³ג€¢׳³ג‚×׳³ֲ§ ׳³ֲ׳³ג€”׳³ג„¢׳³ג„¢׳³ֲ';
+      return 'נופק לחייל';
     case 'return':
-      return '׳³ג€׳³ג€¢׳³ג€”׳³ג€“׳³ֲ¨';
+      return 'הוחזר';
     case 'add':
-      return '׳³ֲ ׳³ג€¢׳³ֲ¡׳³ֲ£';
+      return 'נוסף';
     case 'credit':
-      return '׳³ג€“׳³ג€¢׳³ג€÷׳³ג€';
+      return 'זוכה';
     case 'storage':
-      return '׳³ג€׳³ג€¢׳³ג‚×׳³ֲ§׳³ג€';
+      return 'הופקד';
     case 'retrieve':
-      return '׳³ֲ©׳³ג€¢׳³ג€”׳³ֲ¨׳³ֲ¨ ׳³ֲ׳³ֲ׳³ג‚×׳³ֲ¡׳³ג€¢׳³ֲ';
+      return 'שוחרר מאפסון';
     default:
       return '';
   }
