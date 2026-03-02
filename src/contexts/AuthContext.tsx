@@ -21,6 +21,7 @@ interface AuthContextType {
   signUp: (email: string, password: string, name: string) => Promise<void>;
   signOut: () => Promise<void>;
   hasPermission: (module: 'arme' | 'vetement' | 'admin' | 'rsp') => boolean;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -59,6 +60,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               phone: userData.phone,
               role: userData.role as UserRole,
               company: userData.company,  // פלוגה pour RSP
+              rank: userData.rank,
+              signature: userData.signature,
               createdAt: userData.createdAt?.toDate() || new Date(),
             });
           } else {
@@ -144,6 +147,30 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
+  const refreshUser = useCallback(async () => {
+    const fbUser = auth.currentUser;
+    if (!fbUser) return;
+    try {
+      const userDoc = await getDoc(doc(db, 'users', fbUser.uid));
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+        setUser({
+          id: fbUser.uid,
+          email: fbUser.email || '',
+          name: userData.name || '',
+          phone: userData.phone,
+          role: userData.role as UserRole,
+          company: userData.company,
+          rank: userData.rank,
+          signature: userData.signature,
+          createdAt: userData.createdAt?.toDate() || new Date(),
+        });
+      }
+    } catch (error) {
+      console.error('[AuthContext] refreshUser error:', error);
+    }
+  }, []);
+
   const signOut = async () => {
     try {
       await firebaseSignOut(auth);
@@ -183,7 +210,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     signUp,
     signOut,
     hasPermission,
-  }), [user, firebaseUser, loading, signIn, signUp, signOut, hasPermission]);
+    refreshUser,
+  }), [user, firebaseUser, loading, signIn, signUp, signOut, hasPermission, refreshUser]);
 
   return (
     <AuthContext.Provider value={value}>

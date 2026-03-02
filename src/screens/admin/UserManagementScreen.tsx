@@ -20,6 +20,7 @@ import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Co
 import { AppModal, ModalType } from '../../components';
 import { userService } from '../../services/userService';
 import { UserRole } from '../../types';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface User {
   id: string;
@@ -41,7 +42,8 @@ const ROLES = [
 const COMPANIES = ['פלוגה א', 'פלוגה ב', 'פלוגה ג', 'פלוגה ד', 'מפקדה', 'ניוד'];
 
 const UserManagementScreen: React.FC = () => {
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
+  const { user: currentUser } = useAuth();
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState<User[]>([]);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
@@ -204,6 +206,30 @@ const UserManagementScreen: React.FC = () => {
           </Text>
         </View>
       </View>
+
+      {/* My Profile Button */}
+      <TouchableOpacity
+        style={styles.myProfileButton}
+        onPress={() => navigation.navigate('UserProfile')}
+        activeOpacity={0.8}
+      >
+        <View style={styles.myProfileLeft}>
+          <View style={styles.myProfileAvatar}>
+            {currentUser?.signature ? (
+              <Ionicons name="checkmark-circle" size={22} color={Colors.success} />
+            ) : (
+              <Ionicons name="person-circle-outline" size={22} color={Colors.arme} />
+            )}
+          </View>
+          <View>
+            <Text style={styles.myProfileTitle}>הפרופיל שלי — חתימת מנפק</Text>
+            <Text style={styles.myProfileSubtitle}>
+              {currentUser?.signature ? 'חתימה שמורה ✓' : 'לחץ להגדרת חתימה'}
+            </Text>
+          </View>
+        </View>
+        <Ionicons name="chevron-back" size={20} color={Colors.arme} />
+      </TouchableOpacity>
 
       {/* Users List */}
       {loading ? (
@@ -645,6 +671,52 @@ const styles = StyleSheet.create({
     fontSize: FontSize.base,
     fontWeight: '600',
     color: Colors.textWhite,
+  },
+
+  // My Profile button
+  myProfileButton: {
+    backgroundColor: Colors.backgroundCard,
+    marginHorizontal: Spacing.lg,
+    marginBottom: Spacing.md,
+    borderRadius: BorderRadius.lg,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1.5,
+    borderColor: Colors.arme + '50',
+    ...Shadows.small,
+  },
+
+  myProfileLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    flex: 1,
+  },
+
+  myProfileAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: BorderRadius.full,
+    backgroundColor: Colors.armeLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  myProfileTitle: {
+    fontSize: FontSize.base,
+    fontWeight: '600',
+    color: Colors.armeDark,
+    textAlign: 'right',
+  },
+
+  myProfileSubtitle: {
+    fontSize: FontSize.sm,
+    color: Colors.textSecondary,
+    textAlign: 'right',
+    marginTop: 2,
   },
 });
 

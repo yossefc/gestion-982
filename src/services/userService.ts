@@ -111,6 +111,30 @@ export const updateUserCompany = async (userId: string, company: string): Promis
 };
 
 /**
+ * Met à jour la signature (base64) du מנפק
+ */
+export const updateUserSignature = async (userId: string, signature: string): Promise<void> => {
+  try {
+    const userRef = doc(db, USERS_COLLECTION, userId);
+    await updateDoc(userRef, { signature });
+  } catch (error) {
+    throw error;
+  }
+};
+
+/**
+ * Met à jour le grade (דרגה) d'un utilisateur
+ */
+export const updateUserRank = async (userId: string, rank: string): Promise<void> => {
+  try {
+    const userRef = doc(db, USERS_COLLECTION, userId);
+    await updateDoc(userRef, { rank: rank || null });
+  } catch (error) {
+    throw error;
+  }
+};
+
+/**
  * Supprime un utilisateur
  */
 export const deleteUser = async (userId: string): Promise<void> => {
@@ -186,6 +210,8 @@ export const userService = {
   update: updateUser,
   updateRole: updateUserRole,
   updateCompany: updateUserCompany,
+  updateSignature: updateUserSignature,
+  updateRank: updateUserRank,
   delete: deleteUser,
   getByRole: getUsersByRole,
   getCount: getUserCount,

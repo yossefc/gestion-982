@@ -12,6 +12,8 @@ export interface User {
   phone?: string;
   role: UserRole;
   company?: string;     // פלוגה - Requis pour le rôle 'rsp'
+  rank?: string;        // דרגה - Grade militaire du מנפק
+  signature?: string;   // Base64 image - signature du מנפק (sauvegardée une fois)
   createdAt: Date;
 }
 
@@ -204,6 +206,7 @@ export type RootStackParamList = {
   // Admin
   AdminPanel: undefined;
   UserManagement: undefined;
+  UserProfile: undefined;
   HoldingsRecalculate: undefined;
   DatabaseDebug: undefined;
   Migration: undefined;
