@@ -15,6 +15,7 @@ import {
   TextInput,
   Modal,
   FlatList,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -1596,7 +1597,10 @@ const CombatAssignmentScreen: React.FC = () => {
         transparent={true}
         onRequestClose={closeSerialPicker}
       >
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
           <View style={styles.modalContainer}>
             {/* Modal Header */}
             <View style={styles.modalHeader}>
@@ -1681,7 +1685,7 @@ const CombatAssignmentScreen: React.FC = () => {
               );
             })()}
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Success Modal with animated green checkmark */}
