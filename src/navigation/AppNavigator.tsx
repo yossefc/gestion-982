@@ -37,6 +37,7 @@ import AddWeaponToInventoryScreen from '../screens/arme/AddWeaponToInventoryScre
 import BulkImportWeaponsScreen from '../screens/arme/BulkImportWeaponsScreen';
 import AssignWeaponScreen from '../screens/arme/AssignWeaponScreen';
 import WeaponStorageScreen from '../screens/arme/WeaponStorageScreen';
+import UnprintedSignaturesScreen from '../screens/arme/UnprintedSignaturesScreen';
 import AdminPanelScreen from '../screens/admin/AdminPanelScreen';
 import UserManagementScreen from '../screens/admin/UserManagementScreen';
 import ProfileScreen from '../screens/profile/ProfileScreen';
@@ -82,74 +83,75 @@ const AppNavigator: React.FC = () => {
             animation: 'slide_from_left',
             contentStyle: { backgroundColor: Colors.background },
           }}
-      >
-        {!user ? (
-          // Écrans non authentifiés
-          <Stack.Screen name="Login" component={LoginScreen} />
-        ) : (
-          // Écrans authentifiés
-          <>
-            {/* Écran principal */}
-            <Stack.Screen name="Home" component={HomeScreen} />
+        >
+          {!user ? (
+            // Écrans non authentifiés
+            <Stack.Screen name="Login" component={LoginScreen} />
+          ) : (
+            // Écrans authentifiés
+            <>
+              {/* Écran principal */}
+              <Stack.Screen name="Home" component={HomeScreen} />
 
-            {/* Écrans communs */}
-            <Stack.Screen name="SoldierSearch" component={SoldierSearchScreen} />
-            <Stack.Screen name="AddSoldier" component={CommonAddSoldierScreen} />
-            <Stack.Screen name="EditSoldier" component={EditSoldierScreen} />
+              {/* Écrans communs */}
+              <Stack.Screen name="SoldierSearch" component={SoldierSearchScreen} />
+              <Stack.Screen name="AddSoldier" component={CommonAddSoldierScreen} />
+              <Stack.Screen name="EditSoldier" component={EditSoldierScreen} />
 
-            {/* Module Vêtement */}
-            <Stack.Screen name="VetementHome" component={VetementHomeScreen} />
-            <Stack.Screen name="ClothingSignature" component={ClothingSignatureScreen} />
-            <Stack.Screen name="ClothingDashboard" component={ClothingDashboardScreen} />
-            <Stack.Screen name="ClothingReturn" component={ClothingReturnScreen} />
-            <Stack.Screen name="ClothingStock" component={ClothingStockScreen} />
-            <Stack.Screen name="ClothingEquipmentManagement" component={ClothingEquipmentManagementScreen} />
+              {/* Module Vêtement */}
+              <Stack.Screen name="VetementHome" component={VetementHomeScreen} />
+              <Stack.Screen name="ClothingSignature" component={ClothingSignatureScreen} />
+              <Stack.Screen name="ClothingDashboard" component={ClothingDashboardScreen} />
+              <Stack.Screen name="ClothingReturn" component={ClothingReturnScreen} />
+              <Stack.Screen name="ClothingStock" component={ClothingStockScreen} />
+              <Stack.Screen name="ClothingEquipmentManagement" component={ClothingEquipmentManagementScreen} />
 
-            {/* Module Arme */}
-            <Stack.Screen name="ArmeHome" component={ArmeHomeScreen} />
-            <Stack.Screen name="ManotList" component={ManotListScreen} />
-            <Stack.Screen name="ManotDetails" component={ManotDetailsScreen} />
-            <Stack.Screen name="AddMana" component={AddManaScreen} />
-            <Stack.Screen name="CombatEquipmentList" component={CombatEquipmentListScreen} />
-            <Stack.Screen name="AddCombatEquipment" component={AddCombatEquipmentScreen} />
-            <Stack.Screen name="CombatAssignment" component={CombatAssignmentScreen} />
-            <Stack.Screen name="CombatReturn" component={CombatReturnScreen} />
-            <Stack.Screen name="CombatStorage" component={CombatStorageScreen} />
-            <Stack.Screen name="CombatRetrieve" component={CombatRetrieveScreen} />
-            <Stack.Screen name="CombatStock" component={CombatStockScreen} />
-            <Stack.Screen name="WeaponInventoryList" component={WeaponInventoryListScreen} />
-            <Stack.Screen name="AddWeaponToInventory" component={AddWeaponToInventoryScreen} />
-            <Stack.Screen name="BulkImportWeapons" component={BulkImportWeaponsScreen} />
-            <Stack.Screen name="AssignWeapon" component={AssignWeaponScreen} />
-            <Stack.Screen name="WeaponStorage" component={WeaponStorageScreen} />
+              {/* Module Arme */}
+              <Stack.Screen name="ArmeHome" component={ArmeHomeScreen} />
+              <Stack.Screen name="ManotList" component={ManotListScreen} />
+              <Stack.Screen name="ManotDetails" component={ManotDetailsScreen} />
+              <Stack.Screen name="AddMana" component={AddManaScreen} />
+              <Stack.Screen name="CombatEquipmentList" component={CombatEquipmentListScreen} />
+              <Stack.Screen name="AddCombatEquipment" component={AddCombatEquipmentScreen} />
+              <Stack.Screen name="CombatAssignment" component={CombatAssignmentScreen} />
+              <Stack.Screen name="CombatReturn" component={CombatReturnScreen} />
+              <Stack.Screen name="CombatStorage" component={CombatStorageScreen} />
+              <Stack.Screen name="CombatRetrieve" component={CombatRetrieveScreen} />
+              <Stack.Screen name="CombatStock" component={CombatStockScreen} />
+              <Stack.Screen name="WeaponInventoryList" component={WeaponInventoryListScreen} />
+              <Stack.Screen name="AddWeaponToInventory" component={AddWeaponToInventoryScreen} />
+              <Stack.Screen name="BulkImportWeapons" component={BulkImportWeaponsScreen} />
+              <Stack.Screen name="AssignWeapon" component={AssignWeaponScreen} />
+              <Stack.Screen name="WeaponStorage" component={WeaponStorageScreen} />
+              <Stack.Screen name="UnprintedSignatures" component={UnprintedSignaturesScreen} />
 
-            {/* Module Admin */}
-            <Stack.Screen name="AdminPanel" component={AdminPanelScreen} />
-            <Stack.Screen name="UserManagement" component={UserManagementScreen} />
-            <Stack.Screen name="UserProfile" component={ProfileScreen} />
+              {/* Module Admin */}
+              <Stack.Screen name="AdminPanel" component={AdminPanelScreen} />
+              <Stack.Screen name="UserManagement" component={UserManagementScreen} />
+              <Stack.Screen name="UserProfile" component={ProfileScreen} />
 
-            <Stack.Screen name="DatabaseDebug" component={DatabaseDebugScreen} />
-            <Stack.Screen name="Migration" component={MigrationScreen} />
-            <Stack.Screen name="RspMigration" component={RspMigrationScreen} />
-            <Stack.Screen name="SoldierHistory" component={SoldierHistoryScreen} />
+              <Stack.Screen name="DatabaseDebug" component={DatabaseDebugScreen} />
+              <Stack.Screen name="Migration" component={MigrationScreen} />
+              <Stack.Screen name="RspMigration" component={RspMigrationScreen} />
+              <Stack.Screen name="SoldierHistory" component={SoldierHistoryScreen} />
 
-            {/* Module Shlishut */}
-            <Stack.Screen name="ShlishutHome" component={ShlishutHomeScreen} />
+              {/* Module Shlishut */}
+              <Stack.Screen name="ShlishutHome" component={ShlishutHomeScreen} />
 
-            {/* Module RSP */}
-            <Stack.Screen name="RspHome" component={RspHomeScreen} />
-            <Stack.Screen name="RspEquipment" component={RspEquipmentScreen} />
-            <Stack.Screen name="RspAssignment" component={RspAssignmentScreen} />
-            <Stack.Screen name="RspTable" component={RspTableScreen} />
-            <Stack.Screen name="RspReadOnly" component={RspReadOnlyScreen} />
-            <Stack.Screen name="RspDashboard" component={RspDashboardScreen} />
-            <Stack.Screen name="RspSoldierDetail" component={RspSoldierDetailScreen} />
+              {/* Module RSP */}
+              <Stack.Screen name="RspHome" component={RspHomeScreen} />
+              <Stack.Screen name="RspEquipment" component={RspEquipmentScreen} />
+              <Stack.Screen name="RspAssignment" component={RspAssignmentScreen} />
+              <Stack.Screen name="RspTable" component={RspTableScreen} />
+              <Stack.Screen name="RspReadOnly" component={RspReadOnlyScreen} />
+              <Stack.Screen name="RspDashboard" component={RspDashboardScreen} />
+              <Stack.Screen name="RspSoldierDetail" component={RspSoldierDetailScreen} />
 
-            {/* Signature commune */}
-            <Stack.Screen name="SignatureScreen" component={ClothingSignatureScreen} />
-          </>
-        )}
-      </Stack.Navigator>
+              {/* Signature commune */}
+              <Stack.Screen name="SignatureScreen" component={ClothingSignatureScreen} />
+            </>
+          )}
+        </Stack.Navigator>
       </NavigationContainer>
     </View>
   );

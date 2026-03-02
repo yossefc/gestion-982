@@ -12,11 +12,14 @@ import {
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { RootStackParamList, Soldier, AssignmentItem } from '../../types';
 import { soldierService, combatEquipmentService } from '../../services/firebaseService';
+import { assignmentService } from '../../services/assignmentService';
 import { transactionalAssignmentService } from '../../services/transactionalAssignmentService';
 import { useAuth } from '../../contexts/AuthContext';
 import { Colors, Shadows } from '../../theme/Colors';
 import { openWhatsAppChat } from '../../services/whatsappService';
 import { AppModal, ModalType } from '../../components';
+import { generateAndPrintPDF, PrintAssignmentData } from '../../utils/printUtils';
+import { Ionicons } from '@expo/vector-icons';
 
 type CombatReturnRouteProp = RouteProp<RootStackParamList, 'CombatReturn'> & {
   params: {
@@ -43,6 +46,7 @@ const CombatReturnScreen: React.FC = () => {
   const [soldier, setSoldier] = useState<Soldier | null>(null);
   const [items, setItems] = useState<ReturnItem[]>([]);
   const [processing, setProcessing] = useState(false);
+  const [printing, setPrinting] = useState(false);
 
   // AppModal state
   const [modalVisible, setModalVisible] = useState(false);
@@ -326,6 +330,52 @@ const CombatReturnScreen: React.FC = () => {
     setModalVisible(true);
   };
 
+  const handlePrintCurrentHoldings = async () => {
+    if (!soldier || items.length === 0) {
+      setModalType('error');
+      setModalMessage('אין ציוד להדפסה');
+      setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalVisible(true);
+      return;
+    }
+
+    setPrinting(true);
+    try {
+      // Find the last assignment to get a signature if possible
+      const assignments = await assignmentService.getAssignmentsBySoldier(soldierId, 'combat');
+      const latestAssignmentWithSignature = assignments.find(a => a.signature);
+
+      const printItems = items.map(item => ({
+        equipmentId: item.equipmentId,
+        equipmentName: item.equipmentName,
+        quantity: item.quantity,
+        serial: item.serial || item.availableSerials.join(', '),
+      }));
+
+      const printData: PrintAssignmentData = {
+        soldierName: soldier.name,
+        soldierPersonalNumber: soldier.personalNumber,
+        soldierPhone: soldier.phone,
+        soldierCompany: soldier.company,
+        items: printItems,
+        signature: latestAssignmentWithSignature?.signature || '',
+        operatorName: user?.name || user?.email || '',
+        timestamp: new Date(),
+        assignmentId: `holdings_${soldierId}_${Date.now()}`
+      };
+
+      await generateAndPrintPDF(printData);
+    } catch (error) {
+      console.error('Error printing holdings:', error);
+      setModalType('error');
+      setModalMessage('אירעה שגיאה בהדפסת הטופס');
+      setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalVisible(true);
+    } finally {
+      setPrinting(false);
+    }
+  };
+
   if (loading) {
     return (
       <View style={styles.container}>
@@ -393,8 +443,26 @@ const CombatReturnScreen: React.FC = () => {
           </Text>
         </View>
 
-        {/* Items List */}
-        <Text style={styles.sectionTitle}>ציוד פעיל ({items.length})</Text>
+        <View style={styles.sectionHeaderLine}>
+          <Text style={styles.sectionTitle}>ציוד פעיל ({items.length})</Text>
+
+          {items.length > 0 && (
+            <TouchableOpacity
+              style={[styles.smallPrintBtn, printing && styles.buttonDisabled]}
+              onPress={handlePrintCurrentHoldings}
+              disabled={printing}
+            >
+              {printing ? (
+                <ActivityIndicator size="small" color={Colors.primary} />
+              ) : (
+                <>
+                  <Ionicons name="print-outline" size={16} color={Colors.primary} />
+                  <Text style={styles.smallPrintText}>הדפס טופס</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
+        </View>
 
         {items.length === 0 ? (
           <View style={styles.emptyCard}>
@@ -672,11 +740,32 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     textAlign: 'right',
   },
+  sectionHeaderLine: {
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  smallPrintBtn: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: Colors.backgroundCard,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Colors.primary,
+    gap: 6,
+  },
+  smallPrintText: {
+    fontSize: 14,
+    color: Colors.primary,
+    fontWeight: 'bold',
+  },
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     color: Colors.text,
-    marginBottom: 15,
     textAlign: 'right',
   },
   itemsList: {

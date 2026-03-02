@@ -37,6 +37,8 @@ const convertDocToAssignment = (doc: any): Assignment => {
     assignedBy: data.assignedBy,
     assignedByName: data.assignedByName,
     assignedByEmail: data.assignedByEmail,
+    isPrinted: data.isPrinted || false,
+    printedAt: data.printedAt?.toDate(),
   };
 };
 
@@ -256,12 +258,65 @@ export const createAssignment = async (
       data.signature = signatureBase64;
     }
 
+    // Nouveaux formulaires sont non-imprimés par défaut
+    data.isPrinted = false;
+
     // Créer un nouveau document avec ID auto-généré (permet l'historique complet)
     const docRef = await addDoc(collection(db, COLLECTION_NAME), data);
 
-
     return docRef.id;
   } catch (error) {
+    throw error;
+  }
+};
+
+// Obtenir les attributions non encore imprimées
+export const getUnprintedAssignments = async (type: 'combat' | 'clothing'): Promise<Assignment[]> => {
+  try {
+    const q = query(
+      collection(db, COLLECTION_NAME),
+      where('type', '==', type),
+      where('isPrinted', '==', false),
+      orderBy('timestamp', 'desc')
+    );
+
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(convertDocToAssignment);
+  } catch (error) {
+    // Les requêtes avec plusieurs clauses where/orderBy nécessitent un index dans Firestore.
+    // En attendant la création de l'index, nous pouvons obtenir tout et filtrer localement en fallback.
+    try {
+      console.warn("Falling back to local filtering for unprinted assignments. Ensure Firestore indexes are created.");
+      const qAlt = query(
+        collection(db, COLLECTION_NAME),
+        where('type', '==', type),
+        orderBy('timestamp', 'desc')
+      );
+      const snapshot = await getDocs(qAlt);
+      return snapshot.docs
+        .map(convertDocToAssignment)
+        .filter(a => !a.isPrinted);
+    } catch (fallbackError) {
+      throw fallbackError;
+    }
+  }
+};
+
+// Marquer une liste d'attributions comme imprimées
+export const markAssignmentsAsPrinted = async (assignmentIds: string[]): Promise<void> => {
+  try {
+    const updatePromises = assignmentIds.map(id => {
+      const docRef = doc(db, COLLECTION_NAME, id);
+      return updateDoc(docRef, {
+        isPrinted: true,
+        printedAt: Timestamp.now(),
+        updatedAt: Timestamp.now()
+      });
+    });
+
+    await Promise.all(updatePromises);
+  } catch (error) {
+    console.error('Error marking assignments as printed:', error);
     throw error;
   }
 };
@@ -431,6 +486,8 @@ export const assignmentService = {
   getAssignmentsBySoldier,
   getAssignmentsByType,
   getByType: getAssignmentsByType, // Alias for backward compatibility
+  getUnprintedAssignments,
+  markAssignmentsAsPrinted,
   calculateCurrentHoldings,
   create: createAssignment,  // Alias for createAssignment
   createAssignment,
