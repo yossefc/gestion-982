@@ -14,7 +14,7 @@ import {
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { Mana } from '../../types';
 import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
-import { manaService, DEFAULT_MANOT } from '../../services/firebaseService';
+import { manaService } from '../../services/firebaseService';
 
 const ManotListScreen: React.FC = () => {
   const navigation = useNavigation<any>();
@@ -31,31 +31,6 @@ const ManotListScreen: React.FC = () => {
   const loadManot = async () => {
     try {
       const data = await manaService.getAll();
-
-      if (data.length === 0) {
-        Alert.alert(
-          'אין מנות במערכת',
-          'האם ברצונך להוסיף מנות ברירת מחדל?',
-          [
-            { text: 'לא', style: 'cancel' },
-            {
-              text: 'כן, הוסף',
-              onPress: async () => {
-                try {
-                  for (const mana of DEFAULT_MANOT) {
-                    await manaService.create(mana);
-                  }
-                  loadManot();
-                } catch (error) {
-                  console.error('Error adding default manot:', error);
-                  Alert.alert('שגיאה', 'נכשל בהוספת מנות ברירת מחדל');
-                }
-              },
-            },
-          ]
-        );
-      }
-
       setManot(data);
     } catch (error) {
       console.error('Error loading manot:', error);
