@@ -16,7 +16,6 @@ import { RootStackParamList, Soldier, AssignmentItem } from '../../types';
 import { soldierService, combatEquipmentService } from '../../services/firebaseService';
 import { assignmentService } from '../../services/assignmentService';
 import { transactionalAssignmentService } from '../../services/transactionalAssignmentService';
-import { weaponInventoryService } from '../../services/weaponInventoryService';
 import { useAuth } from '../../contexts/AuthContext';
 import { Colors, Shadows } from '../../theme/Colors';
 import { openWhatsAppChat } from '../../services/whatsappService';
@@ -277,22 +276,12 @@ const CombatReturnScreen: React.FC = () => {
                 itemData.serial = item.selectedSerials.join(', ');
               }
 
-              console.log('[CombatReturn] Credit item prepared:', {
-                equipmentId: itemData.equipmentId,
-                equipmentName: itemData.equipmentName,
-                quantity: itemData.quantity,
-                serial: itemData.serial,
-              });
-
               return itemData;
             });
 
-            // Create transactional return assignment with requestId
-            console.log('[CombatReturn] Creating transactional return assignment...');
-
             const requestId = `combat_return_${soldierId}_${Date.now()}`;
 
-            const assignmentId = await transactionalAssignmentService.returnEquipment({
+            await transactionalAssignmentService.returnEquipment({
               soldierId,
               soldierName: soldier?.name || '',
               soldierPersonalNumber: soldier?.personalNumber || '',
@@ -301,55 +290,6 @@ const CombatReturnScreen: React.FC = () => {
               returnedBy: user?.id || '',
               requestId,
             });
-
-            console.log('[CombatReturn] Transactional return assignment created:', assignmentId);
-
-            // Update weapon inventory status for returned weapons
-            console.log('[CombatReturn] =====================================');
-            console.log('[CombatReturn] DÉBUT MISE À JOUR weapons_inventory');
-            console.log('[CombatReturn] =====================================');
-            console.log('[CombatReturn] Selected items:', selectedItems.length);
-
-            for (const item of selectedItems) {
-              console.log(`[CombatReturn] Item: ${item.equipmentName}`);
-              console.log(`[CombatReturn]   - selectedSerials:`, item.selectedSerials);
-              console.log(`[CombatReturn]   - availableSerials:`, item.availableSerials);
-
-              if (item.selectedSerials && item.selectedSerials.length > 0) {
-                for (const serial of item.selectedSerials) {
-                  console.log(`[CombatReturn] Processing serial: "${serial}" (trimmed: "${serial.trim()}")`);
-
-                  if (serial.trim()) {
-                    try {
-                      // Find the weapon by serial number
-                      console.log(`[CombatReturn] Searching weapon with serial: ${serial.trim()}`);
-                      const weapon = await weaponInventoryService.getWeaponBySerialNumber(serial.trim());
-
-                      if (weapon) {
-                        console.log(`[CombatReturn] ✅ Weapon FOUND: ${weapon.serialNumber} (ID: ${weapon.id}, Status: ${weapon.status})`);
-                        console.log(`[CombatReturn] Calling returnWeapon(${weapon.id})...`);
-
-                        await weaponInventoryService.returnWeapon(weapon.id);
-
-                        console.log(`[CombatReturn] ✅ Weapon ${weapon.serialNumber} status updated to 'available'`);
-                      } else {
-                        console.warn(`[CombatReturn] ⚠️ Weapon NOT FOUND for serial: ${serial}`);
-                      }
-                    } catch (error) {
-                      console.error(`[CombatReturn] ❌ ERROR finding/updating weapon with serial ${serial}:`, error);
-                    }
-                  } else {
-                    console.log(`[CombatReturn] ⚠️ Serial vide après trim, skip`);
-                  }
-                }
-              } else {
-                console.log(`[CombatReturn] Pas de serials sélectionnés pour ${item.equipmentName}`);
-              }
-            }
-
-            console.log('[CombatReturn] =====================================');
-            console.log('[CombatReturn] FIN MISE À JOUR weapons_inventory');
-            console.log('[CombatReturn] =====================================');
 
             // Recalculer les holdings pour voir s'il reste quelque chose
             console.log('[CombatReturn] Final check of remaining items...');

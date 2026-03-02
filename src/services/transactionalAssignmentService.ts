@@ -36,6 +36,7 @@ import {
   OperationType,
 } from './offlineService';
 import cacheService from './cacheService';
+import { weaponInventoryService } from './weaponInventoryService';
 
 const db = getFirestore(app);
 
@@ -492,8 +493,9 @@ export async function issueEquipment(params: IssueEquipmentParams): Promise<stri
 }
 
 /**
- * Return equipment from a soldier (׳”׳—׳–׳¨׳”)
+ * Return equipment from a soldier (זיכוי)
  * Transaction atomique: assignment + soldier_holdings
+ * Puis mise à jour de l'inventaire des armes (hors transaction - requêtes Firestore incompatibles)
  */
 export async function returnEquipment(params: ReturnEquipmentParams): Promise<string> {
   const {
@@ -506,7 +508,7 @@ export async function returnEquipment(params: ReturnEquipmentParams): Promise<st
     requestId,
   } = params;
 
-  return await runTransaction(db, async (transaction: Transaction) => {
+  const assignmentId = await runTransaction(db, async (transaction: Transaction) => {
     // 0. Idempotence
     const assignmentRef = doc(db, 'assignments', requestId);
     const assignmentSnap = await transaction.get(assignmentRef);
@@ -534,15 +536,16 @@ export async function returnEquipment(params: ReturnEquipmentParams): Promise<st
     );
     const issueDocs = await getDocs(issueQuery);
 
-    // 2. Crֳ©er l'assignment (historique - WRITE)
+    // 2. Créer l'assignment (historique - WRITE)
+    // action 'credit' + status 'זוכה' : cohérent avec l'UI "זיכוי חייל"
     const assignmentData: any = {
       soldierId,
       soldierName,
       soldierPersonalNumber,
       type,
-      action: 'return',
+      action: 'credit',
       items,
-      status: 'הוחזר',
+      status: 'זוכה',
       timestamp: Timestamp.now(),
       assignedBy: returnedBy,
       requestId,
@@ -603,10 +606,35 @@ export async function returnEquipment(params: ReturnEquipmentParams): Promise<st
 
     return assignmentRef.id;
   });
+
+  // Mise à jour de l'inventaire des armes APRÈS la transaction
+  // (les requêtes Firestore ne sont pas compatibles avec runTransaction)
+  // Un échec ici ne remet pas en cause le זיכוי déjà enregistré — on log et on continue
+  if (type === 'combat') {
+    for (const item of items) {
+      const serials = item.serial
+        ? item.serial.split(',').map((s: string) => s.trim()).filter(Boolean)
+        : [];
+      for (const serial of serials) {
+        try {
+          const weapon = await weaponInventoryService.getWeaponBySerialNumber(serial);
+          if (weapon) {
+            await weaponInventoryService.returnWeapon(weapon.id);
+          } else {
+            console.warn(`[ReturnEquipment] Arme introuvable dans l'inventaire pour le מסטב: ${serial}`);
+          }
+        } catch (err) {
+          console.warn(`[ReturnEquipment] Échec mise à jour inventaire pour מסטב ${serial}:`, err);
+        }
+      }
+    }
+  }
+
+  return assignmentId;
 }
 
 /**
- * Add equipment to a soldier's holdings (׳”׳•׳¡׳₪׳”)
+ * Add equipment to a soldier's holdings (הוספה)
  * Transaction atomique: assignment + soldier_holdings
  */
 export async function addEquipment(params: AddEquipmentParams): Promise<string> {

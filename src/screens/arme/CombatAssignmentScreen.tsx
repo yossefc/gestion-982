@@ -504,8 +504,13 @@ const CombatAssignmentScreen: React.FC = () => {
     .msegeret {
       font-size: 14px;
       font-weight: bold;
-      margin-top: 6px;
+      margin-top: 10px;
+      margin-bottom: 4px;
       color: #000;
+      border: 2px solid #000;
+      padding: 4px 12px;
+      display: inline-block;
+      border-radius: 4px;
     }
     .msegeret strong {
       font-size: 16px;
@@ -647,8 +652,9 @@ const CombatAssignmentScreen: React.FC = () => {
     }
     .safety-sig-box {
       flex: 1;
-      border-bottom: 1px solid #000;
-      height: 35px;
+      display: flex;
+      align-items: center;
+      height: 45px;
     }
     .safety-sig-label {
       font-size: 9px;
@@ -728,8 +734,8 @@ const CombatAssignmentScreen: React.FC = () => {
       </div>
       <div class="signature-area">
         ${assignmentData.operatorSignature
-          ? `<img src="${assignmentData.operatorSignature}" class="signature-img" />`
-          : '<div class="signature-placeholder">חתימת המנפק</div>'}
+        ? `<img src="${assignmentData.operatorSignature}" class="signature-img" />`
+        : '<div class="signature-placeholder">חתימת המנפק</div>'}
       </div>
     </div>
 
@@ -777,9 +783,9 @@ const CombatAssignmentScreen: React.FC = () => {
       <div class="safety-confirm-text">קראתי והבנתי את הוראות הבטיחות לעיל ואני מתחייב לפעול על פיהן</div>
       <div class="safety-sig-line">
         <span class="safety-sig-label">חתימת החייל:</span>
-        <div class="safety-sig-box"></div>
-        <span class="safety-sig-label">תאריך:</span>
-        <div class="safety-sig-box"></div>
+        <div class="safety-sig-box">
+          ${signatureImg}
+        </div>
       </div>
     </div>
   </div>
