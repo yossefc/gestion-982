@@ -82,26 +82,30 @@ let transactionFunctions: Partial<Record<OperationType, TransactionFn>> = {};
  * Initialise le service offline
  */
 export async function initOfflineService(): Promise<void> {
-  // Charger l'ֳ©tat initial
-  await loadQueueCounts();
+  // Exécuter la vérification réseau ET le chargement de la queue EN PARALLÈLE
+  // pour ne pas cumuler les délais (AsyncStorage + NetInfo)
+  const [netState] = await Promise.all([
+    NetInfo.fetch(),
+    loadQueueCounts(),
+  ]);
 
-  // ֳ‰couter les changements de connectivitֳ©
-  NetInfo.addEventListener(handleConnectivityChange);
+  // Même logique que useNetworkStatus : null = état indéterminé → supposer online
+  currentState.isOnline =
+    netState.isConnected === true &&
+    (netState.isInternetReachable === true || netState.isInternetReachable === null);
 
-  // Vֳ©rifier l'ֳ©tat initial
-  const netState = await NetInfo.fetch();
-  currentState.isOnline = netState.isConnected ?? true;
+  // Marquer le service comme initialisé MAINTENANT que l'état réseau est connu
   initialized = true;
+
+  // Écouter les changements de connectivité APRÈS avoir fixé l'état initial
+  NetInfo.addEventListener(handleConnectivityChange);
 
   console.log(`[OfflineService] Initialized - online: ${currentState.isOnline}`);
 
-  // NOTE: Auto-sync dֳ©sactivֳ© au dֳ©marrage pour ֳ©viter de bloquer l'app
-  // La sync se fera automatiquement lors des changements de connectivitֳ©
-  // ou peut ֳ×tre dֳ©clenchֳ©e manuellement via offlineService.process()
-
-  // if (currentState.isOnline) {
-  //   processQueue();
-  // }
+  // Si on est online et qu'il y a des opérations en attente, les sync
+  if (currentState.isOnline && currentState.pendingCount > 0) {
+    processQueue();
+  }
 
   notifyListeners();
 }
@@ -114,11 +118,14 @@ export function setTransactionFunctions(functions: typeof transactionFunctions):
 }
 
 /**
- * Gֳ¨re les changements de connectivitֳ©
+ * Gère les changements de connectivité
  */
 async function handleConnectivityChange(state: NetInfoState): Promise<void> {
   const wasOffline = !currentState.isOnline;
-  currentState.isOnline = state.isConnected ?? true;
+  // Même logique que useNetworkStatus : null = indéterminé → supposer online
+  currentState.isOnline =
+    state.isConnected === true &&
+    (state.isInternetReachable === true || state.isInternetReachable === null);
 
   // Si on vient de revenir online, traiter la queue
   if (wasOffline && currentState.isOnline) {
