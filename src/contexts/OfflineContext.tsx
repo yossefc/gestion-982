@@ -11,6 +11,7 @@ import React, {
   useState,
   useEffect,
   useCallback,
+  useRef,
   ReactNode,
 } from 'react';
 import {
@@ -84,14 +85,22 @@ export const OfflineProvider: React.FC<OfflineProviderProps> = ({ children }) =>
   const [pendingOperations, setPendingOperations] = useState<PendingOperation[]>([]);
   const [failedOperations, setFailedOperations] = useState<PendingOperation[]>([]);
 
+  // Ref pour éviter de ré-initialiser le service si le Provider remonte
+  const initCalledRef = useRef(false);
+
   // Initialiser le service offline
   useEffect(() => {
-    initOfflineService().catch(console.error);
-
-    // S'abonner aux changements d'état
+    // S'abonner aux changements d'état EN PREMIER pour ne rater aucune mise à jour
     const unsubscribe = offlineService.subscribe((newState) => {
       setState(newState);
     });
+
+    // Initialiser le service une seule fois (la garde dans offlineService protège
+    // aussi des appels concurrents, mais on évite même l'appel inutile ici)
+    if (!initCalledRef.current) {
+      initCalledRef.current = true;
+      initOfflineService().catch(console.error);
+    }
 
     return () => unsubscribe();
   }, []);

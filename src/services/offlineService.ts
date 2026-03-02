@@ -53,6 +53,10 @@ export interface OfflineState {
 
 // Flag pour savoir si le service a ete initialise
 let initialized = false;
+// Flag pour éviter les initialisations concurrentes (appels simultanés à initOfflineService)
+let initializing = false;
+// Référence à l'unsubscribe NetInfo pour ne jamais enregistrer deux listeners
+let netInfoUnsubscribe: (() => void) | null = null;
 
 // ֳ‰tat global - isOnline est false par defaut pour etre conservatif
 // (mieux vaut queue une operation que d'echouer)
@@ -80,34 +84,48 @@ let transactionFunctions: Partial<Record<OperationType, TransactionFn>> = {};
 
 /**
  * Initialise le service offline
+ * Protégé contre les appels concurrents et multiples.
  */
 export async function initOfflineService(): Promise<void> {
-  // Exécuter la vérification réseau ET le chargement de la queue EN PARALLÈLE
-  // pour ne pas cumuler les délais (AsyncStorage + NetInfo)
-  const [netState] = await Promise.all([
-    NetInfo.fetch(),
-    loadQueueCounts(),
-  ]);
+  // Garde 1 : déjà initialisé → no-op
+  if (initialized) return;
+  // Garde 2 : initialisation en cours → attendre qu'elle finisse sans relancer
+  if (initializing) return;
+  initializing = true;
 
-  // Même logique que useNetworkStatus : null = état indéterminé → supposer online
-  currentState.isOnline =
-    netState.isConnected === true &&
-    (netState.isInternetReachable === true || netState.isInternetReachable === null);
+  try {
+    // Exécuter la vérification réseau ET le chargement de la queue EN PARALLÈLE
+    // pour ne pas cumuler les délais (AsyncStorage + NetInfo)
+    const [netState] = await Promise.all([
+      NetInfo.fetch(),
+      loadQueueCounts(),
+    ]);
 
-  // Marquer le service comme initialisé MAINTENANT que l'état réseau est connu
-  initialized = true;
+    // Même logique que useNetworkStatus : null = état indéterminé → supposer online
+    currentState.isOnline =
+      netState.isConnected === true &&
+      (netState.isInternetReachable === true || netState.isInternetReachable === null);
 
-  // Écouter les changements de connectivité APRÈS avoir fixé l'état initial
-  NetInfo.addEventListener(handleConnectivityChange);
+    // Marquer le service comme initialisé MAINTENANT que l'état réseau est connu
+    initialized = true;
 
-  console.log(`[OfflineService] Initialized - online: ${currentState.isOnline}`);
+    // Enregistrer le listener NetInfo UNE SEULE FOIS
+    // (stocker l'unsubscribe pour éviter les doublons si jamais appelé de nouveau)
+    if (!netInfoUnsubscribe) {
+      netInfoUnsubscribe = NetInfo.addEventListener(handleConnectivityChange);
+    }
 
-  // Si on est online et qu'il y a des opérations en attente, les sync
-  if (currentState.isOnline && currentState.pendingCount > 0) {
-    processQueue();
+    console.log(`[OfflineService] Initialized - online: ${currentState.isOnline}`);
+
+    // Si on est online et qu'il y a des opérations en attente, les sync
+    if (currentState.isOnline && currentState.pendingCount > 0) {
+      processQueue();
+    }
+
+    notifyListeners();
+  } finally {
+    initializing = false;
   }
-
-  notifyListeners();
 }
 
 /**
