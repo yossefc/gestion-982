@@ -1,5 +1,5 @@
-// Écran de retour d'équipement לחימה (זיכוי חייל) avec signature et WhatsApp
-import React, { useEffect, useState, useRef } from 'react';
+// Écran de retour d'équipement לחימה (זיכוי חייל) avec WhatsApp
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -7,14 +7,11 @@ import {
   StyleSheet,
   ScrollView,
   ActivityIndicator,
-  TextInput,
   Platform,
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
-import SignatureCanvas from 'react-native-signature-canvas';
 import { RootStackParamList, Soldier, AssignmentItem } from '../../types';
 import { soldierService, combatEquipmentService } from '../../services/firebaseService';
-import { assignmentService } from '../../services/assignmentService';
 import { transactionalAssignmentService } from '../../services/transactionalAssignmentService';
 import { useAuth } from '../../contexts/AuthContext';
 import { Colors, Shadows } from '../../theme/Colors';
@@ -42,15 +39,10 @@ const CombatReturnScreen: React.FC = () => {
   const { soldierId, isClearance } = route.params || {};
   const { user } = useAuth();
 
-  const signatureRef = useRef<any>(null);
-
   const [loading, setLoading] = useState(true);
   const [soldier, setSoldier] = useState<Soldier | null>(null);
   const [items, setItems] = useState<ReturnItem[]>([]);
   const [processing, setProcessing] = useState(false);
-  const [signature, setSignature] = useState<string | null>(null);
-  const [showSignature, setShowSignature] = useState(false);
-  const [scrollEnabled, setScrollEnabled] = useState(true);
 
   // AppModal state
   const [modalVisible, setModalVisible] = useState(false);
@@ -181,54 +173,6 @@ const CombatReturnScreen: React.FC = () => {
     );
   };
 
-  // Style du canvas de signature
-  const webStyle = `
-    .m-signature-pad {
-      position: fixed;
-      margin: auto;
-      top: 0;
-      left: 0;
-      right: 0;
-      width: 100%;
-      height: 100%;
-      box-shadow: none;
-      border: 2px solid #2c5f7c;
-      border-radius: 8px;
-      background-color: #ffffff;
-    }
-    .m-signature-pad--body {
-      border: none;
-    }
-    .m-signature-pad--footer {
-      display: none;
-    }
-    body,html {
-      margin: 0px;
-      padding: 0px;
-    }
-  `;
-
-  const handleBegin = () => {
-    setScrollEnabled(false);
-  };
-
-  const handleEnd = () => {
-    setScrollEnabled(true);
-    signatureRef.current?.readSignature();
-  };
-
-  const handleOK = (sig: string) => {
-    setSignature(sig);
-    setShowSignature(false);
-    setScrollEnabled(true);
-  };
-
-  const handleClear = () => {
-    signatureRef.current?.clearSignature();
-    setSignature(null);
-    setScrollEnabled(true);
-  };
-
   const handleReturnEquipment = async () => {
     const selectedItems = items.filter(
       item => item.selected && item.returnQuantity > 0
@@ -237,14 +181,6 @@ const CombatReturnScreen: React.FC = () => {
     if (selectedItems.length === 0) {
       setModalType('error');
       setModalMessage('אנא בחר לפחות פריט אחד לזיכוי');
-      setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
-      setModalVisible(true);
-      return;
-    }
-
-    if (!signature) {
-      setModalType('warning');
-      setModalMessage('אנא חתום לפני ביצוע הזיכוי');
       setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
       setModalVisible(true);
       return;
@@ -412,53 +348,6 @@ const CombatReturnScreen: React.FC = () => {
     );
   }
 
-  if (showSignature) {
-    return (
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => setShowSignature(false)}
-          >
-            <Text style={styles.backButtonText}>←</Text>
-          </TouchableOpacity>
-          <View style={styles.headerContent}>
-            <Text style={styles.title}>חתימת מקבל</Text>
-          </View>
-        </View>
-
-        <View style={styles.signatureContainer}>
-          <SignatureCanvas
-            ref={signatureRef}
-            onOK={handleOK}
-            onBegin={handleBegin}
-            onEnd={handleEnd}
-            descriptionText=""
-            clearText="נקה"
-            confirmText="שמור"
-            webStyle={webStyle}
-            backgroundColor="#ffffff"
-          />
-
-          <View style={styles.signatureButtons}>
-            <TouchableOpacity
-              style={styles.endSignatureButton}
-              onPress={handleEnd}
-            >
-              <Text style={styles.endSignatureText}>✓ סיים חתימה</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.clearSignatureButton}
-              onPress={handleClear}
-            >
-              <Text style={styles.clearSignatureText}>🗑️ נקה</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-    );
-  }
 
   return (
     <View style={styles.container}>
@@ -481,7 +370,6 @@ const CombatReturnScreen: React.FC = () => {
         style={styles.content}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
-        scrollEnabled={scrollEnabled}
       >
         {/* Soldier Info */}
         {soldier && (
@@ -501,8 +389,7 @@ const CombatReturnScreen: React.FC = () => {
           <Text style={styles.instructionsText}>
             • בחר את הפריטים שהחייל מחזיר{'\n'}
             • הגדר כמות לכל פריט{'\n'}
-            • בחר מסטבים אם רלוונטי{'\n'}
-            • חתום לאישור הזיכוי
+            • בחר מסטבים אם רלוונטי
           </Text>
         </View>
 
@@ -626,35 +513,6 @@ const CombatReturnScreen: React.FC = () => {
                 )}
               </View>
             ))}
-          </View>
-        )}
-
-        {/* Signature Section */}
-        {items.some(i => i.selected) && (
-          <View style={styles.signatureSection}>
-            <Text style={styles.sectionTitle}>חתימה</Text>
-            {signature ? (
-              <View style={styles.signaturePreview}>
-                <Text style={styles.signatureStatus}>✓ החתימה נשמרה</Text>
-                <TouchableOpacity
-                  style={styles.changeSignatureButton}
-                  onPress={() => setShowSignature(true)}
-                  disabled={processing}
-                >
-                  <Text style={styles.changeSignatureText}>
-                    שנה חתימה
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <TouchableOpacity
-                style={styles.signButton}
-                onPress={() => setShowSignature(true)}
-                disabled={processing}
-              >
-                <Text style={styles.signButtonText}>✍️ לחץ לחתימה</Text>
-              </TouchableOpacity>
-            )}
           </View>
         )}
 
@@ -977,86 +835,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   serialChipTextSelected: {
-    color: Colors.textWhite,
-  },
-  signatureSection: {
-    marginTop: 20,
-    marginBottom: 20,
-  },
-  signaturePreview: {
-    backgroundColor: Colors.backgroundCard,
-    borderRadius: 12,
-    padding: 20,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: Colors.success,
-  },
-  signatureStatus: {
-    fontSize: 16,
-    color: Colors.success,
-    fontWeight: 'bold',
-    marginBottom: 12,
-  },
-  changeSignatureButton: {
-    backgroundColor: Colors.backgroundSecondary,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
-  },
-  changeSignatureText: {
-    fontSize: 14,
-    color: Colors.text,
-    fontWeight: '600',
-  },
-  signButton: {
-    backgroundColor: Colors.arme,
-    borderRadius: 12,
-    padding: 18,
-    alignItems: 'center',
-    ...Shadows.medium,
-  },
-  signButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: Colors.textWhite,
-  },
-  signatureContainer: {
-    flex: 1,
-    padding: 20,
-  },
-  signatureButtons: {
-    position: 'absolute',
-    bottom: 30,
-    left: 20,
-    right: 20,
-    flexDirection: 'row',
-    gap: 12,
-    zIndex: 10,
-  },
-  endSignatureButton: {
-    flex: 1,
-    backgroundColor: Colors.success,
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-    ...Shadows.medium,
-  },
-  endSignatureText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: Colors.textWhite,
-  },
-  clearSignatureButton: {
-    flex: 1,
-    backgroundColor: Colors.danger,
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-    ...Shadows.medium,
-  },
-  clearSignatureText: {
-    fontSize: 16,
-    fontWeight: 'bold',
     color: Colors.textWhite,
   },
   emptyCard: {
