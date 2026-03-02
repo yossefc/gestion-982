@@ -28,6 +28,8 @@ interface User {
   displayName?: string;
   role: UserRole;
   company?: string;  // פלוגה - requis pour le rôle RSP
+  signature?: string;
+  rank?: string;
 }
 
 const ROLES = [
@@ -167,6 +169,21 @@ const UserManagementScreen: React.FC = () => {
             {roleConfig.label}
           </Text>
         </View>
+
+        <TouchableOpacity
+          style={styles.sigButton}
+          onPress={() => navigation.navigate('UserProfile', { userId: item.id })}
+          activeOpacity={0.7}
+        >
+          <Ionicons
+            name="create-outline"
+            size={18}
+            color={item.signature ? Colors.success : Colors.textLight}
+          />
+          {item.signature && (
+            <View style={styles.sigDot} />
+          )}
+        </TouchableOpacity>
 
         <Ionicons name="chevron-back" size={20} color={Colors.textLight} />
       </TouchableOpacity>
@@ -671,6 +688,30 @@ const styles = StyleSheet.create({
     fontSize: FontSize.base,
     fontWeight: '600',
     color: Colors.textWhite,
+  },
+
+  // Signature button on user card
+  sigButton: {
+    width: 36,
+    height: 36,
+    borderRadius: BorderRadius.full,
+    backgroundColor: Colors.backgroundInput,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: Spacing.xs,
+    position: 'relative',
+  },
+
+  sigDot: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: Colors.success,
+    borderWidth: 1.5,
+    borderColor: Colors.backgroundCard,
   },
 
   // My Profile button

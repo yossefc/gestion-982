@@ -206,7 +206,7 @@ export type RootStackParamList = {
   // Admin
   AdminPanel: undefined;
   UserManagement: undefined;
-  UserProfile: undefined;
+  UserProfile: { userId?: string } | undefined;
   HoldingsRecalculate: undefined;
   DatabaseDebug: undefined;
   Migration: undefined;

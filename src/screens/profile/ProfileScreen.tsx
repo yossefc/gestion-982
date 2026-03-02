@@ -1,9 +1,10 @@
 /**
  * ProfileScreen.tsx - Profil du מנפק (opérateur)
- * Permet de sauvegarder sa signature et son grade une fois pour toutes
+ * Permet de sauvegarder la signature et le grade d'un utilisateur.
+ * Peut être utilisé pour l'utilisateur courant ou un autre utilisateur (admin).
  */
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -16,19 +17,32 @@ import {
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import SignatureCanvas from 'react-native-signature-canvas';
 import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
 import { useAuth } from '../../contexts/AuthContext';
 import { userService } from '../../services/userService';
 import { AppModal } from '../../components';
+import { User } from '../../types';
 
 const ProfileScreen: React.FC = () => {
   const navigation = useNavigation();
-  const { user, refreshUser } = useAuth();
+  const route = useRoute();
+  const { user: currentUser, refreshUser } = useAuth();
   const signatureRef = useRef<any>(null);
 
-  const [rank, setRank] = useState(user?.rank || '');
+  // userId param: if set and different from currentUser → edit another user
+  const params = route.params as { userId?: string } | undefined;
+  const targetUserId = params?.userId || currentUser?.id || '';
+  const isEditingOtherUser = !!params?.userId && params.userId !== currentUser?.id;
+
+  // Target user data (loaded from Firestore if editing another user)
+  const [targetUser, setTargetUser] = useState<User | null>(
+    isEditingOtherUser ? null : (currentUser as User | null)
+  );
+  const [loadingUser, setLoadingUser] = useState(isEditingOtherUser);
+
+  const [rank, setRank] = useState('');
   const [newSignatureData, setNewSignatureData] = useState<string | null>(null);
   const [showCanvas, setShowCanvas] = useState(false);
   const [scrollEnabled, setScrollEnabled] = useState(true);
@@ -40,6 +54,28 @@ const ProfileScreen: React.FC = () => {
   const [modalMessage, setModalMessage] = useState('');
   const [modalTitle, setModalTitle] = useState<string | undefined>(undefined);
   const [modalButtons, setModalButtons] = useState<any[]>([]);
+
+  // Load target user if editing another user
+  useEffect(() => {
+    if (!isEditingOtherUser) {
+      // Use currentUser data
+      setRank(currentUser?.rank || '');
+      return;
+    }
+    const loadUser = async () => {
+      try {
+        setLoadingUser(true);
+        const userData = await userService.getById(targetUserId);
+        setTargetUser(userData);
+        setRank(userData?.rank || '');
+      } catch (e) {
+        console.error('[ProfileScreen] Error loading user:', e);
+      } finally {
+        setLoadingUser(false);
+      }
+    };
+    loadUser();
+  }, [targetUserId, isEditingOtherUser]);
 
   const handleSignatureEnd = () => {
     signatureRef.current?.readSignature();
@@ -63,9 +99,10 @@ const ProfileScreen: React.FC = () => {
   };
 
   const handleSave = async () => {
-    if (!user) return;
+    if (!targetUserId) return;
 
-    const signatureToSave = newSignatureData || user.signature || null;
+    const existingSignature = isEditingOtherUser ? targetUser?.signature : currentUser?.signature;
+    const signatureToSave = newSignatureData || existingSignature || null;
 
     if (!signatureToSave) {
       setModalType('warning');
@@ -78,9 +115,20 @@ const ProfileScreen: React.FC = () => {
 
     try {
       setSaving(true);
-      await userService.updateSignature(user.id, signatureToSave);
-      await userService.updateRank(user.id, rank.trim());
-      await refreshUser();
+      await userService.updateSignature(targetUserId, signatureToSave);
+      await userService.updateRank(targetUserId, rank.trim());
+
+      // If editing current user, refresh their session data
+      if (!isEditingOtherUser) {
+        await refreshUser();
+      } else {
+        // Update local state to reflect saved data
+        setTargetUser(prev => prev ? { ...prev, signature: signatureToSave, rank: rank.trim() } : prev);
+      }
+
+      setNewSignatureData(null);
+      setShowCanvas(false);
+
       setModalType('success');
       setModalTitle('הצלחה');
       setModalMessage('הפרופיל עודכן בהצלחה');
@@ -103,7 +151,17 @@ const ProfileScreen: React.FC = () => {
     }
   };
 
-  const currentSignature = newSignatureData || user?.signature || null;
+  const displayUser = isEditingOtherUser ? targetUser : currentUser;
+  const currentSignature = newSignatureData || (isEditingOtherUser ? targetUser?.signature : currentUser?.signature) || null;
+
+  if (loadingUser) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={Colors.arme} />
+        <Text style={styles.loadingText}>טוען פרופיל...</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -113,7 +171,9 @@ const ProfileScreen: React.FC = () => {
           <Ionicons name="arrow-forward" size={24} color={Colors.textWhite} />
         </TouchableOpacity>
         <View style={styles.headerTitleContainer}>
-          <Text style={styles.headerTitle}>פרופיל מנפק</Text>
+          <Text style={styles.headerTitle}>
+            {isEditingOtherUser ? 'עריכת פרופיל משתמש' : 'הפרופיל שלי'}
+          </Text>
           <Text style={styles.headerSubtitle}>חתימה ודרגה</Text>
         </View>
         <View style={styles.headerSpacer} />
@@ -130,8 +190,10 @@ const ProfileScreen: React.FC = () => {
             <Ionicons name="person" size={36} color={Colors.arme} />
           </View>
           <View style={styles.userInfo}>
-            <Text style={styles.userName}>{user?.name || user?.email}</Text>
-            <Text style={styles.userEmail}>{user?.email}</Text>
+            <Text style={styles.userName}>
+              {displayUser?.name || displayUser?.displayName || displayUser?.email?.split('@')[0] || ''}
+            </Text>
+            <Text style={styles.userEmail}>{displayUser?.email || ''}</Text>
           </View>
         </View>
 
@@ -151,7 +213,7 @@ const ProfileScreen: React.FC = () => {
         {/* Signature section */}
         <Text style={styles.sectionTitle}>חתימת מנפק</Text>
         <Text style={styles.sectionSubtitle}>
-          החתימה תשמש בכל טפסי ההחתמה שתפיק
+          החתימה תשמש בכל טפסי ההחתמה שיופקו על ידי משתמש זה
         </Text>
 
         {/* Current signature preview */}
@@ -220,14 +282,12 @@ const ProfileScreen: React.FC = () => {
                 <Text style={styles.confirmButtonText}>קלוט חתימה</Text>
               </TouchableOpacity>
             </View>
-            {newSignatureData && (
+            {currentSignature && (
               <TouchableOpacity
                 style={styles.cancelCanvasButton}
-                onPress={() => {
-                  setShowCanvas(false);
-                }}
+                onPress={() => setShowCanvas(false)}
               >
-                <Text style={styles.cancelCanvasText}>ביטול</Text>
+                <Text style={styles.cancelCanvasText}>ביטול — שמור חתימה קיימת</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -266,6 +326,19 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,
+  },
+
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.background,
+  },
+
+  loadingText: {
+    marginTop: Spacing.md,
+    fontSize: FontSize.base,
+    color: Colors.textSecondary,
   },
 
   // Header

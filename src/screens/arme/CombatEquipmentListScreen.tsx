@@ -16,7 +16,7 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { CombatEquipment } from '../../types';
 import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
 import { AppModal, ModalType } from '../../components';
-import { combatEquipmentService, DEFAULT_COMBAT_EQUIPMENT } from '../../services/firebaseService';
+import { combatEquipmentService } from '../../services/firebaseService';
 import { useData } from '../../contexts/DataContext';
 
 const CATEGORY_CONFIG: { [key: string]: { icon: string; color: string } } = {
@@ -53,40 +53,8 @@ const CombatEquipmentListScreen: React.FC = () => {
   const loadEquipment = async () => {
     try {
       const data = await combatEquipmentService.getAll();
-
-      if (data.length === 0) {
-        setModalType('info');
-        setModalTitle('אין ציוד במערכת');
-        setModalMessage('האם ברצונך להוסיף ציוד ברירת מחדל?');
-        setModalButtons([
-          { text: 'לא', style: 'outline', onPress: () => setModalVisible(false) },
-          {
-            text: 'כן, הוסף',
-            style: 'primary',
-            onPress: async () => {
-              setModalVisible(false);
-              try {
-                for (const eq of DEFAULT_COMBAT_EQUIPMENT) {
-                  await combatEquipmentService.create(eq);
-                }
-                refreshCombatEquipment().catch(console.error);
-                loadEquipment();
-              } catch (error) {
-                console.error('Error adding default equipment:', error);
-                setModalType('error');
-                setModalMessage('נכשל בהוספת ציוד ברירת מחדל');
-                setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
-                setModalVisible(true);
-              }
-            }
-          }
-        ]);
-        setModalVisible(true);
-      }
-
       setEquipment(data);
     } catch (error) {
-      console.error('Error loading equipment:', error);
       console.error('Error loading equipment:', error);
       setModalType('error');
       setModalMessage('נכשל בטעינת הציוד');
