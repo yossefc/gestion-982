@@ -20,7 +20,7 @@ import { useNavigation } from '@react-navigation/native';
 import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
 import { assignmentService } from '../../services/assignmentService';
 import { Assignment } from '../../types';
-import { generateAndPrintPDF, PrintAssignmentData } from '../../utils/printUtils';
+import { generateAndPrintMultiPDF, PrintAssignmentData } from '../../utils/printUtils';
 import { AppModal } from '../../components';
 
 const UnprintedSignaturesScreen: React.FC = () => {
@@ -118,24 +118,25 @@ const UnprintedSignaturesScreen: React.FC = () => {
     try {
       const selected = assignments.filter(a => selectedIds.has(a.id!));
 
-      for (const assignment of selected) {
-        const printData: PrintAssignmentData = {
-          soldierName: assignment.soldierName,
-          soldierPersonalNumber: assignment.soldierPersonalNumber,
-          soldierPhone: assignment.soldierPhone,
-          soldierCompany: assignment.soldierCompany,
-          items: assignment.items || [],
-          signature: assignment.signature || '',
-          operatorSignature: undefined,
-          operatorName: assignment.assignedByName || assignment.assignedByEmail || '',
-          timestamp:
-            assignment.timestamp instanceof Date
-              ? assignment.timestamp
-              : new Date(assignment.timestamp),
-          assignmentId: assignment.id,
-        };
-        await generateAndPrintPDF(printData);
-      }
+      // Construire les données d'impression pour tous les formulaires sélectionnés
+      const printDataList: PrintAssignmentData[] = selected.map(assignment => ({
+        soldierName: assignment.soldierName,
+        soldierPersonalNumber: assignment.soldierPersonalNumber,
+        soldierPhone: assignment.soldierPhone,
+        soldierCompany: assignment.soldierCompany,
+        items: assignment.items || [],
+        signature: assignment.signature || '',
+        operatorSignature: undefined,
+        operatorName: assignment.assignedByName || assignment.assignedByEmail || '',
+        timestamp:
+          assignment.timestamp instanceof Date
+            ? assignment.timestamp
+            : new Date(assignment.timestamp),
+        assignmentId: assignment.id,
+      }));
+
+      // Un seul appel Print.printAsync avec toutes les pages — fonctionne sur iOS et Android
+      await generateAndPrintMultiPDF(printDataList);
 
       // Marquer comme imprimés dans Firestore
       const idsToMark = Array.from(selectedIds);
