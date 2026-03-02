@@ -28,7 +28,6 @@ import { weaponInventoryService } from '../../services/weaponInventoryService';
 import { printQueueService } from '../../services/printQueueService';
 import { useAuth } from '../../contexts/AuthContext';
 import { useData } from '../../contexts/DataContext';
-import { useIsOnline } from '../../contexts/OfflineContext';
 import { Mana, WeaponInventoryItem, Assignment } from '../../types';
 import { openWhatsAppChat } from '../../services/whatsappService';
 import { AppModal } from '../../components';
@@ -61,7 +60,6 @@ const CombatAssignmentScreen: React.FC = () => {
 
   // OPTIMISÉ: Utiliser le cache centralisé pour équipements et manot
   const { combatEquipment, manot: cachedManot, isInitialized } = useData();
-  const isOnline = useIsOnline();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -75,8 +73,6 @@ const CombatAssignmentScreen: React.FC = () => {
   const [showSignature, setShowSignature] = useState(false);
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
   const [existingAssignments, setExistingAssignments] = useState<any[]>([]);
-  const [isOfflineMode, setIsOfflineMode] = useState(false);
-  const [dataLoaded, setDataLoaded] = useState(false);
 
   // Weapon inventory for autocomplete
   const [availableWeapons, setAvailableWeapons] = useState<WeaponInventoryItem[]>([]);
@@ -88,7 +84,6 @@ const CombatAssignmentScreen: React.FC = () => {
   const [successModalData, setSuccessModalData] = useState<{
     assignmentForPrint: any;
     whatsappMessage: string;
-    isQueuedOffline?: boolean;
   } | null>(null);
 
   // AppModal state
@@ -98,43 +93,21 @@ const CombatAssignmentScreen: React.FC = () => {
   const [modalTitle, setModalTitle] = useState<string | undefined>(undefined);
   const [modalButtons, setModalButtons] = useState<any[]>([]);
 
-  // OPTIMISE: Utiliser les donnees du cache des qu'elles sont disponibles
-  // Mode offline: continuer meme si pas completement initialise
+  // Utiliser les donnees du cache des qu'elles sont disponibles
   useEffect(() => {
-    // Ne pas recharger si deja en mode offline ou si donnees deja chargees
-    if (isOfflineMode || dataLoaded) return;
-
-    // Si on a des donnees en cache, les utiliser immediatement
     if (combatEquipment.length > 0 || cachedManot.length > 0 || isInitialized) {
       setEquipment(combatEquipment as Equipment[]);
       setManot(cachedManot);
       loadSoldierSpecificData();
-      setDataLoaded(true);
     }
-  }, [isInitialized, combatEquipment, cachedManot, isOfflineMode, dataLoaded]);
+  }, [isInitialized]);
 
-  // Sync manot depuis le contexte meme apres le timeout offline
-  // Fix: le timeout peut se declencher avant que DataContext ait fini de charger les manot
+  // Sync manot depuis le contexte quand elles changent
   useEffect(() => {
     if (cachedManot.length > 0) {
       setManot(cachedManot);
     }
   }, [cachedManot]);
-
-  // Timeout de securite: apres 3 secondes, continuer quand meme (mode offline)
-  // Ce timeout gere TOUS les cas de blocage: authLoading, Firebase lent, etc.
-  useEffect(() => {
-    const timeout = setTimeout(() => {
-      if (loading) {
-        console.log('[CombatAssignment] Timeout (3s) - proceeding in offline mode');
-        setIsOfflineMode(true);
-        setEquipment(combatEquipment as Equipment[]);
-        setManot(cachedManot);
-        setLoading(false);
-      }
-    }, 3000); // Reduit a 3 secondes pour une meilleure UX
-    return () => clearTimeout(timeout);
-  }, [loading, combatEquipment, cachedManot]);
 
   // Charger uniquement les données spécifiques au soldat (pas en cache global)
   const loadSoldierSpecificData = async () => {
@@ -484,8 +457,7 @@ const CombatAssignmentScreen: React.FC = () => {
           requestId,
         });
 
-      const isQueuedOffline = assignmentId.startsWith('LOCAL_');
-      console.log('[CombatAssignment] Transactional assignment created:', assignmentId, isQueuedOffline ? '(QUEUED OFFLINE)' : '');
+      console.log('[CombatAssignment] Transactional assignment created:', assignmentId);
 
       // Update weapon inventory status for each weapon with serial number
       const weaponUpdatePromises: Promise<any>[] = [];
@@ -518,18 +490,11 @@ const CombatAssignmentScreen: React.FC = () => {
         }
       }
 
-      // Wait for all weapon updates / queues
+      // Wait for all weapon updates
       if (weaponUpdatePromises.length > 0) {
         console.log(`[CombatAssignment] Updating ${weaponUpdatePromises.length} weapons...`);
-        if (isOnline) {
-          await Promise.all(weaponUpdatePromises);
-          console.log(`[CombatAssignment] Updated/queued ${weaponUpdatePromises.length} weapons`);
-        } else {
-          // Offline: fire-and-forget to avoid blocking UI
-          Promise.allSettled(weaponUpdatePromises).then(() => {
-            console.log(`[CombatAssignment] Queued ${weaponUpdatePromises.length} weapons (offline)`);
-          });
-        }
+        await Promise.all(weaponUpdatePromises);
+        console.log(`[CombatAssignment] Updated ${weaponUpdatePromises.length} weapons`);
       }
 
       console.log('[CombatAssignment] Save completed successfully');
@@ -548,28 +513,21 @@ const CombatAssignmentScreen: React.FC = () => {
       */
 
       // Envoyer à la file d'attente EN ARRIÈRE-PLAN (ne bloque pas l'affichage)
-      // Si offline, ne pas lancer la génération PDF (trop lent / timeout)
-      if (!isQueuedOffline && isOnline) {
-        // On lance la promesse sans await pour ne pas bloquer
-        sendToPrintQueue({
-          soldierName: soldier.name,
-          soldierPersonalNumber: soldier.personalNumber,
-          soldierPhone: soldier.phone,
-          soldierCompany: soldier.company,
-          items,
-          signature: signatureData,
-          operatorSignature: user?.signature || undefined,
-          timestamp: new Date(),
-          assignmentId,
-        }).then(() => {
-          console.log('[CombatAssignment] Print queue sent successfully (background)');
-        }).catch((printError) => {
-          console.error('[CombatAssignment] Print queue error (background):', printError);
-          // On ne bloque pas l'utilisateur, juste un log
-        });
-      } else {
-        console.log('[CombatAssignment] Offline - skipping print queue generation');
-      }
+      sendToPrintQueue({
+        soldierName: soldier.name,
+        soldierPersonalNumber: soldier.personalNumber,
+        soldierPhone: soldier.phone,
+        soldierCompany: soldier.company,
+        items,
+        signature: signatureData,
+        operatorSignature: user?.signature || undefined,
+        timestamp: new Date(),
+        assignmentId,
+      }).then(() => {
+        console.log('[CombatAssignment] Print queue sent successfully (background)');
+      }).catch((printError) => {
+        console.error('[CombatAssignment] Print queue error (background):', printError);
+      });
 
       // Generate WhatsApp message
       let whatsappMessage = `שלום ${soldier.name},\n\nההחתמה בוצעה בהצלחה.\n\n`;
@@ -653,12 +611,9 @@ const CombatAssignmentScreen: React.FC = () => {
         });
       }
 
-      // Show success modal with animated green checkmark
-      // Note: isQueuedOffline indicates the operation was queued for later sync
       setSuccessModalData({
         assignmentForPrint,
         whatsappMessage,
-        isQueuedOffline,
       });
       setShowSuccessModal(true);
     } catch (error: any) {
@@ -685,9 +640,7 @@ const CombatAssignmentScreen: React.FC = () => {
     return acc;
   }, {} as Record<string, Equipment[]>);
 
-  // Afficher le loading seulement si on charge ET qu'on n'est pas en mode offline
-  // Le timeout de 3s garantit qu'on ne reste jamais bloque indefiniment
-  if (loading && !isOfflineMode) {
+  if (loading) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={Colors.arme} />
@@ -808,17 +761,6 @@ const CombatAssignmentScreen: React.FC = () => {
             {selectionMode === 'mana' && !selectedMana && (
               <View>
                 <Text style={styles.sectionTitle}>בחר מנה</Text>
-                {/* Offline banner when no data available */}
-                {!isOnline && manot.length === 0 && (
-                  <View style={styles.offlineWarning}>
-                    <Ionicons name="cloud-offline" size={24} color="#92400E" />
-                    <Text style={styles.offlineWarningTitle}>אין חיבור לאינטרנט</Text>
-                    <Text style={styles.offlineWarningText}>
-                      לא נמצאו מנות בזיכרון המקומי.{'\n'}
-                      התחבר לאינטרנט כדי לטעון את המנות, ואז הן יהיו זמינות גם offline.
-                    </Text>
-                  </View>
-                )}
                 <View style={styles.manotList}>
                   {manot.map(mana => (
                     <TouchableOpacity
@@ -866,17 +808,6 @@ const CombatAssignmentScreen: React.FC = () => {
             {/* Equipment by Category */}
             {((selectionMode === 'manual') || (selectionMode === 'mana' && selectedMana)) && (
               <>
-                {/* Offline warning when no equipment available */}
-                {!isOnline && equipment.length === 0 && (
-                  <View style={styles.offlineWarning}>
-                    <Ionicons name="cloud-offline" size={24} color="#92400E" />
-                    <Text style={styles.offlineWarningTitle}>אין חיבור לאינטרנט</Text>
-                    <Text style={styles.offlineWarningText}>
-                      לא נמצא ציוד בזיכרון המקומי.{'\n'}
-                      התחבר לאינטרנט כדי לטעון את רשימת הציוד.
-                    </Text>
-                  </View>
-                )}
                 {/* Show info based on mode */}
                 {selectionMode === 'manual' && selectedMana && (
                   <View style={styles.manualModeInfo}>
@@ -1289,14 +1220,12 @@ const CombatAssignmentScreen: React.FC = () => {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* Success Modal with animated green checkmark */}
+      {/* Success Modal */}
       <AppModal
         visible={showSuccessModal}
-        type={successModalData?.isQueuedOffline ? 'warning' : 'success'}
-        title={successModalData?.isQueuedOffline ? 'נשמר מקומית' : 'הצלחה!'}
-        message={successModalData?.isQueuedOffline
-          ? 'ההחתמה נשמרה מקומית ותסונכרן אוטומטית כשתחזור לאינטרנט.\n\nניתן להמשיך לעבוד במצב אופליין.'
-          : 'ההחתמה בוצעה בהצלחה והמסמך נשלח למדפסת'}
+        type="success"
+        title="הצלחה!"
+        message="ההחתמה בוצעה בהצלחה והמסמך נשלח למדפסת"
         buttons={[
           {
             text: 'סגור',
@@ -1307,35 +1236,32 @@ const CombatAssignmentScreen: React.FC = () => {
               navigation.goBack();
             },
           },
-          // Pas de boutons print/WhatsApp en mode offline
-          ...(successModalData?.isQueuedOffline ? [] : [
-            {
-              text: 'הדפס שוב',
-              style: 'secondary' as const,
-              icon: 'print' as const,
-              onPress: async () => {
-                if (successModalData) {
-                  await generateAndPrintPDF(successModalData.assignmentForPrint);
-                }
-              },
+          {
+            text: 'הדפס שוב',
+            style: 'secondary' as const,
+            icon: 'print' as const,
+            onPress: async () => {
+              if (successModalData) {
+                await generateAndPrintPDF(successModalData.assignmentForPrint);
+              }
             },
-            ...(soldier.phone ? [{
-              text: 'שלח WhatsApp',
-              style: 'outline' as const,
-              icon: 'logo-whatsapp' as const,
-              onPress: async () => {
-                if (successModalData) {
-                  try {
-                    await openWhatsAppChat(soldier.phone, successModalData.whatsappMessage);
-                  } catch (e) {
-                    console.error('WhatsApp error:', e);
-                  }
+          },
+          ...(soldier.phone ? [{
+            text: 'שלח WhatsApp',
+            style: 'outline' as const,
+            icon: 'logo-whatsapp' as const,
+            onPress: async () => {
+              if (successModalData) {
+                try {
+                  await openWhatsAppChat(soldier.phone, successModalData.whatsappMessage);
+                } catch (e) {
+                  console.error('WhatsApp error:', e);
                 }
-                setShowSuccessModal(false);
-                navigation.goBack();
-              },
-            }] : []),
-          ]),
+              }
+              setShowSuccessModal(false);
+              navigation.goBack();
+            },
+          }] : []),
         ]}
         onClose={() => {
           setShowSuccessModal(false);
@@ -1372,33 +1298,6 @@ const styles = StyleSheet.create({
     marginTop: Spacing.md,
     fontSize: FontSize.base,
     color: Colors.textSecondary,
-  },
-
-  // Offline Warning
-  offlineWarning: {
-    backgroundColor: '#FEF3C7',
-    borderRadius: BorderRadius.lg,
-    padding: Spacing.xl,
-    marginHorizontal: Spacing.lg,
-    marginVertical: Spacing.md,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#F59E0B',
-  },
-
-  offlineWarningTitle: {
-    fontSize: FontSize.lg,
-    fontWeight: '600',
-    color: '#92400E',
-    marginTop: Spacing.sm,
-    marginBottom: Spacing.xs,
-  },
-
-  offlineWarningText: {
-    fontSize: FontSize.sm,
-    color: '#92400E',
-    textAlign: 'center',
-    lineHeight: 20,
   },
 
   // Header
