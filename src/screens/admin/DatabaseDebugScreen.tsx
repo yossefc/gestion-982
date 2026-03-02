@@ -665,6 +665,56 @@ const DatabaseDebugScreen: React.FC = () => {
           </View>
         </TouchableOpacity>
 
+        <TouchableOpacity
+          style={styles.actionButton}
+          onPress={async () => {
+            setModalType('warning');
+            setModalTitle('ניקוי ציוד כללי');
+            setModalMessage('זה ימחק את ה-\"M16\" הכללי (ומספר פריטי ברירת מחדל נוספים) כדי למנוע כפילויות בטבלת המלאי. האם להמשיך?');
+            setModalButtons([
+              { text: 'ביטול', style: 'outline', onPress: () => setModalVisible(false) },
+              {
+                text: 'מחק',
+                style: 'destructive',
+                onPress: async () => {
+                  setModalVisible(false);
+                  setLoading(true);
+                  try {
+                    const allEq = await combatEquipmentService.getAll();
+                    const m16s = allEq.filter(e => e.name === 'M16' && !e.hasSubEquipment);
+                    // Delete all generic M16s or other generic items if needed
+                    // Here we delete any equipment named exactly M16 (which is generic, not the serial ones which are in weapons_inventory)
+                    const equipmentsToDelete = allEq.filter(e => e.name === 'M16' || e.name === 'M203');
+                    for (const eq of equipmentsToDelete) {
+                      await combatEquipmentService.delete(eq.id);
+                    }
+                    setModalType('success');
+                    setModalTitle('הצלחה');
+                    setModalMessage('הציוד הכללי נמחק מהמערכת.');
+                    setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+                    setModalVisible(true);
+                  } catch (e) {
+                    setModalType('error');
+                    setModalMessage('שגיאה במחיקת הציוד');
+                    setModalVisible(true);
+                  }
+                  setLoading(false);
+                }
+              }
+            ]);
+            setModalVisible(true);
+          }}
+          activeOpacity={0.8}
+        >
+          <View style={[styles.actionIcon, { backgroundColor: Colors.danger + '20' }]}>
+            <Ionicons name="trash" size={24} color={Colors.danger} />
+          </View>
+          <View style={styles.actionContent}>
+            <Text style={styles.actionTitle}>מחק M16 וכלי נשק כלליים</Text>
+            <Text style={styles.actionSubtitle}>מונע כפילויות בטבלת מלאי (M16 / M203)</Text>
+          </View>
+        </TouchableOpacity>
+
         {/* Discrepancy Results */}
         {weaponDiscrepancies.length > 0 && (
           <View style={styles.resultsContainer}>

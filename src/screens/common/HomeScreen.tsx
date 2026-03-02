@@ -225,33 +225,6 @@ const HomeScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* Répartition par compagnie */}
-        <View style={styles.sectionHeader}>
-          <View style={styles.sectionDot} />
-          <Text style={styles.sectionTitle}>פילוח לפי פלוגות</Text>
-        </View>
-
-        <View style={styles.companiesCard}>
-          {companiesList.map(({ company, recruited, released, color }) => (
-            <View key={company} style={styles.companyItem}>
-              <View style={styles.companyInfo}>
-                <View style={[styles.companyDot, { backgroundColor: color }]} />
-                <Text style={styles.companyName}>{company}</Text>
-              </View>
-              <View style={styles.companyStatsRow}>
-                <View style={[styles.companyBadge, { backgroundColor: '#10B98120' }]}>
-                  <Text style={[styles.companyBadgeText, { color: '#10B981' }]}>{recruited}</Text>
-                  <Text style={[styles.companyBadgeLabel, { color: '#10B981' }]}>מגויס</Text>
-                </View>
-                <View style={[styles.companyBadge, { backgroundColor: '#3B82F620' }]}>
-                  <Text style={[styles.companyBadgeText, { color: '#3B82F6' }]}>{released}</Text>
-                  <Text style={[styles.companyBadgeLabel, { color: '#3B82F6' }]}>משוחרר</Text>
-                </View>
-              </View>
-            </View>
-          ))}
-        </View>
-
         {/* Modules */}
         <View style={styles.sectionHeader}>
           <View style={styles.sectionDot} />
@@ -360,11 +333,34 @@ const HomeScreen: React.FC = () => {
           )}
         </View>
 
-        {/* Actions rapides */}
+        {/* Répartition par compagnie */}
         <View style={styles.sectionHeader}>
           <View style={styles.sectionDot} />
-          <Text style={styles.sectionTitle}>פעולות מהירות</Text>
+          <Text style={styles.sectionTitle}>פילוח לפי פלוגות</Text>
         </View>
+
+        <View style={styles.companiesCard}>
+          {companiesList.map(({ company, recruited, released, color }) => (
+            <View key={company} style={styles.companyItem}>
+              <View style={styles.companyInfo}>
+                <View style={[styles.companyDot, { backgroundColor: color }]} />
+                <Text style={styles.companyName}>{company}</Text>
+              </View>
+              <View style={styles.companyStatsRow}>
+                <View style={[styles.companyBadge, { backgroundColor: '#10B98120' }]}>
+                  <Text style={[styles.companyBadgeText, { color: '#10B981' }]}>{recruited}</Text>
+                  <Text style={[styles.companyBadgeLabel, { color: '#10B981' }]}>מגויס</Text>
+                </View>
+                <View style={[styles.companyBadge, { backgroundColor: '#3B82F620' }]}>
+                  <Text style={[styles.companyBadgeText, { color: '#3B82F6' }]}>{released}</Text>
+                  <Text style={[styles.companyBadgeLabel, { color: '#3B82F6' }]}>משוחרר</Text>
+                </View>
+              </View>
+            </View>
+          ))}
+        </View>
+
+
 
         <View style={styles.quickActionsRow}>
         </View>
