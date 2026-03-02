@@ -111,6 +111,14 @@ const CombatAssignmentScreen: React.FC = () => {
     }
   }, [isInitialized, combatEquipment, cachedManot, isOfflineMode, dataLoaded]);
 
+  // Sync manot depuis le contexte meme apres le timeout offline
+  // Fix: le timeout peut se declencher avant que DataContext ait fini de charger les manot
+  useEffect(() => {
+    if (cachedManot.length > 0) {
+      setManot(cachedManot);
+    }
+  }, [cachedManot]);
+
   // Timeout de securite: apres 3 secondes, continuer quand meme (mode offline)
   // Ce timeout gere TOUS les cas de blocage: authLoading, Firebase lent, etc.
   useEffect(() => {
