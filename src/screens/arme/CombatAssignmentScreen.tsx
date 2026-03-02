@@ -339,6 +339,7 @@ const CombatAssignmentScreen: React.FC = () => {
     items: any[];
     signature: string;
     timestamp: Date;
+    assignmentId?: string;
   }) => {
     try {
       console.log('[CombatAssignment] Sending document to print queue...');
@@ -386,6 +387,7 @@ const CombatAssignmentScreen: React.FC = () => {
     items: any[];
     signature: string;
     timestamp: Date;
+    assignmentId?: string;
   }) => {
     const dateStr = assignmentData.timestamp.toLocaleDateString('he-IL', {
       year: 'numeric',
@@ -402,15 +404,20 @@ const CombatAssignmentScreen: React.FC = () => {
 
     // Générer les lignes du tableau avec numéro de série
     const itemsRows = assignmentData.items
-      .map((item, index) => `
+      .map((item, index) => {
+        const serialDisplay = item.serial
+          ? item.serial.split(', ').join('<br>')
+          : '-';
+        return `
       <tr>
         <td class="cell cell-center">${index + 1}</td>
         <td class="cell cell-right">${item.equipmentName}</td>
         <td class="cell cell-center">${item.quantity}</td>
-        <td class="cell cell-center">${item.serial || '-'}</td>
+        <td class="cell cell-center">${serialDisplay}</td>
         <td class="cell cell-right"></td>
       </tr>
-    `).join('');
+    `;
+      }).join('');
 
     // Lignes vides pour le formulaire (au moins 10 lignes au total)
     const emptyRowsCount = Math.max(0, 10 - assignmentData.items.length);
@@ -629,7 +636,7 @@ const CombatAssignmentScreen: React.FC = () => {
     <div class="header-center">
       <div class="doc-title">טופס החתמה על ציוד לחימה</div>
       <div class="doc-subtitle">גדוד 982</div>
-      <div class="voucher-number">מספר שובר: _______________</div>
+      <div class="voucher-number">מספר שובר: ${assignmentData.assignmentId || '_______________'}</div>
     </div>
     <div class="header-left">
       <div style="font-size: 10px;">תאריך: ${dateStr}</div>
@@ -691,8 +698,8 @@ const CombatAssignmentScreen: React.FC = () => {
         <span class="signature-value">${assignmentData.soldierName}</span>
       </div>
       <div class="signature-row">
-        <span class="signature-label">דרגה:</span>
-        <span class="signature-value"></span>
+        <span class="signature-label">פלוגה:</span>
+        <span class="signature-value">${assignmentData.soldierCompany || ''}</span>
       </div>
       <div class="signature-row">
         <span class="signature-label">מ"א:</span>
@@ -742,6 +749,7 @@ const CombatAssignmentScreen: React.FC = () => {
     items: any[];
     signature: string;
     timestamp: Date;
+    assignmentId?: string;
   }, askForPrinter: boolean = false) => {
     try {
       // Si demandé, permettre la sélection d'une imprimante
@@ -965,6 +973,7 @@ const CombatAssignmentScreen: React.FC = () => {
           items,
           signature: signatureData,
           timestamp: new Date(),
+          assignmentId,
         }).then(() => {
           console.log('[CombatAssignment] Print queue sent successfully (background)');
         }).catch((printError) => {
@@ -996,6 +1005,7 @@ const CombatAssignmentScreen: React.FC = () => {
         items,
         signature: signatureData,
         timestamp: new Date(),
+        assignmentId,
       };
 
       // Show success with WhatsApp and Print options
