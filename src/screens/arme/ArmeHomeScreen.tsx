@@ -138,13 +138,7 @@ const ArmeHomeScreen: React.FC = () => {
       title: 'טופס 982',
       icon: '📄',
       color: '#9C27B0',
-      action: () => {
-        setModalType('info');
-        setModalTitle('בקרוב');
-        setModalMessage('יצירת טופס 982 תהיה זמינה בקרוב');
-        setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
-        setModalVisible(true);
-      },
+      action: () => navigation.navigate('UnprintedSignatures'),
     },
     {
       id: 'quick-report',
