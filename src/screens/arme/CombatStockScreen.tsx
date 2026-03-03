@@ -125,8 +125,9 @@ const CombatStockScreen: React.FC = () => {
 
   const getRowValues = (stock: EquipmentStock) => {
     const headquarters = getCompanyValue(stock, 'מפקדה/אגמ') + getCompanyValue(stock, 'מפקדה') + getCompanyValue(stock, 'ניוד');
+    const totalCalc = stock.available + stock.stored;
     return {
-      standard: stock.available + stock.stored,
+      standard: totalCalc > 0 ? totalCalc : '-',
       shelf: stock.available,
       loans: stock.issued,
       compA: getCompanyValue(stock, 'פלוגה א'),
@@ -135,7 +136,7 @@ const CombatStockScreen: React.FC = () => {
       compD: getCompanyValue(stock, 'פלוגה ד'),
       hq: headquarters,
       stored: stock.stored,
-      total: stock.available + stock.stored,
+      total: totalCalc,
     };
   };
 
