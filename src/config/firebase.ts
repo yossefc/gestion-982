@@ -1,32 +1,54 @@
-// Configuration Firebase pour l'application Gestion 982
-import { initializeApp } from 'firebase/app';
-// @ts-ignore - getReactNativePersistence existe mais absent des types TS (problème connu Firebase)
-import { initializeAuth, getReactNativePersistence } from 'firebase/auth';
+// Firebase configuration for Gestion 982
+import { getApp, getApps, initializeApp } from 'firebase/app';
+import { Auth, getAuth, initializeAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import ReactNativeAsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 
 const firebaseConfig = {
-  apiKey: "AIzaSyB229X5qoI8v5KOQ_gG0RtyIJAWZ-GfU50",
-  authDomain: "gestion-982.firebaseapp.com",
-  projectId: "gestion-982",
-  storageBucket: "gestion-982.firebasestorage.app",
-  messagingSenderId: "624248239778",
-  appId: "1:624248239778:android:497ded1eeec435330cc9fb"
+  apiKey: 'AIzaSyB229X5qoI8v5KOQ_gG0RtyIJAWZ-GfU50',
+  authDomain: 'gestion-982.firebaseapp.com',
+  projectId: 'gestion-982',
+  storageBucket: 'gestion-982.firebasestorage.app',
+  messagingSenderId: '624248239778',
+  appId: '1:624248239778:android:497ded1eeec435330cc9fb',
 };
 
-// Initialiser Firebase
-const app = initializeApp(firebaseConfig);
+const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 
-// Initialiser Auth avec persistence React Native
-const auth = initializeAuth(app, {
-  persistence: getReactNativePersistence(ReactNativeAsyncStorage)
-});
+function createAuth(): Auth {
+  // Web bundle must not use React Native persistence API.
+  if (Platform.OS === 'web') {
+    return getAuth(app);
+  }
 
-// Initialiser Firestore
+  try {
+    // Load RN persistence only on native platforms.
+    const { getReactNativePersistence } = require('firebase/auth/react-native') as {
+      getReactNativePersistence?: (storage: typeof ReactNativeAsyncStorage) => any;
+    };
+
+    if (typeof getReactNativePersistence === 'function') {
+      return initializeAuth(app, {
+        persistence: getReactNativePersistence(ReactNativeAsyncStorage),
+      });
+    }
+  } catch (error: any) {
+    // During fast refresh or when submodule is unavailable, fallback is safe.
+    if (error?.code !== 'auth/already-initialized') {
+      console.warn(
+        '[Firebase] React Native persistence unavailable, using default auth.',
+        error
+      );
+    }
+  }
+
+  return getAuth(app);
+}
+
+const auth = createAuth();
 const db = getFirestore(app);
-
-// Initialiser Storage
 const storage = getStorage(app);
 
 export { app, auth, db, storage };

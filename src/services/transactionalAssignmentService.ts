@@ -106,57 +106,8 @@ async function calculateCurrentHoldingsFromHistory(
   );
 
   const snapshot = await getDocs(assignmentsQuery);
-  const holdings = new Map<string, HoldingItem>();
-
-  for (const assignmentDoc of snapshot.docs) {
-    const assignment = assignmentDoc.data();
-    const action = assignment.action;
-
-    // LOGIQUE SPÉCIALE: Si c'est une 'issue', on repart de zéro pour ce type (remplacement)
-    if (action === 'issue') {
-      holdings.clear();
-    }
-
-    for (const item of assignment.items || []) {
-      const key = item.equipmentId;
-      const current = holdings.get(key) || {
-        equipmentId: item.equipmentId,
-        equipmentName: item.equipmentName,
-        quantity: 0,
-        serials: [],
-        status: 'assigned' as const,
-      };
-
-      const itemSerials = item.serial ? item.serial.split(',').map((s: string) => s.trim()).filter(Boolean) : [];
-
-      if (action === 'issue' || action === 'add') {
-        current.quantity += item.quantity;
-        current.serials = [...current.serials, ...itemSerials];
-        current.status = 'assigned';
-      } else if (action === 'retrieve') {
-        current.status = 'assigned';
-      } else if (action === 'storage') {
-        current.status = 'stored';
-      } else if (action === 'return' || action === 'credit') {
-        current.quantity -= item.quantity;
-        // Pour le retrait, on retire les serials spécifiés si possible
-        if (itemSerials.length > 0) {
-          current.serials = current.serials.filter(s => !itemSerials.includes(s));
-        } else {
-          // Sinon on retire par la fin si c'est un retour générique
-          current.serials = current.serials.slice(0, Math.max(0, current.serials.length - item.quantity));
-        }
-      }
-
-      if (current.quantity > 0) {
-        holdings.set(key, current);
-      } else {
-        holdings.delete(key);
-      }
-    }
-  }
-
-  return Array.from(holdings.values());
+  const assignments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Assignment));
+  return deduplicateHoldings(computeHoldingsFromAssignments(assignments));
 }
 
 /**
@@ -167,68 +118,234 @@ function applyOperationToHoldings(
   items: AssignmentItem[],
   action: 'issue' | 'add' | 'return' | 'credit' | 'storage' | 'retrieve'
 ): HoldingItem[] {
+  type HoldingStatus = 'assigned' | 'stored';
+
+  const parseSerials = (serial?: string): string[] =>
+    serial
+      ? [...new Set(serial.split(',').map(s => s.trim()).filter(Boolean))]
+      : [];
+
+  const normalizeStatus = (status?: string): HoldingStatus =>
+    status === 'stored' || status === 'storage' ? 'stored' : 'assigned';
+
+  const toKey = (equipmentId: string, status: HoldingStatus): string => `${equipmentId}__${status}`;
+
   const holdingsMap = new Map<string, HoldingItem>();
 
-  // Charger les holdings actuels
-  // LOGIQUE SPÉCIALE: Pour une החתמה (issue), on remplace tout l'existant.
-  // Donc on commence avec une map vide. Pour les autres actions, on charge l'existant.
-  if (action !== 'issue') {
-    for (const holding of currentHoldings) {
-      holdingsMap.set(holding.equipmentId, { ...holding });
-    }
-  }
+  const upsertEntry = (
+    equipmentId: string,
+    equipmentName: string,
+    status: HoldingStatus
+  ): HoldingItem => {
+    const key = toKey(equipmentId, status);
+    const existing = holdingsMap.get(key);
+    if (existing) return existing;
 
-  // Appliquer l'opération
-  for (const item of items) {
-    const key = item.equipmentId;
-    const current = holdingsMap.get(key) || {
-      equipmentId: item.equipmentId,
-      equipmentName: item.equipmentName,
+    const created: HoldingItem = {
+      equipmentId,
+      equipmentName,
       quantity: 0,
       serials: [],
-      status: 'assigned' as const,
+      status,
     };
+    holdingsMap.set(key, created);
+    return created;
+  };
 
-    const itemSerials = item.serial ? item.serial.split(',').map(s => s.trim()).filter(Boolean) : [];
+  const normalizeEntry = (entry: HoldingItem) => {
+    entry.serials = [...new Set((entry.serials || []).map(s => s?.trim()).filter(Boolean))];
+    if (entry.serials.length > 0) {
+      entry.quantity = entry.serials.length;
+    }
+    entry.quantity = Math.max(0, entry.quantity || 0);
+  };
 
-    if (action === 'issue' || action === 'add' || action === 'retrieve') {
-      current.quantity += item.quantity;
+  const removeIfEmpty = (equipmentId: string, status: HoldingStatus) => {
+    const key = toKey(equipmentId, status);
+    const entry = holdingsMap.get(key);
+    if (!entry) return;
+    normalizeEntry(entry);
+    if (entry.quantity <= 0) {
+      holdingsMap.delete(key);
+    } else {
+      holdingsMap.set(key, entry);
+    }
+  };
 
-      // DEDUPLICATION: On n'ajoute que les séries qui ne sont pas déjà présentes
-      const newSerialsToAdd = itemSerials.filter(s => !current.serials.includes(s));
-      current.serials = [...current.serials, ...newSerialsToAdd];
+  const decreaseQuantity = (entry: HoldingItem, amount: number) => {
+    const qty = Math.max(0, amount);
+    if (qty <= 0) return;
 
-      // Si l'item a des serials, quantity DOIT = nombre de serials (chaque serial = 1 unité)
-      if (current.serials.length > 0) {
-        current.quantity = current.serials.length;
-      }
-
-      current.status = 'assigned';
-    } else if (action === 'storage') {
-      // Pour l'אפסון, on ne retire plus l'item, on change juste son statut
-      current.status = 'stored';
-    } else if (action === 'return' || action === 'credit') {
-      if (itemSerials.length > 0) {
-        current.serials = current.serials.filter(s => !itemSerials.includes(s));
-      } else {
-        current.serials = current.serials.slice(0, Math.max(0, current.serials.length - item.quantity));
-      }
-      // Si l'item a des serials, quantity DOIT = nombre de serials restants
-      if (current.serials.length > 0) {
-        current.quantity = current.serials.length;
-      } else {
-        current.quantity -= item.quantity;
-      }
+    if (entry.serials.length > 0) {
+      entry.serials = entry.serials.slice(0, Math.max(0, entry.serials.length - qty));
+      entry.quantity = entry.serials.length;
+      return;
     }
 
-    if (current.quantity > 0) {
-      holdingsMap.set(key, current);
-    } else {
-      holdingsMap.delete(key);
+    entry.quantity = Math.max(0, entry.quantity - qty);
+  };
+
+  const addQuantity = (entry: HoldingItem, amount: number) => {
+    const qty = Math.max(0, amount);
+    if (qty <= 0) return;
+    if (entry.serials.length > 0) {
+      // For serial-managed items, quantity is derived from serials.
+      return;
+    }
+    entry.quantity += qty;
+  };
+
+  const moveByQuantity = (from: HoldingItem, to: HoldingItem, requestedQty: number) => {
+    const moveQty = Math.max(0, Math.min(requestedQty, from.quantity));
+    if (moveQty <= 0) return;
+    decreaseQuantity(from, moveQty);
+    addQuantity(to, moveQty);
+  };
+
+  const removeSerialsFromEntry = (entry: HoldingItem, serialsToRemove: string[]): string[] => {
+    if (serialsToRemove.length === 0) return [];
+    const existing = new Set(entry.serials);
+    const removed = serialsToRemove.filter(s => existing.has(s));
+    if (removed.length === 0) return [];
+
+    const removedSet = new Set(removed);
+    entry.serials = entry.serials.filter(s => !removedSet.has(s));
+    entry.quantity = entry.serials.length > 0 ? entry.serials.length : Math.max(0, entry.quantity - removed.length);
+    return removed;
+  };
+
+  // For 'issue' we intentionally replace holdings with the provided issued set.
+  if (action !== 'issue') {
+    for (const holding of currentHoldings) {
+      const status = normalizeStatus(holding.status);
+      const target = upsertEntry(holding.equipmentId, holding.equipmentName, status);
+      target.quantity += holding.quantity || 0;
+      target.serials = [...target.serials, ...(holding.serials || [])];
+      normalizeEntry(target);
     }
   }
 
-  return Array.from(holdingsMap.values());
+  for (const item of items) {
+    const equipmentId = item.equipmentId;
+    const equipmentName = item.equipmentName;
+    const itemSerials = parseSerials(item.serial);
+    const itemStatusHint = normalizeStatus(item.status);
+
+    if (action === 'issue' || action === 'add') {
+      const assigned = upsertEntry(equipmentId, equipmentName, 'assigned');
+      assigned.status = 'assigned';
+
+      if (itemSerials.length > 0) {
+        const toAdd = itemSerials.filter(s => !assigned.serials.includes(s));
+        assigned.serials = [...assigned.serials, ...toAdd];
+      } else {
+        addQuantity(assigned, item.quantity);
+      }
+
+      normalizeEntry(assigned);
+      removeIfEmpty(equipmentId, 'stored');
+      continue;
+    }
+
+    if (action === 'storage') {
+      const assigned = upsertEntry(equipmentId, equipmentName, 'assigned');
+      const stored = upsertEntry(equipmentId, equipmentName, 'stored');
+      assigned.status = 'assigned';
+      stored.status = 'stored';
+
+      if (itemSerials.length > 0) {
+        const moved = removeSerialsFromEntry(assigned, itemSerials);
+        if (moved.length > 0) {
+          const newToStored = moved.filter(s => !stored.serials.includes(s));
+          stored.serials = [...stored.serials, ...newToStored];
+        } else {
+          // Fallback for inconsistent data (no serials tracked in assigned): move by quantity.
+          moveByQuantity(assigned, stored, item.quantity || itemSerials.length);
+        }
+      } else {
+        moveByQuantity(assigned, stored, item.quantity);
+      }
+
+      normalizeEntry(assigned);
+      normalizeEntry(stored);
+      removeIfEmpty(equipmentId, 'assigned');
+      removeIfEmpty(equipmentId, 'stored');
+      continue;
+    }
+
+    if (action === 'retrieve') {
+      const assigned = upsertEntry(equipmentId, equipmentName, 'assigned');
+      const stored = upsertEntry(equipmentId, equipmentName, 'stored');
+      assigned.status = 'assigned';
+      stored.status = 'stored';
+
+      if (itemSerials.length > 0) {
+        const moved = removeSerialsFromEntry(stored, itemSerials);
+        if (moved.length > 0) {
+          const newToAssigned = moved.filter(s => !assigned.serials.includes(s));
+          assigned.serials = [...assigned.serials, ...newToAssigned];
+        } else {
+          moveByQuantity(stored, assigned, item.quantity || itemSerials.length);
+        }
+      } else {
+        moveByQuantity(stored, assigned, item.quantity);
+      }
+
+      normalizeEntry(assigned);
+      normalizeEntry(stored);
+      removeIfEmpty(equipmentId, 'assigned');
+      removeIfEmpty(equipmentId, 'stored');
+      continue;
+    }
+
+    if (action === 'return' || action === 'credit') {
+      const assigned = upsertEntry(equipmentId, equipmentName, 'assigned');
+      const stored = upsertEntry(equipmentId, equipmentName, 'stored');
+
+      if (itemSerials.length > 0) {
+        // Remove serials from the hinted bucket first, then fallback to the other one.
+        const first = itemStatusHint === 'stored' ? stored : assigned;
+        const second = first === stored ? assigned : stored;
+        let remaining = [...itemSerials];
+
+        const removedFirst = removeSerialsFromEntry(first, remaining);
+        if (removedFirst.length > 0) {
+          const removedSet = new Set(removedFirst);
+          remaining = remaining.filter(s => !removedSet.has(s));
+        }
+        if (remaining.length > 0) {
+          removeSerialsFromEntry(second, remaining);
+        }
+      } else {
+        let remainingQty = Math.max(0, item.quantity);
+        const ordered = itemStatusHint === 'stored'
+          ? [stored, assigned]
+          : [assigned, stored];
+
+        for (const entry of ordered) {
+          if (remainingQty <= 0) break;
+          const before = entry.quantity;
+          decreaseQuantity(entry, remainingQty);
+          const removed = Math.max(0, before - entry.quantity);
+          remainingQty -= removed;
+        }
+      }
+
+      normalizeEntry(assigned);
+      normalizeEntry(stored);
+      removeIfEmpty(equipmentId, 'assigned');
+      removeIfEmpty(equipmentId, 'stored');
+    }
+  }
+
+  return Array.from(holdingsMap.values())
+    .map(entry => ({
+      ...entry,
+      status: normalizeStatus(entry.status),
+      serials: [...new Set((entry.serials || []).map(s => s?.trim()).filter(Boolean))],
+      quantity: entry.serials?.length > 0 ? entry.serials.length : Math.max(0, entry.quantity || 0),
+    }))
+    .filter(entry => entry.quantity > 0);
 }
 
 // ============================================
@@ -999,48 +1116,67 @@ export async function retrieveEquipment(
  *     → on garde le vrai ID (celui qui ne commence pas par "WEAPON_")
  */
 function deduplicateHoldings(items: HoldingItem[]): HoldingItem[] {
+  const toStatus = (status?: string): 'assigned' | 'stored' =>
+    status === 'stored' || status === 'storage' ? 'stored' : 'assigned';
+  const toKey = (equipmentId: string, status: 'assigned' | 'stored') => `${equipmentId}__${status}`;
+
   const holdingsMap = new Map<string, HoldingItem>();
 
   for (const item of items) {
-    // Chercher un doublon existant: même equipmentId OU même nom + serials en commun
-    let mergeKey: string | undefined = undefined;
+    const status = toStatus(item.status);
+    const itemSerials = [...new Set((item.serials || []).map(s => s?.trim()).filter(Boolean))];
+    const itemQty = itemSerials.length > 0 ? itemSerials.length : Math.max(0, item.quantity || 0);
 
-    if (holdingsMap.has(item.equipmentId)) {
-      mergeKey = item.equipmentId;
+    // Merge by exact key first.
+    let mergeKey: string | undefined;
+    const exactKey = toKey(item.equipmentId, status);
+    if (holdingsMap.has(exactKey)) {
+      mergeKey = exactKey;
     } else {
-      // Vérifier si un autre item avec le même nom a des serials en commun
+      // Legacy merge: same status + same name + overlapping serials, even with different IDs.
       for (const [key, existing] of holdingsMap) {
-        if (existing.equipmentName === item.equipmentName) {
-          const hasCommonSerial = item.serials.some(s => s && existing.serials.includes(s));
-          if (hasCommonSerial) {
-            mergeKey = key;
-            break;
-          }
+        if (toStatus(existing.status) !== status) continue;
+        if (existing.equipmentName !== item.equipmentName) continue;
+        if (itemSerials.length === 0 || existing.serials.length === 0) continue;
+        const hasCommonSerial = itemSerials.some(s => existing.serials.includes(s));
+        if (hasCommonSerial) {
+          mergeKey = key;
+          break;
         }
       }
     }
 
-    if (mergeKey !== undefined) {
-      const existing = holdingsMap.get(mergeKey)!;
-      const mergedSerials = [...new Set([...existing.serials, ...item.serials])];
-
-      // Garder le vrai ID (celui qui ne commence pas par "WEAPON_")
-      const realId = existing.equipmentId.startsWith('WEAPON_') ? item.equipmentId : existing.equipmentId;
-
-      holdingsMap.delete(mergeKey);
-      holdingsMap.set(realId, {
-        ...existing,
-        equipmentId: realId,
-        serials: mergedSerials,
-        quantity: mergedSerials.filter(Boolean).length || existing.quantity,
-        status: existing.status === 'stored' || item.status === 'stored' ? 'stored' : 'assigned',
+    if (!mergeKey) {
+      holdingsMap.set(exactKey, {
+        equipmentId: item.equipmentId,
+        equipmentName: item.equipmentName,
+        serials: itemSerials,
+        quantity: itemQty,
+        status,
       });
-    } else {
-      holdingsMap.set(item.equipmentId, { ...item });
+      continue;
     }
+
+    const existing = holdingsMap.get(mergeKey)!;
+    const mergedSerials = [...new Set([...(existing.serials || []), ...itemSerials])];
+
+    // Prefer real (non synthetic) ID, but keep status boundary.
+    const realId = existing.equipmentId.startsWith('WEAPON_') ? item.equipmentId : existing.equipmentId;
+    const mergedQty = mergedSerials.length > 0
+      ? mergedSerials.length
+      : Math.max(0, (existing.quantity || 0) + itemQty);
+
+    holdingsMap.delete(mergeKey);
+    holdingsMap.set(toKey(realId, status), {
+      ...existing,
+      equipmentId: realId,
+      status,
+      serials: mergedSerials,
+      quantity: mergedQty,
+    });
   }
 
-  return Array.from(holdingsMap.values()).filter(item => item.quantity > 0);
+  return Array.from(holdingsMap.values()).filter(item => (item.quantity || 0) > 0);
 }
 
 /**
@@ -1114,7 +1250,14 @@ export async function getAllHoldings(type: 'combat' | 'clothing'): Promise<any[]
       where('type', '==', type)
     );
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => doc.data());
+    return snapshot.docs.map(docSnap => {
+      const data = docSnap.data();
+      const items = Array.isArray(data.items) ? data.items as HoldingItem[] : [];
+      return {
+        ...data,
+        items: deduplicateHoldings(items),
+      };
+    });
   } catch (error) {
     console.warn('[TransactionalAssignment] getAllHoldings failed, using offline cache:', error);
     const assignments = await getAssignmentsForHoldings(type);

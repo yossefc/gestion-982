@@ -147,6 +147,7 @@ export interface AssignmentItem {
   equipmentName: string;
   quantity: number;
   serial?: string;
+  status?: 'assigned' | 'stored';
   subEquipments?: {
     name: string;
     serial?: string;

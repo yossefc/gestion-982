@@ -87,7 +87,7 @@ export const getAllEquipmentStocks = async (): Promise<EquipmentStock[]> => {
           stock.byCompany.push(companyDist);
         }
 
-        if (weapon.status === 'stored') {
+        if ((weapon.status as any) === 'stored' || (weapon.status as any) === 'storage') {
           stock.stored += 1;
           companyDist.stored += 1;
         } else if (weapon.status === 'assigned') {
@@ -112,7 +112,7 @@ export const getAllEquipmentStocks = async (): Promise<EquipmentStock[]> => {
         if (!gearMap.has(item.equipmentId)) gearMap.set(item.equipmentId, { issued: 0, stored: 0 });
         const counts = gearMap.get(item.equipmentId)!;
 
-        if (item.status === 'stored') {
+        if ((item.status as any) === 'stored' || (item.status as any) === 'storage') {
           counts.stored += item.quantity;
         } else {
           counts.issued += item.quantity;

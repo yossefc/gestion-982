@@ -29,6 +29,7 @@ type CombatReturnRouteProp = RouteProp<RootStackParamList, 'CombatReturn'> & {
 };
 
 interface ReturnItem extends AssignmentItem {
+  itemKey: string;
   selected: boolean;
   returnQuantity: number;
   availableSerials: string[]; // Serials disponibles (depuis serial string)
@@ -102,6 +103,7 @@ const CombatReturnScreen: React.FC = () => {
         console.log(`[CombatReturn] Processing item ${item.equipmentName}: ${serialsArray.length} serials`);
 
         return {
+          itemKey: `${item.equipmentId}_${item.status || 'assigned'}`,
           equipmentId: item.equipmentId,
           equipmentName: item.equipmentName,
           quantity: item.quantity,
@@ -127,10 +129,10 @@ const CombatReturnScreen: React.FC = () => {
     }
   };
 
-  const toggleItem = (equipmentId: string) => {
+  const toggleItem = (itemKey: string) => {
     setItems(prev =>
       prev.map(item =>
-        item.equipmentId === equipmentId
+        item.itemKey === itemKey
           ? {
             ...item,
             selected: !item.selected,
@@ -142,10 +144,10 @@ const CombatReturnScreen: React.FC = () => {
     );
   };
 
-  const updateReturnQuantity = (equipmentId: string, delta: number) => {
+  const updateReturnQuantity = (itemKey: string, delta: number) => {
     setItems(prev =>
       prev.map(item => {
-        if (item.equipmentId === equipmentId) {
+        if (item.itemKey === itemKey) {
           const newQuantity = Math.max(
             0,
             Math.min(item.quantity, item.returnQuantity + delta)
@@ -157,10 +159,10 @@ const CombatReturnScreen: React.FC = () => {
     );
   };
 
-  const toggleSerial = (equipmentId: string, serial: string) => {
+  const toggleSerial = (itemKey: string, serial: string) => {
     setItems(prev =>
       prev.map(item => {
-        if (item.equipmentId === equipmentId) {
+        if (item.itemKey === itemKey) {
           const isSelected = item.selectedSerials.includes(serial);
           const selectedSerials = isSelected
             ? item.selectedSerials.filter(s => s !== serial)
@@ -209,6 +211,7 @@ const CombatReturnScreen: React.FC = () => {
                 equipmentId: item.equipmentId,
                 equipmentName: item.equipmentName,
                 quantity: item.returnQuantity,
+                status: item.status,
               };
 
               // Ajouter serial seulement s'il y a des serials sélectionnés
@@ -475,7 +478,7 @@ const CombatReturnScreen: React.FC = () => {
           <View style={styles.itemsList}>
             {items.map(item => (
               <View
-                key={item.equipmentId}
+                key={item.itemKey}
                 style={[
                   styles.itemCard,
                   item.selected && styles.itemCardSelected,
@@ -483,7 +486,7 @@ const CombatReturnScreen: React.FC = () => {
               >
                 <TouchableOpacity
                   style={styles.itemHeader}
-                  onPress={() => toggleItem(item.equipmentId)}
+                  onPress={() => toggleItem(item.itemKey)}
                   disabled={processing}
                 >
                   <View style={styles.checkbox}>
@@ -524,7 +527,7 @@ const CombatReturnScreen: React.FC = () => {
                         <TouchableOpacity
                           style={styles.quantityButton}
                           onPress={() =>
-                            updateReturnQuantity(item.equipmentId, -1)
+                            updateReturnQuantity(item.itemKey, -1)
                           }
                           disabled={processing}
                         >
@@ -536,7 +539,7 @@ const CombatReturnScreen: React.FC = () => {
                         <TouchableOpacity
                           style={styles.quantityButton}
                           onPress={() =>
-                            updateReturnQuantity(item.equipmentId, 1)
+                            updateReturnQuantity(item.itemKey, 1)
                           }
                           disabled={processing}
                         >
@@ -559,7 +562,7 @@ const CombatReturnScreen: React.FC = () => {
                                 styles.serialChipSelected,
                               ]}
                               onPress={() =>
-                                toggleSerial(item.equipmentId, serial)
+                                toggleSerial(item.itemKey, serial)
                               }
                               disabled={processing}
                             >

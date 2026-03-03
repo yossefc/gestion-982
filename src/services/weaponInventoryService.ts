@@ -555,7 +555,8 @@ export const setWeaponAssignedStatusOnlyOffline = async (
       error?.message?.includes('Could not reach Cloud Firestore');
 
     if (isNetworkError) {
-      return await offlineService.queue('weaponReturn', params);
+      // Preserve intent: assignment failures must retry as assignment, not return.
+      return await offlineService.queue('weaponAssign', params);
     }
 
     throw error;
