@@ -37,6 +37,7 @@ const convertDocToAssignment = (doc: any): Assignment => {
     assignedBy: data.assignedBy,
     assignedByName: data.assignedByName,
     assignedByEmail: data.assignedByEmail,
+    assignedByRank: data.assignedByRank,
     isPrinted: data.isPrinted || false,
     printedAt: data.printedAt?.toDate(),
   };

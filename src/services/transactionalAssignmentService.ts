@@ -1,16 +1,16 @@
-﻿/**
+/**
  * transactionalAssignmentService.ts
  *
  * Service d'attribution avec transactions atomiques Firestore.
- * Garantit la cohֳ©rence entre assignments (historique) et soldier_holdings (ֳ©tat).
+ * Garantit la cohérence entre assignments (historique) et soldier_holdings (état).
  *
  * Architecture:
  * - assignments: Historique immuable (append-only)
- * - soldier_holdings: ֳ‰tat courant (mis ֳ  jour transactionnellement)
+ * - soldier_holdings: État courant (mis à jour transactionnellement)
  *
  * OFFLINE SUPPORT:
- * - Les opֳ©rations sont mises en queue si offline
- * - Sync automatique au retour du rֳ©seau
+ * - Les opérations sont mises en queue si offline
+ * - Sync automatique au retour du réseau
  */
 
 import {
@@ -55,6 +55,8 @@ interface IssueEquipmentParams {
   signature?: string;
   signaturePdfUrl?: string;
   assignedBy: string;
+  assignedByName?: string;
+  assignedByRank?: string;
   requestId: string; // ID stable pour l'idempotence
 }
 
@@ -79,6 +81,8 @@ interface AddEquipmentParams {
   signature?: string;
   signaturePdfUrl?: string;
   addedBy: string;
+  addedByName?: string;
+  addedByRank?: string;
   requestId: string;
 }
 
@@ -87,8 +91,8 @@ interface AddEquipmentParams {
 // ============================================
 
 /**
- * Calcule l'ֳ©tat courant des holdings depuis l'historique complet des assignments
- * (Utilisֳ© pour vֳ©rification/validation, mais pas dans la transaction critique)
+ * Calcule l'état courant des holdings depuis l'historique complet des assignments
+ * (Utilisé pour vérification/validation, mais pas dans la transaction critique)
  */
 async function calculateCurrentHoldingsFromHistory(
   soldierId: string,
@@ -108,7 +112,7 @@ async function calculateCurrentHoldingsFromHistory(
     const assignment = assignmentDoc.data();
     const action = assignment.action;
 
-    // LOGIQUE SPֳ‰CIALE: Si c'est une 'issue', on repart de zֳ©ro pour ce type (remplacement)
+    // LOGIQUE SPÉCIALE: Si c'est une 'issue', on repart de zéro pour ce type (remplacement)
     if (action === 'issue') {
       holdings.clear();
     }
@@ -135,11 +139,11 @@ async function calculateCurrentHoldingsFromHistory(
         current.status = 'stored';
       } else if (action === 'return' || action === 'credit') {
         current.quantity -= item.quantity;
-        // Pour le retrait, on retire les serials spֳ©cifiֳ©s si possible
+        // Pour le retrait, on retire les serials spécifiés si possible
         if (itemSerials.length > 0) {
           current.serials = current.serials.filter(s => !itemSerials.includes(s));
         } else {
-          // Sinon on retire par la fin si c'est un retour gֳ©nֳ©rique
+          // Sinon on retire par la fin si c'est un retour générique
           current.serials = current.serials.slice(0, Math.max(0, current.serials.length - item.quantity));
         }
       }
@@ -156,7 +160,7 @@ async function calculateCurrentHoldingsFromHistory(
 }
 
 /**
- * Applique une opֳ©ration sur les holdings existants
+ * Applique une opération sur les holdings existants
  */
 function applyOperationToHoldings(
   currentHoldings: HoldingItem[],
@@ -166,7 +170,7 @@ function applyOperationToHoldings(
   const holdingsMap = new Map<string, HoldingItem>();
 
   // Charger les holdings actuels
-  // LOGIQUE SPֳ‰CIALE: Pour une ׳”׳—׳×׳׳” (issue), on remplace tout l'existant.
+  // LOGIQUE SPÉCIALE: Pour une החתמה (issue), on remplace tout l'existant.
   // Donc on commence avec une map vide. Pour les autres actions, on charge l'existant.
   if (action !== 'issue') {
     for (const holding of currentHoldings) {
@@ -174,7 +178,7 @@ function applyOperationToHoldings(
     }
   }
 
-  // Appliquer l'opֳ©ration
+  // Appliquer l'opération
   for (const item of items) {
     const key = item.equipmentId;
     const current = holdingsMap.get(key) || {
@@ -190,18 +194,18 @@ function applyOperationToHoldings(
     if (action === 'issue' || action === 'add' || action === 'retrieve') {
       current.quantity += item.quantity;
 
-      // DEDUPLICATION: On n'ajoute que les sֳ©ries qui ne sont pas dֳ©jֳ  prֳ©sentes
+      // DEDUPLICATION: On n'ajoute que les séries qui ne sont pas déjà présentes
       const newSerialsToAdd = itemSerials.filter(s => !current.serials.includes(s));
       current.serials = [...current.serials, ...newSerialsToAdd];
 
-      // Si l'item a des serials, quantity DOIT = nombre de serials (chaque serial = 1 unitֳ©)
+      // Si l'item a des serials, quantity DOIT = nombre de serials (chaque serial = 1 unité)
       if (current.serials.length > 0) {
         current.quantity = current.serials.length;
       }
 
       current.status = 'assigned';
     } else if (action === 'storage') {
-      // Pour l'׳׳₪׳¡׳•׳, on ne retire plus l'item, on change juste son statut
+      // Pour l'אפסון, on ne retire plus l'item, on change juste son statut
       current.status = 'stored';
     } else if (action === 'return' || action === 'credit') {
       if (itemSerials.length > 0) {
@@ -244,17 +248,17 @@ function getAssignmentTimestampMs(assignment: Assignment): number {
 function getStatusForAction(action: OperationType): string {
   switch (action) {
     case 'issue':
-      return 'נופק לחייל';
+      return '���� �����';
     case 'return':
-      return 'הוחזר';
+      return '�����';
     case 'add':
-      return 'נוסף';
+      return '����';
     case 'credit':
-      return 'זוכה';
+      return '����';
     case 'storage':
-      return 'הופקד';
+      return '�����';
     case 'retrieve':
-      return 'שוחרר מאפסון';
+      return '����� ������';
     default:
       return '';
   }
@@ -267,12 +271,12 @@ async function getAssignmentsForHoldings(
   const cacheKey = type === 'combat' ? 'combatAssignments' : 'clothingAssignments';
   let cached = cacheService.getImmediate<Assignment>(cacheKey) || [];
 
-  // IMPORTANT: Filtrer par soldierId si spécifié
+  // IMPORTANT: Filtrer par soldierId si sp?cifi?
   if (soldierId) {
     cached = cached.filter(a => a.soldierId === soldierId);
   }
 
-  // OPTIMISÉ: getPendingOperations est maintenant synchrone (cache mémoire)
+  // OPTIMIS?: getPendingOperations est maintenant synchrone (cache m?moire)
   const pendingOps = offlineService.getPendingOperations();
   const pendingAssignments: Assignment[] = pendingOps
     .filter(op => {
@@ -415,7 +419,7 @@ function isNetworkOrTimeoutError(error: any): boolean {
 // ============================================
 
 /**
- * Issue equipment to a soldier (׳”׳—׳×׳׳”)
+ * Issue equipment to a soldier (החתמה)
  * Transaction atomique: assignment + soldier_holdings
  */
 export async function issueEquipment(params: IssueEquipmentParams): Promise<string> {
@@ -430,11 +434,13 @@ export async function issueEquipment(params: IssueEquipmentParams): Promise<stri
     signature,
     signaturePdfUrl,
     assignedBy,
+    assignedByName,
+    assignedByRank,
     requestId,
   } = params;
 
   return await runTransaction(db, async (transaction: Transaction) => {
-    // 0. Vֳ©rifier l'idempotence (si le requestId a dֳ©jֳ  ֳ©tֳ© traitֳ©)
+    // 0. Vérifier l'idempotence (si le requestId a déjà été traité)
     const assignmentRef = doc(db, 'assignments', requestId);
     const assignmentSnap = await transaction.get(assignmentRef);
 
@@ -442,12 +448,12 @@ export async function issueEquipment(params: IssueEquipmentParams): Promise<stri
       return assignmentRef.id;
     }
 
-    // 1. Lire soldier_holdings (ֳ©tat courant) - DOIT ֳTRE FAIT AVANT LES WRITES
+    // 1. Lire soldier_holdings (état courant) - DOIT ÊTRE FAIT AVANT LES WRITES
     const holdingId = `${soldierId}_${type}`;
     const holdingRef = doc(db, 'soldier_holdings', holdingId);
     const holdingSnap = await transaction.get(holdingRef);
 
-    // 2. Crֳ©er l'assignment (historique immuable avec ID stable - WRITE)
+    // 2. Créer l'assignment (historique immuable avec ID stable - WRITE)
     const assignmentData: any = {
       soldierId,
       soldierName,
@@ -455,7 +461,7 @@ export async function issueEquipment(params: IssueEquipmentParams): Promise<stri
       type,
       action: 'issue',
       items,
-      status: 'נופק לחייל',
+      status: '���� �����',
       timestamp: Timestamp.now(),
       assignedBy,
       requestId,
@@ -465,15 +471,17 @@ export async function issueEquipment(params: IssueEquipmentParams): Promise<stri
     if (soldierCompany) assignmentData.soldierCompany = soldierCompany;
     if (signature) assignmentData.signature = signature;
     if (signaturePdfUrl) assignmentData.signaturePdfUrl = signaturePdfUrl;
+    if (assignedByName) assignmentData.assignedByName = assignedByName;
+    if (assignedByRank) assignmentData.assignedByRank = assignedByRank;
 
     transaction.set(assignmentRef, assignmentData);
 
-    // 3. Mettre ֳ  jour soldier_holdings (WRITE)
+    // 3. Mettre à jour soldier_holdings (WRITE)
     const currentHoldings: HoldingItem[] = holdingSnap.exists()
       ? (holdingSnap.data().items || [])
       : [];
 
-    // Appliquer l'opֳ©ration issue
+    // Appliquer l'opération issue
     const newHoldings = applyOperationToHoldings(currentHoldings, items, 'issue');
     const outstandingCount = newHoldings.reduce((sum, item) => sum + item.quantity, 0);
 
@@ -493,9 +501,9 @@ export async function issueEquipment(params: IssueEquipmentParams): Promise<stri
 }
 
 /**
- * Return equipment from a soldier (זיכוי)
+ * Return equipment from a soldier (�����)
  * Transaction atomique: assignment + soldier_holdings
- * Puis mise à jour de l'inventaire des armes (hors transaction - requêtes Firestore incompatibles)
+ * Puis mise ? jour de l'inventaire des armes (hors transaction - requ?tes Firestore incompatibles)
  */
 export async function returnEquipment(params: ReturnEquipmentParams): Promise<string> {
   const {
@@ -527,7 +535,7 @@ export async function returnEquipment(params: ReturnEquipmentParams): Promise<st
       transaction.get(extraRef)
     ]);
 
-    // On prֳ©-charge les issues pour pouvoir les supprimer si le solde tombe ֳ  0
+    // On pré-charge les issues pour pouvoir les supprimer si le solde tombe à 0
     const issueQuery = query(
       collection(db, 'assignments'),
       where('soldierId', '==', soldierId),
@@ -536,8 +544,8 @@ export async function returnEquipment(params: ReturnEquipmentParams): Promise<st
     );
     const issueDocs = await getDocs(issueQuery);
 
-    // 2. Créer l'assignment (historique - WRITE)
-    // action 'credit' + status 'זוכה' : cohérent avec l'UI "זיכוי חייל"
+    // 2. Cr?er l'assignment (historique - WRITE)
+    // action 'credit' + status '����' : coh?rent avec l'UI "����� ����"
     const assignmentData: any = {
       soldierId,
       soldierName,
@@ -545,7 +553,7 @@ export async function returnEquipment(params: ReturnEquipmentParams): Promise<st
       type,
       action: 'credit',
       items,
-      status: 'זוכה',
+      status: '����',
       timestamp: Timestamp.now(),
       assignedBy: returnedBy,
       requestId,
@@ -553,7 +561,7 @@ export async function returnEquipment(params: ReturnEquipmentParams): Promise<st
 
     transaction.set(assignmentRef, assignmentData);
 
-    // 3. Mettre ֳ  jour soldier_holdings
+    // 3. Mettre à jour soldier_holdings
     if (!holdingSnap.exists()) {
       throw new Error('No holdings found for this soldier');
     }
@@ -573,7 +581,7 @@ export async function returnEquipment(params: ReturnEquipmentParams): Promise<st
       lastUpdated: Timestamp.now(),
     });
 
-    // 4. Nettoyage automatique: si le solde est ֳ  0, effacer les documents de signature (issue) et l'ancienne collection
+    // 4. Nettoyage automatique: si le solde est à 0, effacer les documents de signature (issue) et l'ancienne collection
     if (outstandingCount === 0) {
       issueDocs.forEach(issueDoc => {
         transaction.delete(issueDoc.ref);
@@ -587,7 +595,7 @@ export async function returnEquipment(params: ReturnEquipmentParams): Promise<st
         if (otherItems.length === 0) {
           transaction.delete(extraRef);
         } else {
-          // Garder uniquement les items de l'autre type et effacer les champs liֳ©s ֳ  celui-ci
+          // Garder uniquement les items de l'autre type et effacer les champs liés à celui-ci
           const updates: any = {
             items: otherItems,
             lastUpdated: Timestamp.now()
@@ -607,11 +615,11 @@ export async function returnEquipment(params: ReturnEquipmentParams): Promise<st
     return assignmentRef.id;
   });
 
-  // Mise à jour de l'inventaire des armes APRÈS la transaction
-  // (les requêtes Firestore ne sont pas compatibles avec runTransaction)
-  // Un échec ici ne remet pas en cause le זיכוי déjà enregistré — on log et on continue
+  // Mise ? jour de l'inventaire des armes APR?S la transaction
+  // (les requ?tes Firestore ne sont pas compatibles avec runTransaction)
+  // Un ?chec ici ne remet pas en cause le ����� d?j? enregistr? � on log et on continue
   if (type === 'combat') {
-    // Fire-and-forget pour ne pas bloquer le traitement global et éviter les timeouts
+    // Fire-and-forget pour ne pas bloquer le traitement global et ?viter les timeouts
     Promise.all(items.map(async (item) => {
       const serials = item.serial
         ? item.serial.split(',').map((s: string) => s.trim()).filter(Boolean)
@@ -623,20 +631,20 @@ export async function returnEquipment(params: ReturnEquipmentParams): Promise<st
           if (weapon) {
             await weaponInventoryService.setWeaponAvailableStatusOnlyOffline(weapon.id);
           } else {
-            console.warn(`[ReturnEquipment] Arme introuvable dans l'inventaire pour le מסטב: ${serial}`);
+            console.warn(`[ReturnEquipment] Arme introuvable dans l'inventaire pour le ����: ${serial}`);
           }
         } catch (err) {
-          console.warn(`[ReturnEquipment] Échec mise à jour inventaire pour מסטב ${serial}:`, err);
+          console.warn(`[ReturnEquipment] ?chec mise ? jour inventaire pour ���� ${serial}:`, err);
         }
       }));
-    })).catch(err => console.error("[ReturnEquipment] Erreur globale lors de la libération des armes:", err));
+    })).catch(err => console.error("[ReturnEquipment] Erreur globale lors de la lib?ration des armes:", err));
   }
 
   return assignmentId;
 }
 
 /**
- * Add equipment to a soldier's holdings (הוספה)
+ * Add equipment to a soldier's holdings (�����)
  * Transaction atomique: assignment + soldier_holdings
  */
 export async function addEquipment(params: AddEquipmentParams): Promise<string> {
@@ -651,6 +659,8 @@ export async function addEquipment(params: AddEquipmentParams): Promise<string> 
     signature,
     signaturePdfUrl,
     addedBy,
+    addedByName,
+    addedByRank,
     requestId,
   } = params;
 
@@ -668,7 +678,7 @@ export async function addEquipment(params: AddEquipmentParams): Promise<string> 
     const holdingRef = doc(db, 'soldier_holdings', holdingId);
     const holdingSnap = await transaction.get(holdingRef);
 
-    // 2. Crֳ©er l'assignment (historique - WRITE)
+    // 2. Créer l'assignment (historique - WRITE)
     const assignmentData: any = {
       soldierId,
       soldierName,
@@ -676,7 +686,7 @@ export async function addEquipment(params: AddEquipmentParams): Promise<string> 
       type,
       action: 'add',
       items,
-      status: 'נוסף',
+      status: '����',
       timestamp: Timestamp.now(),
       assignedBy: addedBy,
       requestId,
@@ -686,10 +696,12 @@ export async function addEquipment(params: AddEquipmentParams): Promise<string> 
     if (soldierCompany) assignmentData.soldierCompany = soldierCompany;
     if (signature) assignmentData.signature = signature;
     if (signaturePdfUrl) assignmentData.signaturePdfUrl = signaturePdfUrl;
+    if (addedByName) assignmentData.assignedByName = addedByName;
+    if (addedByRank) assignmentData.assignedByRank = addedByRank;
 
     transaction.set(assignmentRef, assignmentData);
 
-    // 3. Mettre ֳ  jour soldier_holdings
+    // 3. Mettre à jour soldier_holdings
     const currentHoldings: HoldingItem[] = holdingSnap.exists()
       ? (holdingSnap.data().items || [])
       : [];
@@ -713,7 +725,7 @@ export async function addEquipment(params: AddEquipmentParams): Promise<string> 
 }
 
 /**
- * Credit all equipment (׳–׳™׳›׳•׳™ - retourne tout)
+ * Credit all equipment (זיכוי - retourne tout)
  * Transaction atomique: assignment + soldier_holdings
  */
 export async function creditEquipment(
@@ -760,7 +772,7 @@ export async function creditEquipment(
     const currentHoldings: HoldingItem[] = holdingSnap.data().items;
     returnedHoldings = currentHoldings; // Capture for weapon release after transaction
 
-    // 2. Crֳ©er un assignment credit avec tous les items
+    // 2. Créer un assignment credit avec tous les items
     const assignmentData: any = {
       soldierId,
       soldierName,
@@ -768,7 +780,7 @@ export async function creditEquipment(
       type,
       action: 'credit',
       items: currentHoldings,
-      status: 'זוכה',
+      status: '����',
       timestamp: Timestamp.now(),
       assignedBy: creditedBy,
       requestId,
@@ -788,7 +800,7 @@ export async function creditEquipment(
       lastUpdated: Timestamp.now(),
     });
 
-    // 4. Nettoyage automatique: le crֳ©dit remet toujours ֳ  0
+    // 4. Nettoyage automatique: le crédit remet toujours à 0
     issueDocs.forEach(issueDoc => {
       transaction.delete(issueDoc.ref);
     });
@@ -819,9 +831,9 @@ export async function creditEquipment(
     return assignmentRef.id;
   });
 
-  // Mise à jour de l'inventaire des armes APRÈS la transaction réussie
+  // Mise ? jour de l'inventaire des armes APR?S la transaction r?ussie
   if (type === 'combat' && returnedHoldings.length > 0) {
-    // Fire-and-forget pour ne pas bloquer le traitement global et éviter les timeouts
+    // Fire-and-forget pour ne pas bloquer le traitement global et ?viter les timeouts
     Promise.all(returnedHoldings.map(async (item) => {
       const serials = item.serials ? item.serials : [];
       await Promise.all(serials.map(async (serial) => {
@@ -830,20 +842,20 @@ export async function creditEquipment(
           if (weapon) {
             await weaponInventoryService.setWeaponAvailableStatusOnlyOffline(weapon.id);
           } else {
-            console.warn(`[CreditEquipment] Arme introuvable dans l'inventaire pour le מסטב: ${serial}`);
+            console.warn(`[CreditEquipment] Arme introuvable dans l'inventaire pour le ����: ${serial}`);
           }
         } catch (err) {
-          console.warn(`[CreditEquipment] Échec mise à jour inventaire pour מסטב ${serial}:`, err);
+          console.warn(`[CreditEquipment] ?chec mise ? jour inventaire pour ���� ${serial}:`, err);
         }
       }));
-    })).catch(err => console.error("[CreditEquipment] Erreur globale lors de la libération des armes:", err));
+    })).catch(err => console.error("[CreditEquipment] Erreur globale lors de la lib?ration des armes:", err));
   }
 
   return assignmentId;
 }
 
 /**
- * Storage operation (׳׳₪׳¡׳•׳)
+ * Storage operation (אפסון)
  * Transaction atomique: assignment + soldier_holdings
  */
 export async function storageEquipment(
@@ -869,7 +881,7 @@ export async function storageEquipment(
     const holdingRef = doc(db, 'soldier_holdings', holdingId);
     const holdingSnap = await transaction.get(holdingRef);
 
-    // 2. Crֳ©er l'assignment (WRITE)
+    // 2. Créer l'assignment (WRITE)
     const assignmentData: any = {
       soldierId,
       soldierName,
@@ -877,7 +889,7 @@ export async function storageEquipment(
       type,
       action: 'storage',
       items,
-      status: 'הופקד',
+      status: '�����',
       timestamp: Timestamp.now(),
       assignedBy: storedBy,
       requestId,
@@ -885,7 +897,7 @@ export async function storageEquipment(
 
     transaction.set(assignmentRef, assignmentData);
 
-    // 3. Mettre ֳ  jour holdings (storage retire des items)
+    // 3. Mettre à jour holdings (storage retire des items)
     if (!holdingSnap.exists()) {
       throw new Error('No holdings found for this soldier');
     }
@@ -910,7 +922,7 @@ export async function storageEquipment(
 }
 
 /**
- * Retrieve from storage (׳©׳—׳¨׳•׳¨ ׳׳׳₪׳¡׳•׳)
+ * Retrieve from storage (שחרור מאפסון)
  * Transaction atomique: assignment + soldier_holdings
  */
 export async function retrieveEquipment(
@@ -936,7 +948,7 @@ export async function retrieveEquipment(
     const holdingRef = doc(db, 'soldier_holdings', holdingId);
     const holdingSnap = await transaction.get(holdingRef);
 
-    // 2. Crֳ©er l'assignment (WRITE)
+    // 2. Créer l'assignment (WRITE)
     const assignmentData: any = {
       soldierId,
       soldierName,
@@ -944,7 +956,7 @@ export async function retrieveEquipment(
       type,
       action: 'retrieve',
       items,
-      status: 'שוחרר מאפסון',
+      status: '����� ������',
       timestamp: Timestamp.now(),
       assignedBy: retrievedBy,
       requestId,
@@ -952,7 +964,7 @@ export async function retrieveEquipment(
 
     transaction.set(assignmentRef, assignmentData);
 
-    // 3. Mettre ֳ  jour holdings (retrieve ajoute des items)
+    // 3. Mettre à jour holdings (retrieve ajoute des items)
     const currentHoldings: HoldingItem[] = holdingSnap.exists()
       ? (holdingSnap.data().items || [])
       : [];
@@ -976,24 +988,24 @@ export async function retrieveEquipment(
 }
 
 /**
- * Dֳ©duplique les items en fusionnant les quantitֳ©s et serials.
- * Gֳ¨re 2 cas:
- *  1) Mֳ×me equipmentId ג†’ fusion directe
- *  2) Mֳ×me equipmentName + serials en commun mais equipmentId diffֳ©rents
- *     (ex: un vrai ID "1ejpa..." et un ID fabriquֳ© "WEAPON_׳׳§׳׳¢ ׳׳׳’")
- *     ג†’ on garde le vrai ID (celui qui ne commence pas par "WEAPON_")
+ * Déduplique les items en fusionnant les quantités et serials.
+ * Gère 2 cas:
+ *  1) Même equipmentId → fusion directe
+ *  2) Même equipmentName + serials en commun mais equipmentId différents
+ *     (ex: un vrai ID "1ejpa..." et un ID fabriqué "WEAPON_מקלע מאג")
+ *     → on garde le vrai ID (celui qui ne commence pas par "WEAPON_")
  */
 function deduplicateHoldings(items: HoldingItem[]): HoldingItem[] {
   const holdingsMap = new Map<string, HoldingItem>();
 
   for (const item of items) {
-    // Chercher un doublon existant: mֳ×me equipmentId OU mֳ×me nom + serials en commun
+    // Chercher un doublon existant: même equipmentId OU même nom + serials en commun
     let mergeKey: string | undefined = undefined;
 
     if (holdingsMap.has(item.equipmentId)) {
       mergeKey = item.equipmentId;
     } else {
-      // Vֳ©rifier si un autre item avec le mֳ×me nom a des serials en commun
+      // Vérifier si un autre item avec le même nom a des serials en commun
       for (const [key, existing] of holdingsMap) {
         if (existing.equipmentName === item.equipmentName) {
           const hasCommonSerial = item.serials.some(s => s && existing.serials.includes(s));
@@ -1030,16 +1042,16 @@ function deduplicateHoldings(items: HoldingItem[]): HoldingItem[] {
 
 /**
  * REPAIR ONLY: Force save current deduplicated holdings to DB
- * Utilise la logique de lecture (qui dֳ©duplique) pour ֳ©craser les donnֳ©es corrompues
+ * Utilise la logique de lecture (qui déduplique) pour écraser les données corrompues
  */
 export async function repairSoldierHoldings(soldierId: string, type: 'combat' | 'clothing'): Promise<void> {
-  // 1. Lire les holdings (la lecture applique dֳ©jֳ  deduplicateHoldings)
+  // 1. Lire les holdings (la lecture applique déjà deduplicateHoldings)
   const cleanItems = await getCurrentHoldings(soldierId, type);
 
   // 2. Calculer le total
   const outstandingCount = cleanItems.reduce((sum, item) => sum + item.quantity, 0);
 
-  // 3. ֳ‰craser dans la base
+  // 3. Écraser dans la base
   const holdingId = `${soldierId}_${type}`;
   const holdingRef = doc(db, 'soldier_holdings', holdingId);
 
@@ -1053,7 +1065,7 @@ export async function repairSoldierHoldings(soldierId: string, type: 'combat' | 
 /**
  * Get current holdings for a soldier (lecture depuis soldier_holdings)
  * NON-TRANSACTIONNEL: simple lecture
- * Inclut une dֳ©duplication automatique pour corriger les donnֳ©es historiques
+ * Inclut une déduplication automatique pour corriger les données historiques
  */
 export async function getCurrentHoldings(
   soldierId: string,
@@ -1072,7 +1084,7 @@ export async function getCurrentHoldings(
 
     if (holdingSnap.exists()) {
       const items = holdingSnap.data().items || [];
-      // Dֳ©dupliquer automatiquement pour corriger les donnֳ©es historiques
+      // Dédupliquer automatiquement pour corriger les données historiques
       return deduplicateHoldings(items);
     }
 
@@ -1085,7 +1097,7 @@ export async function getCurrentHoldings(
 }
 
 /**
- * Get all holdings for a type (utilisֳ© pour les rapports de stock globaux)
+ * Get all holdings for a type (utilisé pour les rapports de stock globaux)
  */
 export async function getAllHoldings(type: 'combat' | 'clothing'): Promise<any[]> {
   if (!isOnline()) {
@@ -1109,7 +1121,7 @@ export async function getAllHoldings(type: 'combat' | 'clothing'): Promise<any[]
 
 /**
  * Recalcule les holdings pour TOUS les soldats
- * Utile pour la migration initiale ou en cas de dֳ©synchronisation
+ * Utile pour la migration initiale ou en cas de désynchronisation
  */
 export async function recalculateAllSoldiersHoldings(
   onProgress?: (current: number, total: number) => void
@@ -1142,8 +1154,8 @@ export async function recalculateAllSoldiersHoldings(
             lastUpdated: Timestamp.now(),
           });
         } else {
-          // Si plus rien, on marque CLOSED ou on supprime si on veut ֳ×tre strict
-          // Pour la cohֳ©rence on garde le doc mais ֳ  CLOSED
+          // Si plus rien, on marque CLOSED ou on supprime si on veut être strict
+          // Pour la cohérence on garde le doc mais à CLOSED
           await setDoc(holdingRef, {
             soldierId,
             type,
@@ -1173,7 +1185,7 @@ export async function recalculateAllSoldiersHoldings(
 
 /**
  * Wrapper pour issueEquipment avec support offline
- * AMֳ‰LIORֳ‰: Attrape les erreurs rֳ©seau et met en queue automatiquement
+ * AMÉLIORÉ: Attrape les erreurs réseau et met en queue automatiquement
  */
 async function issueEquipmentOffline(params: IssueEquipmentParams): Promise<string> {
   if (!isOnline()) {
@@ -1184,7 +1196,7 @@ async function issueEquipmentOffline(params: IssueEquipmentParams): Promise<stri
   try {
     return await runWithTimeout(issueEquipment(params), 2500);
   } catch (error: any) {
-    // Si c'est une erreur rֳ©seau, mettre en queue au lieu d'ֳ©chouer
+    // Si c'est une erreur réseau, mettre en queue au lieu d'échouer
     if (isNetworkOrTimeoutError(error)) {
       console.log('[TransactionalAssignment] Network error detected - Queuing issue operation');
       return await offlineService.queue('issue', params);
@@ -1197,7 +1209,7 @@ async function issueEquipmentOffline(params: IssueEquipmentParams): Promise<stri
 
 /**
  * Wrapper pour returnEquipment avec support offline
- * AMֳ‰LIORֳ‰: Attrape les erreurs rֳ©seau et met en queue automatiquement
+ * AMÉLIORÉ: Attrape les erreurs réseau et met en queue automatiquement
  */
 async function returnEquipmentOffline(params: ReturnEquipmentParams): Promise<string> {
   if (!isOnline()) {
@@ -1218,7 +1230,7 @@ async function returnEquipmentOffline(params: ReturnEquipmentParams): Promise<st
 
 /**
  * Wrapper pour addEquipment avec support offline
- * AMֳ‰LIORֳ‰: Attrape les erreurs rֳ©seau et met en queue automatiquement
+ * AMÉLIORÉ: Attrape les erreurs réseau et met en queue automatiquement
  */
 async function addEquipmentOffline(params: AddEquipmentParams): Promise<string> {
   if (!isOnline()) {
@@ -1239,7 +1251,7 @@ async function addEquipmentOffline(params: AddEquipmentParams): Promise<string> 
 
 /**
  * Wrapper pour creditEquipment avec support offline
- * AMֳ‰LIORֳ‰: Attrape les erreurs rֳ©seau et met en queue automatiquement
+ * AMÉLIORÉ: Attrape les erreurs réseau et met en queue automatiquement
  */
 async function creditEquipmentOffline(
   soldierId: string,
@@ -1268,7 +1280,7 @@ async function creditEquipmentOffline(
 
 /**
  * Wrapper pour storageEquipment avec support offline
- * AMֳ‰LIORֳ‰: Attrape les erreurs rֳ©seau et met en queue automatiquement
+ * AMÉLIORÉ: Attrape les erreurs réseau et met en queue automatiquement
  */
 async function storageEquipmentOffline(
   soldierId: string,
@@ -1298,7 +1310,7 @@ async function storageEquipmentOffline(
 
 /**
  * Wrapper pour retrieveEquipment avec support offline
- * AMֳ‰LIORֳ‰: Attrape les erreurs rֳ©seau et met en queue automatiquement
+ * AMÉLIORÉ: Attrape les erreurs réseau et met en queue automatiquement
  */
 async function retrieveEquipmentOffline(
   soldierId: string,
@@ -1327,7 +1339,7 @@ async function retrieveEquipmentOffline(
 }
 
 // Enregistrer les fonctions transactionnelles pour le service offline
-// Cela permet au service offline de rejouer les opֳ©rations quand on revient online
+// Cela permet au service offline de rejouer les opérations quand on revient online
 setTransactionFunctions({
   issue: issueEquipment,
   return: returnEquipment,
@@ -1362,7 +1374,7 @@ setTransactionFunctions({
 
 // Export du service avec wrappers offline
 export const transactionalAssignmentService = {
-  // Fonctions avec support offline (recommandֳ©)
+  // Fonctions avec support offline (recommandé)
   issueEquipment: issueEquipmentOffline,
   returnEquipment: returnEquipmentOffline,
   addEquipment: addEquipmentOffline,

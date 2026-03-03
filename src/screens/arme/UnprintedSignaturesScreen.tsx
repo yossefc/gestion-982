@@ -128,6 +128,7 @@ const UnprintedSignaturesScreen: React.FC = () => {
         signature: assignment.signature || '',
         operatorSignature: undefined,
         operatorName: assignment.assignedByName || assignment.assignedByEmail || '',
+        operatorRank: assignment.assignedByRank || '',
         timestamp:
           assignment.timestamp instanceof Date
             ? assignment.timestamp

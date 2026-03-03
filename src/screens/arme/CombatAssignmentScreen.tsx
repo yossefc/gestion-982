@@ -442,6 +442,8 @@ const CombatAssignmentScreen: React.FC = () => {
           items,
           signature: signatureData,
           addedBy: user?.id || '',
+          addedByName: user?.displayName || user?.name || user?.email || '',
+          addedByRank: user?.rank || '',
           requestId,
         })
         : await transactionalAssignmentService.issueEquipment({
@@ -454,6 +456,8 @@ const CombatAssignmentScreen: React.FC = () => {
           items,
           signature: signatureData,
           assignedBy: user?.id || '',
+          assignedByName: user?.displayName || user?.name || user?.email || '',
+          assignedByRank: user?.rank || '',
           requestId,
         });
 
@@ -521,6 +525,8 @@ const CombatAssignmentScreen: React.FC = () => {
         items,
         signature: signatureData,
         operatorSignature: user?.signature || undefined,
+        operatorName: user?.displayName || user?.name || user?.email || '',
+        operatorRank: user?.rank || '',
         timestamp: new Date(),
         assignmentId,
       }).then(() => {

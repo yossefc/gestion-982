@@ -134,6 +134,7 @@ export interface Assignment {
   assignedBy: string;     // User ID qui a fait l'attribution
   assignedByName?: string; // Nom de l'opérateur
   assignedByEmail?: string; // Email de l'opérateur
+  assignedByRank?: string; // דרגה - Grade de l'opérateur
   isPrinted?: boolean;    // Indique si le formulaire a déjà été imprimé
   printedAt?: Date;       // Date d'impression
 }
