@@ -24,6 +24,7 @@ import {
   doc,
   setDoc,
   deleteDoc,
+  updateDoc,
   query,
   where,
   Timestamp,
@@ -366,6 +367,119 @@ const MigrationScreen: React.FC = () => {
     setModalVisible(true);
   };
 
+  // Migration 6: Injecter mספר שובר rétroactivement dans weapons_inventory
+  const migrateVoucherNumbers = async () => {
+    setModalType('warning');
+    setModalTitle('מיגרציה מספרי שובר');
+    setModalMessage('פעולה זו תחפש את מספרי השובר עבור כל הנשקים המוקצים ותעדכן אותם במלאי. להמשיך?');
+    setModalButtons([
+      { text: 'ביטול', style: 'outline', onPress: () => setModalVisible(false) },
+      {
+        text: 'אשר',
+        style: 'primary',
+        onPress: async () => {
+          setModalVisible(false);
+          setLoading(true);
+          setResults([]);
+          addResult('info', '🔄 מחפש נשקים ללא מספר שובר...');
+
+          try {
+            // 1. Récupérer tous les weapons assignés sans voucherNumber
+            const weaponsSnapshot = await getDocsFromServer(
+              query(collection(db, 'weapons_inventory'), where('status', '==', 'assigned'))
+            );
+
+            const weaponsToUpdate = weaponsSnapshot.docs.filter(d => {
+              const data = d.data();
+              return data.assignedTo && !data.assignedTo.voucherNumber;
+            });
+
+            addResult('info', `📦 נמצאו ${weaponsToUpdate.length} נשקים ללא מספר שובר (מתוך ${weaponsSnapshot.docs.length} מוקצים)`);
+
+            if (weaponsToUpdate.length === 0) {
+              addResult('success', '✅ כל הנשקים כבר מעודכנים עם מספר שובר');
+              setLoading(false);
+              return;
+            }
+
+            let updated = 0;
+            let notFound = 0;
+
+            for (const weaponDoc of weaponsToUpdate) {
+              const weapon = weaponDoc.data();
+              const serialNumber: string = weapon.serialNumber;
+              const soldierId: string = weapon.assignedTo?.soldierId;
+
+              if (!soldierId) {
+                addResult('error', `⚠️ נשק ${serialNumber}: אין soldierId`);
+                notFound++;
+                continue;
+              }
+
+              // 2. Chercher dans assignments l'attribution correspondante
+              const assignmentsSnapshot = await getDocs(
+                query(
+                  collection(db, 'assignments'),
+                  where('soldierId', '==', soldierId),
+                  where('type', '==', 'combat')
+                )
+              );
+
+              // Trouver l'assignment le plus récent qui contient ce numéro de série
+              let bestAssignmentId: string | null = null;
+              let bestTimestamp: number = 0;
+
+              for (const assignDoc of assignmentsSnapshot.docs) {
+                const assignment = assignDoc.data();
+                if (assignment.action !== 'issue' && assignment.action !== 'add') continue;
+
+                const containsSerial = (assignment.items || []).some((item: any) => {
+                  if (!item.serial) return false;
+                  const serials = item.serial.split(',').map((s: string) => s.trim());
+                  return serials.includes(serialNumber);
+                });
+
+                if (containsSerial) {
+                  const ts: number = assignment.timestamp?.seconds ?? 0;
+                  if (ts > bestTimestamp) {
+                    bestTimestamp = ts;
+                    bestAssignmentId = assignDoc.id;
+                  }
+                }
+              }
+
+              if (bestAssignmentId) {
+                // 3. Mise à jour partielle du champ imbriqué (dot notation Firestore)
+                await updateDoc(doc(db, 'weapons_inventory', weaponDoc.id), {
+                  'assignedTo.voucherNumber': bestAssignmentId,
+                });
+                updated++;
+                addResult('success', `✅ ${serialNumber} → שובר: ...${bestAssignmentId.slice(-8)}`);
+              } else {
+                notFound++;
+                addResult('info', `⚠️ ${serialNumber}: לא נמצא שובר תואם בהיסטוריה`);
+              }
+            }
+
+            addResult('success', `🎉 מיגרציה הושלמה: ${updated} עודכנו, ${notFound} לא נמצאו`);
+            setTimeout(() => {
+              setModalType('success');
+              setModalTitle('הצלחה');
+              setModalMessage(`${updated} נשקים עודכנו עם מספר שובר`);
+              setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+              setModalVisible(true);
+            }, 500);
+          } catch (error: any) {
+            addResult('error', `❌ שגיאה: ${error.message}`);
+          } finally {
+            setLoading(false);
+          }
+        },
+      },
+    ]);
+    setModalVisible(true);
+  };
+
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -425,6 +539,15 @@ const MigrationScreen: React.FC = () => {
           >
             <Text style={styles.buttonText}>5. עדכן כל החיילים ל-"לא מגויס"</Text>
             <Text style={styles.buttonSubtext}>Set all soldiers status to not_recruited</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.button, { backgroundColor: Colors.arme }, loading && styles.buttonDisabled]}
+            onPress={migrateVoucherNumbers}
+            disabled={loading}
+          >
+            <Text style={styles.buttonText}>6. הוסף מספר שובר למלאי נשק</Text>
+            <Text style={styles.buttonSubtext}>מחפש שובר תואם בהיסטוריית ההחתמות ומעדכן במלאי הנשק</Text>
           </TouchableOpacity>
         </View>
 

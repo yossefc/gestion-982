@@ -351,13 +351,19 @@ export function startRealtimeListener(key: CacheKey): () => void {
   const unsubscribe = onSnapshot(
     collection(db, config.collection),
     (snapshot: QuerySnapshot<DocumentData>) => {
-      let data = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt?.toDate?.() || doc.data().createdAt,
-        updatedAt: doc.data().updatedAt?.toDate?.() || doc.data().updatedAt,
-        timestamp: doc.data().timestamp?.toDate?.() || doc.data().timestamp,
-      }));
+      let data = snapshot.docs.map(doc => {
+        const docData = doc.data();
+        // Omit base64 signatures from cache to save storage space and avoid SQLite full errors
+        delete docData.signature;
+
+        return {
+          id: doc.id,
+          ...docData,
+          createdAt: docData.createdAt?.toDate?.() || docData.createdAt,
+          updatedAt: docData.updatedAt?.toDate?.() || docData.updatedAt,
+          timestamp: docData.timestamp?.toDate?.() || docData.timestamp,
+        };
+      });
 
       // Filtrage spécifique
       if (key === 'combatAssignments') {
@@ -482,7 +488,15 @@ export function getCacheStats(): Record<CacheKey, { count: number; age: number; 
 // PERSISTENCE ASYNCSTORAGE
 // ============================================
 
-const CHUNK_SIZE = 50; // Nombre d'items par chunk pour éviter SQLite_FULL et CursorWindow limit
+const DEFAULT_CHUNK_SIZE = 50;
+
+function getChunkSize(key: CacheKey): number {
+  // Assignments can be large (lots of items). Max 10 per chunk.
+  if (key === 'combatAssignments' || key === 'clothingAssignments') {
+    return 10;
+  }
+  return DEFAULT_CHUNK_SIZE;
+}
 
 /**
  * Sauvegarde un cache vers AsyncStorage avec chunking pour les gros tableaux
@@ -499,10 +513,11 @@ async function persistToStorage(key: CacheKey): Promise<void> {
     await clearSpecificStorage(key);
 
     const isLargeData = ['combatAssignments', 'clothingAssignments', 'weaponsInventory', 'soldiers'].includes(key);
+    const chunkSize = getChunkSize(key);
 
-    if (isLargeData && entry.data.length > CHUNK_SIZE) {
+    if (isLargeData && entry.data.length > chunkSize) {
       // Chunking saving
-      const chunksCount = Math.ceil(entry.data.length / CHUNK_SIZE);
+      const chunksCount = Math.ceil(entry.data.length / chunkSize);
       const metadata = {
         timestamp: entry.timestamp,
         isChunked: true,
@@ -512,7 +527,7 @@ async function persistToStorage(key: CacheKey): Promise<void> {
       await AsyncStorage.setItem(`${STORAGE_PREFIX}${key}_meta`, JSON.stringify(metadata));
 
       for (let i = 0; i < chunksCount; i++) {
-        const chunkData = entry.data.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+        const chunkData = entry.data.slice(i * chunkSize, (i + 1) * chunkSize);
         await AsyncStorage.setItem(`${STORAGE_PREFIX}${key}_chunk_${i}`, JSON.stringify(chunkData));
       }
       console.log(`[CacheService] Persisted ${key}: ${entry.data.length} items in ${chunksCount} chunks`);
@@ -617,6 +632,8 @@ async function loadFromStorage(key: CacheKey): Promise<boolean> {
     return true;
   } catch (error) {
     console.error(`[CacheService] Error loading ${key} from storage:`, error);
+    // En cas d'erreur de lecture (ex: CursorWindow trop petit), on efface le cache corrompu
+    await clearSpecificStorage(key);
     return false;
   }
 }
