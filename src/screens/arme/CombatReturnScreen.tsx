@@ -159,26 +159,6 @@ const CombatReturnScreen: React.FC = () => {
     );
   };
 
-  const toggleSerial = (itemKey: string, serial: string) => {
-    setItems(prev =>
-      prev.map(item => {
-        if (item.itemKey === itemKey) {
-          const isSelected = item.selectedSerials.includes(serial);
-          const selectedSerials = isSelected
-            ? item.selectedSerials.filter(s => s !== serial)
-            : [...item.selectedSerials, serial];
-
-          return {
-            ...item,
-            selectedSerials,
-            returnQuantity: selectedSerials.length,
-          };
-        }
-        return item;
-      })
-    );
-  };
-
   const handleReturnEquipment = async () => {
     const selectedItems = items.filter(
       item => item.selected && item.returnQuantity > 0
@@ -449,7 +429,6 @@ const CombatReturnScreen: React.FC = () => {
           <Text style={styles.instructionsText}>
             ג€¢ ׳‘׳—׳¨ ׳׳× ׳”׳₪׳¨׳™׳˜׳™׳ ׳©׳”׳—׳™׳™׳ ׳׳—׳–׳™׳¨{'\n'}
             ג€¢ ׳”׳’׳“׳¨ ׳›׳׳•׳× ׳׳›׳ ׳₪׳¨׳™׳˜{'\n'}
-            ג€¢ ׳‘׳—׳¨ ׳׳¡׳˜׳‘׳™׳ ׳׳ ׳¨׳׳•׳•׳ ׳˜׳™
           </Text>
         </View>
 
@@ -555,38 +534,7 @@ const CombatReturnScreen: React.FC = () => {
                       </View>
                     </View>
 
-                    {/* Serials selector */}
-                    {item.availableSerials.length > 0 && (
-                      <View style={styles.serialsSection}>
-                        <Text style={styles.detailLabel}>׳‘׳—׳¨ ׳׳¡׳˜׳‘׳™׳:</Text>
-                        <View style={styles.serialsList}>
-                          {item.availableSerials.map((serial, idx) => (
-                            <TouchableOpacity
-                              key={idx}
-                              style={[
-                                styles.serialChip,
-                                item.selectedSerials.includes(serial) &&
-                                styles.serialChipSelected,
-                              ]}
-                              onPress={() =>
-                                toggleSerial(item.itemKey, serial)
-                              }
-                              disabled={processing}
-                            >
-                              <Text
-                                style={[
-                                  styles.serialChipText,
-                                  item.selectedSerials.includes(serial) &&
-                                  styles.serialChipTextSelected,
-                                ]}
-                              >
-                                {serial}
-                              </Text>
-                            </TouchableOpacity>
-                          ))}
-                        </View>
-                      </View>
-                    )}
+
                   </View>
                 )}
               </View>
@@ -907,35 +855,6 @@ const styles = StyleSheet.create({
     color: Colors.text,
     minWidth: 40,
     textAlign: 'center',
-  },
-  serialsSection: {
-    marginTop: 12,
-  },
-  serialsList: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    justifyContent: 'flex-end',
-  },
-  serialChip: {
-    backgroundColor: Colors.backgroundSecondary,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 2,
-    borderColor: Colors.borderDark,
-  },
-  serialChipSelected: {
-    backgroundColor: Colors.success,
-    borderColor: Colors.success,
-  },
-  serialChipText: {
-    fontSize: 13,
-    color: Colors.text,
-    fontWeight: '600',
-  },
-  serialChipTextSelected: {
-    color: Colors.textWhite,
   },
   emptyCard: {
     backgroundColor: Colors.backgroundCard,

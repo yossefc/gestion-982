@@ -5,7 +5,6 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { ActivityIndicator, View, StyleSheet } from 'react-native';
 
 import { useAuth } from '../contexts/AuthContext';
-import { OfflineBanner } from '../components';
 import { RootStackParamList } from '../types';
 import { Colors } from '../theme/Colors';
 
@@ -75,7 +74,6 @@ const AppNavigator: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      <OfflineBanner />
       <NavigationContainer>
         <Stack.Navigator
           screenOptions={{
