@@ -87,6 +87,8 @@ export interface CombatEquipment {
   category: string;       // קטגוריה
   categoryKey?: string;   // Catégorie normalisée
   serial?: string;        // מסטב
+  requiresSerial?: boolean; // מסטב מהמלאי
+  requiresManualSerial?: boolean; // מסטב ידני
   hasSubEquipment: boolean;
   subEquipments?: SubEquipment[];
 }
@@ -295,6 +297,7 @@ export interface WeaponInventoryItem {
     soldierName: string;
     soldierPersonalNumber: string;
     assignedDate: Date;
+    voucherNumber?: string;   // מספר שובר - numéro d'attribution
   };
   storageDate?: Date;          // Date de mise en אפסון
   notes?: string;

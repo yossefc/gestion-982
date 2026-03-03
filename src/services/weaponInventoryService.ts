@@ -507,6 +507,7 @@ export const setWeaponAssignedStatusOnly = async (
     soldierId: string;
     soldierName: string;
     soldierPersonalNumber: string;
+    voucherNumber?: string;
   }
 ): Promise<void> => {
   try {
@@ -532,6 +533,7 @@ export const setWeaponAssignedStatusOnlyOffline = async (
     soldierId: string;
     soldierName: string;
     soldierPersonalNumber: string;
+    voucherNumber?: string;
   }
 ): Promise<string> => {
   const params = { weaponId, soldier };

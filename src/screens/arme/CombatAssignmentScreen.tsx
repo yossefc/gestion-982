@@ -38,6 +38,7 @@ interface Equipment {
   name: string;
   category?: string;
   requiresSerial?: boolean;
+  requiresManualSerial?: boolean;
   hasSubEquipment?: boolean;
   subEquipment?: { id: string; name: string }[];
 }
@@ -157,11 +158,11 @@ const CombatAssignmentScreen: React.FC = () => {
       }
 
       if (eq) {
-        console.log('Adding equipment to selection:', eq.name, 'qty:', manaEq.quantity, 'requiresSerial:', eq.requiresSerial);
+        console.log('Adding equipment to selection:', eq.name, 'qty:', manaEq.quantity, 'requiresSerial:', eq.requiresSerial, 'requiresManualSerial:', eq.requiresManualSerial);
         newMap.set(eq.id, {
           equipment: eq,
           quantity: manaEq.quantity,
-          serials: eq.requiresSerial ? Array(manaEq.quantity).fill('') : undefined,
+          serials: (eq.requiresSerial || eq.requiresManualSerial) ? Array(manaEq.quantity).fill('') : undefined,
           subItems: [],
         });
       } else {
@@ -181,7 +182,7 @@ const CombatAssignmentScreen: React.FC = () => {
         newMap.set(eq.id, {
           equipment: eq,
           quantity: 1,
-          serials: eq.requiresSerial ? [''] : undefined,
+          serials: (eq.requiresSerial || eq.requiresManualSerial) ? [''] : undefined,
           subItems: [],
         });
       }
@@ -214,7 +215,7 @@ const CombatAssignmentScreen: React.FC = () => {
         } else {
           // Adjust serials array if equipment requires serial
           let newSerials = item.serials;
-          if (item.equipment.requiresSerial) {
+          if (item.equipment.requiresSerial || item.equipment.requiresManualSerial) {
             if (newQty > item.quantity) {
               // Add more empty slots
               newSerials = [...(item.serials || []), ...Array(newQty - item.quantity).fill('')];
@@ -362,7 +363,7 @@ const CombatAssignmentScreen: React.FC = () => {
 
     // Check for required serials
     for (const [id, item] of Array.from(selectedItems.entries())) {
-      if (item.equipment.requiresSerial) {
+      if (item.equipment.requiresSerial || item.equipment.requiresManualSerial) {
         if (!item.serials || item.serials.length !== item.quantity) {
           setModalType('error');
           setModalMessage(`יש להזין מספרים סידוריים עבור ${item.equipment.name}`);
@@ -484,6 +485,7 @@ const CombatAssignmentScreen: React.FC = () => {
                     soldierId: soldier.id,
                     soldierName: soldier.name,
                     soldierPersonalNumber: soldier.personalNumber,
+                    voucherNumber: assignmentId,
                   })
                 );
               } else {
@@ -545,6 +547,7 @@ const CombatAssignmentScreen: React.FC = () => {
         }
         whatsappMessage += '\n';
       }
+      whatsappMessage += `\nמספר שובר: ${assignmentId}`;
       whatsappMessage += `\nהציוד רשום על שמך ובאחריותך.\nתודה,\nגדוד 982`;
 
       // Store assignment data for potential reprint
@@ -922,13 +925,30 @@ const CombatAssignmentScreen: React.FC = () => {
                                   </View>
 
                                   {/* Serial Numbers */}
-                                  {eq.requiresSerial && item?.serials && (
+                                  {(eq.requiresSerial || eq.requiresManualSerial) && item?.serials && (
                                     <View style={styles.serialsContainer}>
                                       <Text style={styles.serialsTitle}>
                                         מספרים סידוריים (מסטב): *
                                       </Text>
                                       {item.serials.map((serial, idx) => {
-                                        // Get available serials for this equipment category
+                                        if (eq.requiresManualSerial) {
+                                          return (
+                                            <View key={idx} style={styles.serialRow}>
+                                              <Text style={styles.serialLabel}>
+                                                {item.quantity > 1 ? `יחידה ${idx + 1}:` : 'מסטב:'}
+                                              </Text>
+                                              <TextInput
+                                                style={[styles.input, styles.manualSerialInput]}
+                                                value={serial}
+                                                onChangeText={(text) => updateSerial(eq.id, idx, text)}
+                                                placeholder="הזן מספר סידורי"
+                                                placeholderTextColor={Colors.placeholder}
+                                              />
+                                            </View>
+                                          );
+                                        }
+
+                                        // Get available serials for this equipment category (for inventory selection)
                                         const equipmentName = item.equipment.name;
 
                                         // Get already selected serials for this equipment (to prevent duplicates in same form)

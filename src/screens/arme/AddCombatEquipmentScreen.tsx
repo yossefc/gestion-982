@@ -42,10 +42,12 @@ const AddCombatEquipmentScreen: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(isEditMode);
 
+
   // Form state
   const [name, setName] = useState('');
   const [category, setCategory] = useState('נשק');
   const [requiresSerial, setRequiresSerial] = useState(false);
+  const [requiresManualSerial, setRequiresManualSerial] = useState(false);
   const [hasSubEquipment, setHasSubEquipment] = useState(false);
   const [subEquipments, setSubEquipments] = useState<SubEquipment[]>([]);
   const [newSubEquipmentName, setNewSubEquipmentName] = useState('');
@@ -72,6 +74,7 @@ const AddCombatEquipmentScreen: React.FC = () => {
         setName(equipment.name);
         setCategory(equipment.category);
         setRequiresSerial((equipment as any).requiresSerial || false);
+        setRequiresManualSerial((equipment as any).requiresManualSerial || false);
         setHasSubEquipment(equipment.hasSubEquipment);
         setSubEquipments(equipment.subEquipments || []);
       }
@@ -135,6 +138,7 @@ const AddCombatEquipmentScreen: React.FC = () => {
         hasSubEquipment,
         subEquipments: hasSubEquipment ? subEquipments : [],
         requiresSerial,
+        requiresManualSerial,
       };
 
       if (isEditMode && equipmentId) {
@@ -255,20 +259,45 @@ const AddCombatEquipmentScreen: React.FC = () => {
             </View>
           </View>
 
-          {/* דורש מסטב */}
+          {/* דורש מסטב מהמלאי */}
           <View style={styles.section}>
             <View style={styles.toggleContainer}>
               <Switch
                 value={requiresSerial}
-                onValueChange={setRequiresSerial}
+                onValueChange={(val) => {
+                  setRequiresSerial(val);
+                  if (val) setRequiresManualSerial(false);
+                }}
                 trackColor={{ false: Colors.border, true: Colors.arme }}
                 thumbColor={Colors.backgroundCard}
                 ios_backgroundColor={Colors.border}
               />
               <View style={styles.toggleTextContainer}>
-                <Text style={styles.toggleLabel}>דורש מספר סידורי (מסטב)</Text>
+                <Text style={styles.toggleLabel}>דורש מספר סידורי (מהמלאי)</Text>
                 <Text style={styles.toggleHint}>
-                  סמן אם כל יחידה של ציוד זה דורשת מסטב ייחודי בהחתמה
+                  סמן אם פריט זה דורש בחירת מסטב מתוך מלאי הנשקים הקיים
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          {/* דורש מסטב ידני */}
+          <View style={styles.section}>
+            <View style={styles.toggleContainer}>
+              <Switch
+                value={requiresManualSerial}
+                onValueChange={(val) => {
+                  setRequiresManualSerial(val);
+                  if (val) setRequiresSerial(false);
+                }}
+                trackColor={{ false: Colors.border, true: Colors.arme }}
+                thumbColor={Colors.backgroundCard}
+                ios_backgroundColor={Colors.border}
+              />
+              <View style={styles.toggleTextContainer}>
+                <Text style={styles.toggleLabel}>דורש מספר סידורי (ידני)</Text>
+                <Text style={styles.toggleHint}>
+                  סמן אם פריט זה מאפשר הזנת מסטב חופשית ללא חיפוש במלאי הקיים
                 </Text>
               </View>
             </View>
