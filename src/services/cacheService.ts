@@ -482,8 +482,10 @@ export function getCacheStats(): Record<CacheKey, { count: number; age: number; 
 // PERSISTENCE ASYNCSTORAGE
 // ============================================
 
+const CHUNK_SIZE = 50; // Nombre d'items par chunk pour éviter SQLite_FULL et CursorWindow limit
+
 /**
- * Sauvegarde un cache vers AsyncStorage
+ * Sauvegarde un cache vers AsyncStorage avec chunking pour les gros tableaux
  */
 async function persistToStorage(key: CacheKey): Promise<void> {
   try {
@@ -493,18 +495,59 @@ async function persistToStorage(key: CacheKey): Promise<void> {
       return;
     }
 
-    const storageData = {
-      data: entry.data,
-      timestamp: entry.timestamp,
-    };
+    // Supprimer les anciens chunks d'abord pour éviter les conflits
+    await clearSpecificStorage(key);
 
-    await AsyncStorage.setItem(
-      `${STORAGE_PREFIX}${key}`,
-      JSON.stringify(storageData)
-    );
-    console.log(`[CacheService] Persisted ${key}: ${entry.data.length} items`);
+    const isLargeData = ['combatAssignments', 'clothingAssignments', 'weaponsInventory', 'soldiers'].includes(key);
+
+    if (isLargeData && entry.data.length > CHUNK_SIZE) {
+      // Chunking saving
+      const chunksCount = Math.ceil(entry.data.length / CHUNK_SIZE);
+      const metadata = {
+        timestamp: entry.timestamp,
+        isChunked: true,
+        chunksCount,
+      };
+
+      await AsyncStorage.setItem(`${STORAGE_PREFIX}${key}_meta`, JSON.stringify(metadata));
+
+      for (let i = 0; i < chunksCount; i++) {
+        const chunkData = entry.data.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+        await AsyncStorage.setItem(`${STORAGE_PREFIX}${key}_chunk_${i}`, JSON.stringify(chunkData));
+      }
+      console.log(`[CacheService] Persisted ${key}: ${entry.data.length} items in ${chunksCount} chunks`);
+    } else {
+      // Small data saving directly
+      const storageData = {
+        data: entry.data,
+        timestamp: entry.timestamp,
+        isChunked: false
+      };
+
+      await AsyncStorage.setItem(
+        `${STORAGE_PREFIX}${key}`,
+        JSON.stringify(storageData)
+      );
+      console.log(`[CacheService] Persisted ${key}: ${entry.data.length} items`);
+    }
+
   } catch (error) {
     console.error(`[CacheService] Error persisting ${key}:`, error);
+  }
+}
+
+/**
+ * Nettoie toutes les clés reliées à un Storage specifique
+ */
+async function clearSpecificStorage(key: CacheKey): Promise<void> {
+  try {
+    const allKeys = await AsyncStorage.getAllKeys();
+    const keysToRemove = allKeys.filter(k => k.startsWith(`${STORAGE_PREFIX}${key}`));
+    if (keysToRemove.length > 0) {
+      await AsyncStorage.multiRemove(keysToRemove);
+    }
+  } catch (error) {
+    console.error(`[CacheService] Error clearing old keys for ${key}:`, error);
   }
 }
 
@@ -514,6 +557,37 @@ async function persistToStorage(key: CacheKey): Promise<void> {
  */
 async function loadFromStorage(key: CacheKey): Promise<boolean> {
   try {
+    const config = CACHE_CONFIG[key];
+
+    // Essayer de lire en tant que données chunkées d'abord (nouveau format)
+    const metaStored = await AsyncStorage.getItem(`${STORAGE_PREFIX}${key}_meta`);
+
+    if (metaStored) {
+      const metadata = JSON.parse(metaStored);
+
+      const ageMs = Date.now() - metadata.timestamp;
+      const maxAge = config.maxStorageAge || (7 * 24 * 60 * 60 * 1000);
+      if (ageMs > maxAge) {
+        console.log(`[CacheService] Chunked Storage data too old for ${key}, removing...`);
+        await clearSpecificStorage(key);
+        return false;
+      }
+
+      let allData: any[] = [];
+      for (let i = 0; i < metadata.chunksCount; i++) {
+        const chunkStr = await AsyncStorage.getItem(`${STORAGE_PREFIX}${key}_chunk_${i}`);
+        if (chunkStr) {
+          allData = allData.concat(JSON.parse(chunkStr));
+        }
+      }
+
+      cache[key].data = allData;
+      cache[key].timestamp = metadata.timestamp;
+      console.log(`[CacheService] Loaded ${key} from storage: ${allData.length} items in chunks`);
+      return true;
+    }
+
+    // Sinon essayer ancien format non chunké
     const stored = await AsyncStorage.getItem(`${STORAGE_PREFIX}${key}`);
     if (!stored) {
       console.log(`[CacheService] No stored data for ${key}`);
@@ -521,7 +595,6 @@ async function loadFromStorage(key: CacheKey): Promise<boolean> {
     }
 
     const { data, timestamp } = JSON.parse(stored);
-    const config = CACHE_CONFIG[key];
 
     // Calculer l'âge des données
     const ageMs = Date.now() - timestamp;
@@ -533,7 +606,7 @@ async function loadFromStorage(key: CacheKey): Promise<boolean> {
     const maxAge = config.maxStorageAge || (7 * 24 * 60 * 60 * 1000); // 7 jours par défaut
     if (ageMs > maxAge) {
       console.log(`[CacheService] Storage data too old for ${key} (${ageDays} days), removing...`);
-      await AsyncStorage.removeItem(`${STORAGE_PREFIX}${key}`);
+      await clearSpecificStorage(key);
       return false;
     }
 
@@ -593,7 +666,7 @@ export async function persistCacheKey(key: CacheKey): Promise<void> {
 export async function clearStorage(): Promise<void> {
   const keys = Object.keys(CACHE_CONFIG) as CacheKey[];
   await Promise.all(
-    keys.map(key => AsyncStorage.removeItem(`${STORAGE_PREFIX}${key}`))
+    keys.map(key => clearSpecificStorage(key))
   );
 }
 
