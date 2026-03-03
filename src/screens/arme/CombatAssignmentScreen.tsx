@@ -548,7 +548,7 @@ const CombatAssignmentScreen: React.FC = () => {
         }
         whatsappMessage += '\n';
       }
-      whatsappMessage += `\nמספר שובר: ${assignmentId}`;
+      whatsappMessage += `\nמספר שובר: ${String(assignmentId).slice(-6).padStart(6, '0')}`;
       whatsappMessage += `\nהציוד רשום על שמך ובאחריותך.\nתודה,\nגדוד 982`;
 
       // Store assignment data for potential reprint
@@ -1253,7 +1253,7 @@ const CombatAssignmentScreen: React.FC = () => {
         visible={showSuccessModal}
         type="success"
         title="הצלחה!"
-        message={`ההחתמה בוצעה בהצלחה והמסמך נשלח למדפסת\n\nמספר שובר:\n${successModalData?.assignmentId ?? ''}`}
+        message={`ההחתמה בוצעה בהצלחה והמסמך נשלח למדפסת\n\nמספר שובר: ${successModalData?.assignmentId ? String(successModalData.assignmentId).slice(-6).padStart(6, '0') : ''}`}
         buttons={[
           {
             text: 'סגור',

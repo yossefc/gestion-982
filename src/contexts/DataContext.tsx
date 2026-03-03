@@ -423,13 +423,12 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
       }
     };
 
-    // Fonction pour charger tous les caches avec fallback
     const loadAllCachesWithFallback = async () => {
       // Charger en parallele avec des timeouts individuels
       const loadWithTimeout = async <T,>(
         key: string,
         setter: React.Dispatch<React.SetStateAction<T[]>>,
-        timeoutMs: number = 5000
+        timeoutMs: number = 20000 // Augmented to 20s to allow Firebase ample time to download initial data after a local cache wipe
       ) => {
         try {
           const result = await Promise.race([
@@ -455,7 +454,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
         loadWithTimeout<Assignment>('combatAssignments', setCombatAssignments),
         loadWithTimeout<Assignment>('clothingAssignments', setClothingAssignments),
         // Charger l'inventaire des armes pour le mode offline (mסטב)
-        loadWithTimeout<any>('weaponsInventory', () => {}), // Juste peupler le cache
+        loadWithTimeout<any>('weaponsInventory', () => { }), // Juste peupler le cache
       ]);
     };
 

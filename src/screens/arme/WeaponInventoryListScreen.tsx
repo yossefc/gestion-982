@@ -508,7 +508,7 @@ const WeaponInventoryListScreen: React.FC = () => {
                           <View style={styles.soldierInfoRow}>
                             <Ionicons name="receipt-outline" size={11} color={Colors.textLight} />
                             <Text style={styles.voucherNumberTable}>
-                              שובר: {weapon.assignedTo.voucherNumber.slice(-8)}
+                              שובר: {String(weapon.assignedTo.voucherNumber).slice(-6).padStart(6, '0')}
                             </Text>
                           </View>
                         ) : null}
@@ -720,7 +720,7 @@ const WeaponInventoryListScreen: React.FC = () => {
                   {selectedWeapon.status === 'assigned' && selectedWeapon.assignedTo?.voucherNumber && (
                     <View style={styles.modalInfoRow}>
                       <Text style={[styles.modalInfoValue, styles.voucherNumberModal]}>
-                        {selectedWeapon.assignedTo.voucherNumber}
+                        {String(selectedWeapon.assignedTo.voucherNumber).slice(-6).padStart(6, '0')}
                       </Text>
                       <Text style={styles.modalInfoLabel}>מספר שובר:</Text>
                     </View>
