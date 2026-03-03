@@ -553,7 +553,52 @@ export const setWeaponAssignedStatusOnlyOffline = async (
       error?.message?.includes('Could not reach Cloud Firestore');
 
     if (isNetworkError) {
-      return await offlineService.queue('weaponAssign', params);
+      return await offlineService.queue('weaponReturn', params);
+    }
+
+    throw error;
+  }
+};
+
+/**
+ * Mettre à jour UNIQUEMENT le statut de l'arme en inventaire pour la rendre disponible
+ */
+export const setWeaponAvailableStatusOnly = async (weaponId: string): Promise<void> => {
+  try {
+    await updateWeapon(weaponId, {
+      status: 'available',
+      assignedTo: deleteField() as any,
+      storageDate: deleteField() as any,
+    });
+  } catch (error) {
+    throw error;
+  }
+};
+
+/**
+ * Version offline-aware: queue l'update si hors ligne
+ */
+export const setWeaponAvailableStatusOnlyOffline = async (weaponId: string): Promise<string> => {
+  const params = { weaponId };
+
+  if (!isOnline()) {
+    return await offlineService.queue('weaponReturn', params);
+  }
+
+  try {
+    await setWeaponAvailableStatusOnly(weaponId);
+    return weaponId;
+  } catch (error: any) {
+    const isNetworkError =
+      error?.code === 'unavailable' ||
+      error?.code === 'failed-precondition' ||
+      error?.message?.includes('network') ||
+      error?.message?.includes('offline') ||
+      error?.message?.includes('Failed to get document') ||
+      error?.message?.includes('Could not reach Cloud Firestore');
+
+    if (isNetworkError) {
+      return await offlineService.queue('weaponReturn', params);
     }
 
     throw error;
@@ -867,6 +912,10 @@ setTransactionFunctions({
     await setWeaponAssignedStatusOnly(params.weaponId, params.soldier);
     return params.weaponId;
   },
+  weaponReturn: async (params: any) => {
+    await setWeaponAvailableStatusOnly(params.weaponId);
+    return params.weaponId;
+  },
 });
 
 export const weaponInventoryService = {
@@ -884,11 +933,13 @@ export const weaponInventoryService = {
   getWeaponBySerialNumber,
   getWeaponsBySoldier,
   getSoldiersWithStoredWeapons,
-    // Actions
-    assignWeaponToSoldier,
-    setWeaponAssignedStatusOnly,
-    setWeaponAssignedStatusOnlyOffline,
-    returnWeapon,
+  // Actions
+  assignWeaponToSoldier,
+  setWeaponAssignedStatusOnly,
+  setWeaponAssignedStatusOnlyOffline,
+  setWeaponAvailableStatusOnly,
+  setWeaponAvailableStatusOnlyOffline,
+  returnWeapon,
   moveWeaponToStorage,
   moveWeaponToStorageWithSoldier,
   removeWeaponFromStorage,

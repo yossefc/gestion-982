@@ -611,23 +611,25 @@ export async function returnEquipment(params: ReturnEquipmentParams): Promise<st
   // (les requêtes Firestore ne sont pas compatibles avec runTransaction)
   // Un échec ici ne remet pas en cause le זיכוי déjà enregistré — on log et on continue
   if (type === 'combat') {
-    for (const item of items) {
+    // Fire-and-forget pour ne pas bloquer le traitement global et éviter les timeouts
+    Promise.all(items.map(async (item) => {
       const serials = item.serial
         ? item.serial.split(',').map((s: string) => s.trim()).filter(Boolean)
         : [];
-      for (const serial of serials) {
+
+      await Promise.all(serials.map(async (serial) => {
         try {
           const weapon = await weaponInventoryService.getWeaponBySerialNumber(serial);
           if (weapon) {
-            await weaponInventoryService.returnWeapon(weapon.id);
+            await weaponInventoryService.setWeaponAvailableStatusOnlyOffline(weapon.id);
           } else {
             console.warn(`[ReturnEquipment] Arme introuvable dans l'inventaire pour le מסטב: ${serial}`);
           }
         } catch (err) {
           console.warn(`[ReturnEquipment] Échec mise à jour inventaire pour מסטב ${serial}:`, err);
         }
-      }
-    }
+      }));
+    })).catch(err => console.error("[ReturnEquipment] Erreur globale lors de la libération des armes:", err));
   }
 
   return assignmentId;
@@ -722,7 +724,9 @@ export async function creditEquipment(
   creditedBy: string,
   requestId: string
 ): Promise<string> {
-  return await runTransaction(db, async (transaction: Transaction) => {
+  let returnedHoldings: HoldingItem[] = [];
+
+  const assignmentId = await runTransaction(db, async (transaction: Transaction) => {
     // 0. Idempotence
     const assignmentRef = doc(db, 'assignments', requestId);
     const assignmentSnap = await transaction.get(assignmentRef);
@@ -754,6 +758,7 @@ export async function creditEquipment(
     const issueDocs = await getDocs(issueQuery);
 
     const currentHoldings: HoldingItem[] = holdingSnap.data().items;
+    returnedHoldings = currentHoldings; // Capture for weapon release after transaction
 
     // 2. Crֳ©er un assignment credit avec tous les items
     const assignmentData: any = {
@@ -813,6 +818,28 @@ export async function creditEquipment(
 
     return assignmentRef.id;
   });
+
+  // Mise à jour de l'inventaire des armes APRÈS la transaction réussie
+  if (type === 'combat' && returnedHoldings.length > 0) {
+    // Fire-and-forget pour ne pas bloquer le traitement global et éviter les timeouts
+    Promise.all(returnedHoldings.map(async (item) => {
+      const serials = item.serials ? item.serials : [];
+      await Promise.all(serials.map(async (serial) => {
+        try {
+          const weapon = await weaponInventoryService.getWeaponBySerialNumber(serial);
+          if (weapon) {
+            await weaponInventoryService.setWeaponAvailableStatusOnlyOffline(weapon.id);
+          } else {
+            console.warn(`[CreditEquipment] Arme introuvable dans l'inventaire pour le מסטב: ${serial}`);
+          }
+        } catch (err) {
+          console.warn(`[CreditEquipment] Échec mise à jour inventaire pour מסטב ${serial}:`, err);
+        }
+      }));
+    })).catch(err => console.error("[CreditEquipment] Erreur globale lors de la libération des armes:", err));
+  }
+
+  return assignmentId;
 }
 
 /**
@@ -1068,9 +1095,9 @@ export async function getAllHoldings(type: 'combat' | 'clothing'): Promise<any[]
 
   try {
     const q = query(
-    collection(db, 'soldier_holdings'),
-    where('type', '==', type)
-  );
+      collection(db, 'soldier_holdings'),
+      where('type', '==', type)
+    );
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => doc.data());
   } catch (error) {

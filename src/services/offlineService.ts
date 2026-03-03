@@ -23,13 +23,14 @@ const STORAGE_KEYS = {
 
 // Types d'opֳ©rations supportֳ©es
 export type OperationType =
-  | 'issue'      // ׳”׳—׳×׳׳”
+  | 'issue'      // ׳”׳—׳×׳ž׳”
   | 'return'     // ׳”׳—׳–׳¨׳”
   | 'add'        // ׳”׳•׳¡׳₪׳”
   | 'credit'     // ׳–׳™׳›׳•׳™
-  | 'storage'    // ׳׳₪׳¡׳•׳
+  | 'storage'    // ׳׳₪׳¡׳•׳Ÿ
   | 'retrieve'
-  | 'weaponAssign';
+  | 'weaponAssign'
+  | 'weaponReturn';
 
 export interface PendingOperation {
   id: string;                    // UUID unique
@@ -555,7 +556,11 @@ async function updateAssignmentsCache(
     params?.retrievedBy ||
     '';
 
-  const assignmentAction = type === 'weaponAssign' ? 'add' : type;
+  const assignmentAction = type === 'weaponAssign'
+    ? 'add'
+    : type === 'weaponReturn'
+      ? 'credit'
+      : type;
 
   const assignment: Assignment = {
     id: assignmentId,
@@ -575,6 +580,6 @@ async function updateAssignmentsCache(
 
   cacheService.update(cacheKey, 'add', assignment as any);
   cacheService.touch(cacheKey);
-  await persistCacheKey(cacheKey).catch(() => {});
+  await persistCacheKey(cacheKey).catch(() => { });
 }
 

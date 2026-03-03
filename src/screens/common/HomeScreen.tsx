@@ -15,6 +15,7 @@ import {
   RefreshControl,
   Image,
   Dimensions,
+  Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -360,9 +361,69 @@ const HomeScreen: React.FC = () => {
           ))}
         </View>
 
-
-
         <View style={styles.quickActionsRow}>
+          {/* TEMP DEBUG BUTTON */}
+          {canAccessAdmin && (
+            <TouchableOpacity
+              style={[
+                styles.moduleCard,
+                { backgroundColor: '#EF4444', marginTop: 10 }
+              ]}
+              onPress={async () => {
+                try {
+                  Alert.alert('בודק...', 'מתחיל בדיקת פערים בנשקייה...');
+                  const { collection, getDocs } = require('firebase/firestore');
+                  const { db } = require('../../config/firebase');
+
+                  const weaponsSnap = await getDocs(collection(db, 'weapons_inventory'));
+                  const weapons = weaponsSnap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+                  const assignedWeapons = weapons.filter((w: any) => w.status === 'assigned');
+
+                  const holdingsSnap = await getDocs(collection(db, 'soldier_holdings'));
+                  const holdings = holdingsSnap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+                  const combatHoldings = holdings.filter((h: any) => h.type === 'combat');
+
+                  let allAssignedSerials = new Set();
+                  for (const h of combatHoldings) {
+                    for (const item of (h.items || [])) {
+                      if (item.serials) {
+                        for (const s of item.serials) {
+                          allAssignedSerials.add(s);
+                        }
+                      }
+                    }
+                  }
+
+                  const weaponsToFix = [];
+                  for (const w of assignedWeapons) {
+                    if (!allAssignedSerials.has(w.serialNumber)) {
+                      weaponsToFix.push({ serial: w.serialNumber, name: w.assignedTo?.soldierName });
+                    }
+                  }
+
+                  if (weaponsToFix.length > 0) {
+                    console.log('WEAPONS TO FIX:', weaponsToFix);
+                    Alert.alert(
+                      'נמצאו פערים!',
+                      `יש ${weaponsToFix.length} נשקים שתקועים.\nבדוק בקונסול למפרט מלא.`
+                    );
+                  } else {
+                    Alert.alert('הכל תקין', 'לא נמצאו פערים בנשקייה.');
+                  }
+                } catch (err: any) {
+                  Alert.alert('שגיאה', err.message);
+                }
+              }}
+              activeOpacity={0.7}
+            >
+              <View style={styles.moduleContent}>
+                <Text style={[styles.moduleTitle, { color: 'white' }]}>בדיקת פערים נשקייה (TEMPORARY)</Text>
+                <Text style={{ color: 'white', opacity: 0.8, fontSize: 13, marginTop: 4 }}>
+                  בודק אם יש נשקים שתקועים בסטטוס assigned אך החייל לא חתום עליהם ב holdigs
+                </Text>
+              </View>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Footer */}
