@@ -3,7 +3,7 @@
  * Design militaire professionnel
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -13,14 +13,14 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Platform,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
 import { useSoldiers } from '../../contexts/DataContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useIsOnline } from '../../contexts/OfflineContext';
-import { assignmentService } from '../../services/assignmentService';
 import { transactionalAssignmentService } from '../../services/transactionalAssignmentService';
 import { weaponInventoryService } from '../../services/weaponInventoryService';
 import { Soldier as BaseSoldier } from '../../types';
@@ -41,7 +41,7 @@ const SoldierSearchScreen: React.FC = () => {
   }) || { mode: 'signature' };
 
   // Utiliser le cache des soldats depuis le contexte
-  const { soldiers: cachedSoldiers, loading: cachLoading, refreshSoldiers } = useSoldiers();
+  const { soldiers: cachedSoldiers, refreshSoldiers } = useSoldiers();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [soldiers, setSoldiers] = useState<Soldier[]>([]);
@@ -49,9 +49,6 @@ const SoldierSearchScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    loadSoldiers();
-  }, [mode, cachedSoldiers]);
 
   // Gérer le rafraîchissement manuel (pull-to-refresh)
   const handleRefresh = async () => {
@@ -60,7 +57,7 @@ const SoldierSearchScreen: React.FC = () => {
     await loadSoldiers(); // Recharger avec les nouveaux soldats
   };
 
-  const loadSoldiers = async () => {
+  const loadSoldiers = useCallback(async () => {
     let fallbackData = [...cachedSoldiers];
     try {
       setLoading(true);
@@ -151,7 +148,13 @@ const SoldierSearchScreen: React.FC = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [cachedSoldiers, mode, type, userRole, isOnline]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadSoldiers();
+    }, [loadSoldiers])
+  );
 
   const handleSearch = useCallback((query: string) => {
     setSearchQuery(query);
@@ -171,6 +174,10 @@ const SoldierSearchScreen: React.FC = () => {
   }, [soldiers]);
 
   const handleSelectSoldier = (soldier: Soldier) => {
+    if (!isOnline && (mode === 'return' || mode === 'rsp_credit')) {
+      Alert.alert('לא ניתן לבצע זיכוי', 'זיכוי אפשרי רק עם חיבור לאינטרנט');
+      return;
+    }
     // Créer un objet serializable sans Date pour éviter les warnings React Navigation
     const serializableSoldier = {
       id: soldier.id,
@@ -632,4 +639,3 @@ const styles = StyleSheet.create({
 });
 
 export default SoldierSearchScreen;
-

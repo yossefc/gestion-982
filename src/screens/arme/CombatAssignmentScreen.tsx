@@ -563,7 +563,7 @@ const CombatAssignmentScreen: React.FC = () => {
         items,
         signature: signatureData,
         operatorSignature: user?.signature || undefined,
-        operatorName: user?.displayName || user?.email || '',
+        operatorName: user?.displayName || user?.name || '',
         operatorRank: user?.rank || '',
         timestamp: new Date(),
         assignmentId,

@@ -1,6 +1,6 @@
 // Écran de liste des équipements de combat
 // Design professionnel avec UX améliorée
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -18,15 +18,11 @@ import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Co
 import { AppModal, ModalType } from '../../components';
 import { combatEquipmentService } from '../../services/firebaseService';
 import { useData } from '../../contexts/DataContext';
-
-const CATEGORY_CONFIG: { [key: string]: { icon: string; color: string } } = {
-  'נשק': { icon: '🔫', color: '#E53935' },
-  'אופטיקה': { icon: '🔭', color: '#8E24AA' },
-  'ציוד מגן': { icon: '🛡️', color: '#43A047' },
-  'אביזרים': { icon: '🔧', color: '#FB8C00' },
-  'ציוד לוחם': { icon: '🎒', color: '#1E88E5' },
-  'אחר': { icon: '📦', color: '#757575' },
-};
+import {
+  COMBAT_CATEGORY_ALL,
+  getCombatCategoryConfig,
+  getCombatCategoryFilters,
+} from '../../config/combatCategories';
 
 const CombatEquipmentListScreen: React.FC = () => {
   const navigation = useNavigation<any>();
@@ -35,7 +31,7 @@ const CombatEquipmentListScreen: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [equipment, setEquipment] = useState<CombatEquipment[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string>('הכל');
+  const [selectedCategory, setSelectedCategory] = useState<string>(COMBAT_CATEGORY_ALL);
 
   // AppModal state
   const [modalVisible, setModalVisible] = useState(false);
@@ -71,19 +67,18 @@ const CombatEquipmentListScreen: React.FC = () => {
     loadEquipment();
   };
 
-  const categories = ['הכל', ...Object.keys(CATEGORY_CONFIG)];
+  const categories = useMemo(
+    () => getCombatCategoryFilters(equipment.map((item) => item.category)),
+    [equipment]
+  );
 
   const filteredEquipment = equipment.filter((item) => {
     const matchesSearch =
       item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       item.serial?.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesCategory = selectedCategory === 'הכל' || item.category === selectedCategory;
+    const matchesCategory = selectedCategory === COMBAT_CATEGORY_ALL || item.category === selectedCategory;
     return matchesSearch && matchesCategory;
   });
-
-  const getCategoryConfig = (category: string) => {
-    return CATEGORY_CONFIG[category] || CATEGORY_CONFIG['אחר'];
-  };
 
   const handleAddEquipment = () => {
     navigation.navigate('AddCombatEquipment');
@@ -216,7 +211,7 @@ const CombatEquipmentListScreen: React.FC = () => {
         >
           {categories.map((cat) => {
             const isActive = selectedCategory === cat;
-            const config = cat !== 'הכל' ? getCategoryConfig(cat) : null;
+            const config = cat !== COMBAT_CATEGORY_ALL ? getCombatCategoryConfig(cat) : null;
 
             return (
               <TouchableOpacity
@@ -247,7 +242,7 @@ const CombatEquipmentListScreen: React.FC = () => {
 
         <View style={styles.equipmentList}>
           {filteredEquipment.map((item) => {
-            const config = getCategoryConfig(item.category);
+            const config = getCombatCategoryConfig(item.category);
 
             return (
               <View key={item.id} style={styles.equipmentCard}>

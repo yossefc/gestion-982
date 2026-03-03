@@ -1359,16 +1359,14 @@ async function issueEquipmentOffline(params: IssueEquipmentParams): Promise<stri
  */
 async function returnEquipmentOffline(params: ReturnEquipmentParams): Promise<string> {
   if (!isOnline()) {
-    console.log('[TransactionalAssignment] Offline - Queuing return operation');
-    return await offlineService.queue('return', params);
+    throw new Error('זיכוי דורש חיבור לאינטרנט');
   }
 
   try {
     return await runWithTimeout(returnEquipment(params), 2500);
   } catch (error: any) {
     if (isNetworkOrTimeoutError(error)) {
-      console.log('[TransactionalAssignment] Network error detected - Queuing return operation');
-      return await offlineService.queue('return', params);
+      throw new Error('זיכוי דורש חיבור לאינטרנט');
     }
     throw error;
   }
@@ -1407,18 +1405,15 @@ async function creditEquipmentOffline(
   creditedBy: string,
   requestId: string
 ): Promise<string> {
-  const params = { soldierId, soldierName, soldierPersonalNumber, type, creditedBy, requestId };
   if (!isOnline()) {
-    console.log('[TransactionalAssignment] Offline - Queuing credit operation');
-    return await offlineService.queue('credit', params);
+    throw new Error('זיכוי דורש חיבור לאינטרנט');
   }
 
   try {
     return await runWithTimeout(creditEquipment(soldierId, soldierName, soldierPersonalNumber, type, creditedBy, requestId), 2500);
   } catch (error: any) {
     if (isNetworkOrTimeoutError(error)) {
-      console.log('[TransactionalAssignment] Network error detected - Queuing credit operation');
-      return await offlineService.queue('credit', params);
+      throw new Error('זיכוי דורש חיבור לאינטרנט');
     }
     throw error;
   }

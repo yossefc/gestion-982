@@ -1,8 +1,5 @@
-import { db } from '../config/firebase';
-import { Assignment, AssignmentItem, CombatEquipment, Soldier, WeaponInventoryItem } from '../types';
-import { assignmentService } from './assignmentService';
-import { combatEquipmentService } from './firebaseService';
-import { soldierService } from './soldierService';
+import { CombatEquipment, Soldier, WeaponInventoryItem } from '../types';
+import { getCombatCategorySortRank } from '../config/combatCategories';
 import { transactionalAssignmentService } from './transactionalAssignmentService';
 import { weaponInventoryService } from './weaponInventoryService';
 import cacheService from './cacheService';
@@ -18,150 +15,181 @@ export interface EquipmentStock {
   equipmentId: string;
   equipmentName: string;
   category: string;
-  available: number; // En stock magasin (non assigné)
-  stored: number;    // En stock magasin mais assigné à un soldat (Afson)
-  issued: number;    // Chez le soldat (Signed)
-  defective: number; // Arme défectueuse (תקול)
-  total: number;     // Somme de tout
+  available: number; // In armory and not assigned
+  stored: number; // In storage (assigned but stored)
+  issued: number; // Issued to soldier
+  defective: number;
+  total: number;
   byCompany: CompanyDistribution[];
 }
 
+const HEB_WEAPON_CATEGORY = '\u05e0\u05e9\u05e7'; // נשק
+const HEB_UNKNOWN_COMPANY = '\u05dc\u05d0 \u05d9\u05d3\u05d5\u05e2'; // לא ידוע
+const HEB_UNKNOWN_EQUIPMENT = '\u05e6\u05d9\u05d5\u05d3 \u05dc\u05d0 \u05d9\u05d3\u05d5\u05e2'; // ציוד לא ידוע
+const HEB_GENERAL_EQUIPMENT = '\u05e6\u05d9\u05d5\u05d3 \u05db\u05dc\u05dc\u05d9'; // ציוד כללי
+
+function normalizeKey(value: string | undefined): string {
+  return (value || '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toLowerCase();
+}
+
+function buildWeaponKey(category: string): string {
+  return `WEAPON::${normalizeKey(category)}`;
+}
+
+function buildGearKey(category: string, name: string): string {
+  return `GEAR::${normalizeKey(category)}::${normalizeKey(name)}`;
+}
+
+function getCompanyDistribution(
+  stock: EquipmentStock,
+  companyName: string
+): CompanyDistribution {
+  let companyDist = stock.byCompany.find(c => c.company === companyName);
+  if (!companyDist) {
+    companyDist = { company: companyName, issued: 0, stored: 0, soldiers: 0 };
+    stock.byCompany.push(companyDist);
+  }
+  return companyDist;
+}
+
 /**
- * Calcule les stocks pour tous les équipements de combat
- * OPTIMISÉ: Utilise le cache pour soldats et équipements
+ * Compute combat stock table.
+ * Merges duplicate display rows (same category+name) and avoids weapon double counting.
  */
 export const getAllEquipmentStocks = async (): Promise<EquipmentStock[]> => {
-  try {
+  const [soldiersResult, gearResult, allWeapons, allHoldings] = await Promise.all([
+    cacheService.get<Soldier>('soldiers'),
+    cacheService.get<CombatEquipment>('combatEquipment'),
+    weaponInventoryService.getAllWeapons(),
+    transactionalAssignmentService.getAllHoldings('combat'),
+  ]);
 
-    // 1. Charger les données - OPTIMISÉ avec cache pour soldats et équipements
-    const [soldiersResult, gearResult, allWeapons, allHoldings] = await Promise.all([
-      cacheService.get<Soldier>('soldiers'),           // CACHE
-      cacheService.get<CombatEquipment>('combatEquipment'), // CACHE
-      weaponInventoryService.getAllWeapons(),           // Firebase (données volatiles)
-      transactionalAssignmentService.getAllHoldings('combat') // Firebase (données volatiles)
-    ]);
+  const allSoldiers = soldiersResult.data;
+  const allGear = gearResult.data;
 
-    const allSoldiers = soldiersResult.data;
-    const allGear = gearResult.data;
+  const soldierMap = new Map<string, Soldier>(allSoldiers.map((s: Soldier) => [s.id, s]));
+  const gearById = new Map<string, CombatEquipment>(allGear.map((g: CombatEquipment) => [g.id, g]));
+  const weaponCategoryKeySet = new Set<string>(
+    allWeapons.map((w: WeaponInventoryItem) => normalizeKey(w.category))
+  );
 
-    const soldierMap = new Map<string, Soldier>(allSoldiers.map((s: Soldier) => [s.id, s]));
+  // Canonical key map for output rows.
+  const stockMap = new Map<string, EquipmentStock>();
 
-    // Structure pour accumuler les résultats
-    // key: equipmentId ou serialNumber (pour les armes)
-    const stockMap = new Map<string, EquipmentStock>();
+  // A. Weapons: source of truth is weapons_inventory.
+  allWeapons.forEach((weapon: WeaponInventoryItem) => {
+    const stockKey = buildWeaponKey(weapon.category);
+    let stock = stockMap.get(stockKey);
 
-    // --- A. TRAITEMENT DES ARMES (Serial-controlled) ---
-    allWeapons.forEach((weapon: WeaponInventoryItem) => {
-      const equipmentId = `WEAPON_${weapon.category}`;
-      let stock = stockMap.get(equipmentId);
+    if (!stock) {
+      stock = {
+        equipmentId: `WEAPON_${weapon.category}`,
+        equipmentName: weapon.category,
+        category: HEB_WEAPON_CATEGORY,
+        available: 0,
+        stored: 0,
+        issued: 0,
+        defective: 0,
+        total: 0,
+        byCompany: [],
+      };
+      stockMap.set(stockKey, stock);
+    }
 
+    stock.total += 1;
+
+    if (weapon.status === 'available') {
+      stock.available += 1;
+      return;
+    }
+
+    if (weapon.status === 'defective') {
+      stock.defective += 1;
+      return;
+    }
+
+    const soldier = weapon.assignedTo ? soldierMap.get(weapon.assignedTo.soldierId) : null;
+    const companyName = soldier?.company || HEB_UNKNOWN_COMPANY;
+    const companyDist = getCompanyDistribution(stock, companyName);
+
+    if ((weapon.status as any) === 'stored' || (weapon.status as any) === 'storage') {
+      stock.stored += 1;
+      companyDist.stored += 1;
+    } else if (weapon.status === 'assigned') {
+      stock.issued += 1;
+      companyDist.issued += 1;
+    }
+  });
+
+  // B. Quantity-based holdings.
+  const soldierGearStatus = new Map<string, Map<string, { issued: number; stored: number }>>();
+
+  allHoldings.forEach(holding => {
+    const sId = holding.soldierId;
+    if (!soldierGearStatus.has(sId)) soldierGearStatus.set(sId, new Map());
+    const gearMap = soldierGearStatus.get(sId)!;
+
+    (holding.items || []).forEach((item: any) => {
+      if (!gearMap.has(item.equipmentId)) gearMap.set(item.equipmentId, { issued: 0, stored: 0 });
+      const counts = gearMap.get(item.equipmentId)!;
+
+      if ((item.status as any) === 'stored' || (item.status as any) === 'storage') {
+        counts.stored += item.quantity;
+      } else {
+        counts.issued += item.quantity;
+      }
+    });
+  });
+
+  for (const [sId, gearMap] of soldierGearStatus.entries()) {
+    const soldier = soldierMap.get(sId);
+    const companyName = soldier?.company || HEB_UNKNOWN_COMPANY;
+
+    for (const [eId, counts] of gearMap.entries()) {
+      if (counts.issued <= 0 && counts.stored <= 0) continue;
+
+      const gearInfo = gearById.get(eId);
+      const equipmentName = gearInfo?.name || HEB_UNKNOWN_EQUIPMENT;
+      const category = gearInfo?.category || HEB_GENERAL_EQUIPMENT;
+
+      // Avoid duplicate/double-count rows for weapons already computed from inventory.
+      if (eId.startsWith('WEAPON_') || weaponCategoryKeySet.has(normalizeKey(equipmentName))) {
+        continue;
+      }
+
+      const stockKey = buildGearKey(category, equipmentName);
+      let stock = stockMap.get(stockKey);
       if (!stock) {
         stock = {
-          equipmentId,
-          equipmentName: weapon.category,
-          category: 'נשק',
+          equipmentId: eId,
+          equipmentName,
+          category,
           available: 0,
           stored: 0,
           issued: 0,
           defective: 0,
           total: 0,
-          byCompany: []
+          byCompany: [],
         };
-        stockMap.set(equipmentId, stock);
+        stockMap.set(stockKey, stock);
       }
 
-      stock.total += 1;
+      stock.issued += counts.issued;
+      stock.stored += counts.stored;
+      stock.total += counts.issued + counts.stored;
 
-      if (weapon.status === 'available') {
-        stock.available += 1;
-      } else if (weapon.status === 'defective') {
-        stock.defective += 1;
-      } else {
-        const soldier = weapon.assignedTo ? soldierMap.get(weapon.assignedTo.soldierId) : null;
-        const companyName = soldier?.company || 'לא ידוע';
-
-        // Trouver ou créer la distrib par compagnie
-        let companyDist = stock.byCompany.find(c => c.company === companyName);
-        if (!companyDist) {
-          companyDist = { company: companyName, issued: 0, stored: 0, soldiers: 0 };
-          stock.byCompany.push(companyDist);
-        }
-
-        if ((weapon.status as any) === 'stored' || (weapon.status as any) === 'storage') {
-          stock.stored += 1;
-          companyDist.stored += 1;
-        } else if (weapon.status === 'assigned') {
-          stock.issued += 1;
-          companyDist.issued += 1;
-        }
-      }
-    });
-
-    // --- B. TRAITEMENT DU MATÉRIEL (Quantity-based) ---
-    // On va utiliser les holdings pré-calculés dans soldier_holdings
-
-    // Groupement des holdings par [soldierId][equipmentId]
-    const soldierGearStatus = new Map<string, Map<string, { issued: number; stored: number }>>();
-
-    allHoldings.forEach(holding => {
-      const sId = holding.soldierId;
-      if (!soldierGearStatus.has(sId)) soldierGearStatus.set(sId, new Map());
-      const gearMap = soldierGearStatus.get(sId)!;
-
-      (holding.items || []).forEach((item: any) => {
-        if (!gearMap.has(item.equipmentId)) gearMap.set(item.equipmentId, { issued: 0, stored: 0 });
-        const counts = gearMap.get(item.equipmentId)!;
-
-        if ((item.status as any) === 'stored' || (item.status as any) === 'storage') {
-          counts.stored += item.quantity;
-        } else {
-          counts.issued += item.quantity;
-        }
-      });
-    });
-
-    // Maintenant on agrége les données Gear par équipement
-    for (const [sId, gearMap] of soldierGearStatus.entries()) {
-      const soldier = soldierMap.get(sId);
-      const companyName = soldier?.company || 'לא ידוע';
-
-      for (const [eId, counts] of gearMap.entries()) {
-        if (counts.issued <= 0 && counts.stored <= 0) continue;
-
-        let stock = stockMap.get(eId);
-        if (!stock) {
-          const gearInfo = allGear.find((g: CombatEquipment) => g.id === eId);
-          stock = {
-            equipmentId: eId,
-            equipmentName: gearInfo?.name || 'ציוד לא ידוע',
-            category: gearInfo?.category || 'ציוד כללי',
-            available: 0,
-            stored: 0,
-            issued: 0,
-            defective: 0,
-            total: 0,
-            byCompany: []
-          };
-          stockMap.set(eId, stock);
-        }
-
-        stock.issued += counts.issued;
-        stock.stored += counts.stored;
-        stock.total += (counts.issued + counts.stored);
-
-        let companyDist = stock.byCompany.find(c => c.company === companyName);
-        if (!companyDist) {
-          companyDist = { company: companyName, issued: 0, stored: 0, soldiers: 0 };
-          stock.byCompany.push(companyDist);
-        }
-        companyDist.issued += counts.issued;
-        companyDist.stored += counts.stored;
-        companyDist.soldiers += 1;
-      }
+      const companyDist = getCompanyDistribution(stock, companyName);
+      companyDist.issued += counts.issued;
+      companyDist.stored += counts.stored;
+      companyDist.soldiers += 1;
     }
+  }
 
-    // Convertir en tableau, appliquer Math.max(0) pour éviter les négatifs, et trier
-    return Array.from(stockMap.values()).map(stock => ({
+  return Array.from(stockMap.values())
+    .map(stock => ({
       ...stock,
       available: Math.max(0, stock.available),
       stored: Math.max(0, stock.stored),
@@ -173,16 +201,15 @@ export const getAllEquipmentStocks = async (): Promise<EquipmentStock[]> => {
         issued: Math.max(0, company.issued),
         stored: Math.max(0, company.stored),
         soldiers: Math.max(0, company.soldiers),
-      }))
-    })).sort((a, b) => {
+      })),
+    }))
+    .sort((a, b) => {
+      const orderCompare = getCombatCategorySortRank(a.category) - getCombatCategorySortRank(b.category);
+      if (orderCompare !== 0) return orderCompare;
       const catCompare = a.category.localeCompare(b.category, 'he');
       if (catCompare !== 0) return catCompare;
       return a.equipmentName.localeCompare(b.equipmentName, 'he');
     });
-
-  } catch (error) {
-    throw error;
-  }
 };
 
 export const combatStockService = {

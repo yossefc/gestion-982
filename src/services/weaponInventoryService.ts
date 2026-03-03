@@ -14,7 +14,7 @@ import {
   Timestamp,
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
-import { WeaponInventoryItem, WeaponStatus } from '../types';
+import { WeaponInventoryItem } from '../types';
 
 import cacheService from './cacheService';
 import { offlineService, isOnline, setTransactionFunctions } from './offlineService';
@@ -31,6 +31,40 @@ async function runWithTimeout<T>(promise: Promise<T>, timeoutMs: number): Promis
   } finally {
     clearTimeout(timeoutId);
   }
+}
+
+function applyAssignedStatusToCache(
+  weaponId: string,
+  soldier: {
+    soldierId: string;
+    soldierName: string;
+    soldierPersonalNumber: string;
+    voucherNumber?: string;
+  },
+  assignedDate: Date = new Date()
+): void {
+  cacheService.update('weaponsInventory', 'update', {
+    id: weaponId,
+    status: 'assigned',
+    assignedTo: {
+      ...soldier,
+      assignedDate,
+    },
+    storageDate: undefined,
+    updatedAt: new Date(),
+  } as any);
+  cacheService.touch('weaponsInventory');
+}
+
+function applyAvailableStatusToCache(weaponId: string): void {
+  cacheService.update('weaponsInventory', 'update', {
+    id: weaponId,
+    status: 'available',
+    assignedTo: undefined,
+    storageDate: undefined,
+    updatedAt: new Date(),
+  } as any);
+  cacheService.touch('weaponsInventory');
 }
 
 // =============== CRUD OPERATIONS ===============
@@ -511,14 +545,16 @@ export const setWeaponAssignedStatusOnly = async (
   }
 ): Promise<void> => {
   try {
+    const assignedDate = new Date();
     await updateWeapon(weaponId, {
       status: 'assigned',
       assignedTo: {
         ...soldier,
-        assignedDate: new Date(),
+        assignedDate,
       },
       storageDate: deleteField() as any,
     });
+    applyAssignedStatusToCache(weaponId, soldier, assignedDate);
   } catch (error) {
     throw error;
   }
@@ -539,6 +575,7 @@ export const setWeaponAssignedStatusOnlyOffline = async (
   const params = { weaponId, soldier };
 
   if (!isOnline()) {
+    applyAssignedStatusToCache(weaponId, soldier);
     return await offlineService.queue('weaponAssign', params);
   }
 
@@ -556,6 +593,7 @@ export const setWeaponAssignedStatusOnlyOffline = async (
 
     if (isNetworkError) {
       // Preserve intent: assignment failures must retry as assignment, not return.
+      applyAssignedStatusToCache(weaponId, soldier);
       return await offlineService.queue('weaponAssign', params);
     }
 
@@ -573,6 +611,7 @@ export const setWeaponAvailableStatusOnly = async (weaponId: string): Promise<vo
       assignedTo: deleteField() as any,
       storageDate: deleteField() as any,
     });
+    applyAvailableStatusToCache(weaponId);
   } catch (error) {
     throw error;
   }
@@ -585,6 +624,7 @@ export const setWeaponAvailableStatusOnlyOffline = async (weaponId: string): Pro
   const params = { weaponId };
 
   if (!isOnline()) {
+    applyAvailableStatusToCache(weaponId);
     return await offlineService.queue('weaponReturn', params);
   }
 
@@ -601,6 +641,7 @@ export const setWeaponAvailableStatusOnlyOffline = async (weaponId: string): Pro
       error?.message?.includes('Could not reach Cloud Firestore');
 
     if (isNetworkError) {
+      applyAvailableStatusToCache(weaponId);
       return await offlineService.queue('weaponReturn', params);
     }
 
@@ -657,6 +698,7 @@ export const assignWeaponToSoldier = async (
       },
       storageDate: deleteField() as any,
     });
+    applyAssignedStatusToCache(weaponId, soldier);
 
     // 3. Create Assignment (Standardized)
     const { transactionalAssignmentService } = await import('./transactionalAssignmentService');
@@ -696,6 +738,7 @@ export const returnWeapon = async (weaponId: string): Promise<void> => {
       assignedTo: deleteField() as any,
       storageDate: deleteField() as any,
     });
+    applyAvailableStatusToCache(weaponId);
 
     // 2. Update Soldier Holdings (Smart Return)
     if (previousOwner && previousOwner.soldierId) {

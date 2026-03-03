@@ -20,17 +20,12 @@ import { AppModal, ModalType } from '../../components';
 import { RootStackParamList, SubEquipment } from '../../types';
 import { combatEquipmentService } from '../../services/firebaseService';
 import { useData } from '../../contexts/DataContext';
+import {
+  COMBAT_CATEGORY_DEFINITIONS,
+  DEFAULT_COMBAT_CATEGORY,
+} from '../../config/combatCategories';
 
 type AddCombatEquipmentRouteProp = RouteProp<RootStackParamList, 'AddCombatEquipment'>;
-
-const CATEGORIES = [
-  { id: 'נשק', label: 'נשק', icon: '🔫' },
-  { id: 'אופטיקה', label: 'אופטיקה', icon: '🔭' },
-  { id: 'ציוד מגן', label: 'ציוד מגן', icon: '🛡️' },
-  { id: 'אביזרים', label: 'אביזרים', icon: '🔧' },
-  { id: 'ציוד לוחם', label: 'ציוד לוחם', icon: '🎒' },
-  { id: 'אחר', label: 'אחר', icon: '📦' },
-];
 
 const AddCombatEquipmentScreen: React.FC = () => {
   const navigation = useNavigation<any>();
@@ -45,7 +40,7 @@ const AddCombatEquipmentScreen: React.FC = () => {
 
   // Form state
   const [name, setName] = useState('');
-  const [category, setCategory] = useState('נשק');
+  const [category, setCategory] = useState(DEFAULT_COMBAT_CATEGORY);
   const [requiresSerial, setRequiresSerial] = useState(false);
   const [requiresManualSerial, setRequiresManualSerial] = useState(false);
   const [hasSubEquipment, setHasSubEquipment] = useState(false);
@@ -236,7 +231,7 @@ const AddCombatEquipmentScreen: React.FC = () => {
               <Text style={styles.label}>קטגוריה</Text>
             </View>
             <View style={styles.categoryGrid}>
-              {CATEGORIES.map((cat) => (
+              {COMBAT_CATEGORY_DEFINITIONS.map((cat) => (
                 <TouchableOpacity
                   key={cat.id}
                   style={[

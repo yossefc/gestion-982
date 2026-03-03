@@ -1,5 +1,5 @@
 /**
- * ClothingReturnScreen.tsx - Retour de vêtements
+ * ClothingReturnScreen.tsx - Retour de vֳ×tements
  * Design militaire professionnel
  */
 
@@ -51,7 +51,6 @@ const ClothingReturnScreen: React.FC = () => {
   const [signatureData, setSignatureData] = useState<string | null>(null);
   const [scrollEnabled, setScrollEnabled] = useState(true);
   const [showSignature, setShowSignature] = useState(false);
-  const [isOfflineMode, setIsOfflineMode] = useState(false);
 
   // Modal state
   const [modalVisible, setModalVisible] = useState(false);
@@ -63,18 +62,6 @@ const ClothingReturnScreen: React.FC = () => {
     loadHoldings();
   }, []);
 
-  // Timeout de securite: apres 3 secondes, continuer quand meme (mode offline)
-  useEffect(() => {
-    const timeout = setTimeout(() => {
-      if (loading) {
-        console.log('[ClothingReturn] Timeout (3s) - proceeding in offline mode');
-        setIsOfflineMode(true);
-        setLoading(false);
-      }
-    }, 3000);
-    return () => clearTimeout(timeout);
-  }, [loading]);
-
   const loadHoldings = async () => {
     try {
       setLoading(true);
@@ -83,13 +70,10 @@ const ClothingReturnScreen: React.FC = () => {
       setHoldings(items || []);
     } catch (error) {
       console.error('Error loading holdings:', error);
-      // En mode offline, ne pas afficher d'erreur si le timeout n'est pas atteint
-      if (!isOfflineMode) {
-        setModalType('error');
-        setModalMessage('לא ניתן לטעון את הציוד');
-        setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
-        setModalVisible(true);
-      }
+      setModalType('error');
+      setModalMessage('׳׳ ׳ ׳™׳×׳ ׳׳˜׳¢׳•׳ ׳׳× ׳”׳¦׳™׳•׳“');
+      setModalButtons([{ text: '׳¡׳’׳•׳¨', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalVisible(true);
     } finally {
       setLoading(false);
     }
@@ -101,11 +85,11 @@ const ClothingReturnScreen: React.FC = () => {
       if (newMap.has(item.equipmentId)) {
         newMap.delete(item.equipmentId);
       } else {
-        // Prendre automatiquement TOUTE la quantité disponible
+        // Prendre automatiquement TOUTE la quantitֳ© disponible
         newMap.set(item.equipmentId, {
           equipmentId: item.equipmentId,
           equipmentName: item.equipmentName,
-          quantity: item.quantity, // Toute la quantité au lieu de 1
+          quantity: item.quantity, // Toute la quantitֳ© au lieu de 1
           selectedSerials: item.serials, // Tous les serials au lieu d'un seul
         });
       }
@@ -144,8 +128,8 @@ const ClothingReturnScreen: React.FC = () => {
   const validateAndContinue = () => {
     if (selectedReturns.size === 0) {
       setModalType('error');
-      setModalMessage('יש לבחור לפחות פריט אחד להחזרה');
-      setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalMessage('׳™׳© ׳׳‘׳—׳•׳¨ ׳׳₪׳—׳•׳× ׳₪׳¨׳™׳˜ ׳׳—׳“ ׳׳”׳—׳–׳¨׳”');
+      setModalButtons([{ text: '׳¡׳’׳•׳¨', style: 'primary', onPress: () => setModalVisible(false) }]);
       setModalVisible(true);
       return;
     }
@@ -155,8 +139,8 @@ const ClothingReturnScreen: React.FC = () => {
   const handleSubmit = async () => {
     if (!signatureData) {
       setModalType('error');
-      setModalMessage('יש לחתום על הטופס');
-      setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalMessage('׳™׳© ׳׳—׳×׳•׳ ׳¢׳ ׳”׳˜׳•׳₪׳¡');
+      setModalButtons([{ text: '׳¡׳’׳•׳¨', style: 'primary', onPress: () => setModalVisible(false) }]);
       setModalVisible(true);
       return;
     }
@@ -187,9 +171,9 @@ const ClothingReturnScreen: React.FC = () => {
       });
 
       setModalType('success');
-      setModalMessage('הזיכוי בוצע בהצלחה');
+      setModalMessage('׳”׳–׳™׳›׳•׳™ ׳‘׳•׳¦׳¢ ׳‘׳”׳¦׳׳—׳”');
       setModalButtons([{
-        text: 'סגור',
+        text: '׳¡׳’׳•׳¨',
         style: 'primary',
         icon: 'checkmark-circle' as const,
         onPress: () => {
@@ -200,22 +184,21 @@ const ClothingReturnScreen: React.FC = () => {
       setModalVisible(true);
     } catch (error) {
       console.error('Error saving:', error);
+      const message = (error as any)?.message;
       setModalType('error');
-      setModalMessage('לא ניתן לשמור את הזיכוי');
-      setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalMessage(message || 'Cannot save zikuy');
+      setModalButtons([{ text: '׳¡׳’׳•׳¨', style: 'primary', onPress: () => setModalVisible(false) }]);
       setModalVisible(true);
     } finally {
       setSaving(false);
     }
   };
 
-  // Afficher le loading seulement si on charge ET qu'on n'est pas en mode offline
-  // Le timeout de 3s garantit qu'on ne reste jamais bloque indefiniment
-  if (loading && !isOfflineMode) {
+  if (loading) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={Colors.vetement} />
-        <Text style={styles.loadingText}>טוען ציוד...</Text>
+        <Text style={styles.loadingText}>׳˜׳•׳¢׳ ׳¦׳™׳•׳“...</Text>
       </View>
     );
   }
@@ -232,7 +215,7 @@ const ClothingReturnScreen: React.FC = () => {
         </TouchableOpacity>
 
         <View style={styles.headerTitleContainer}>
-          <Text style={styles.headerTitle}>זיכוי אפסנאות</Text>
+          <Text style={styles.headerTitle}>׳–׳™׳›׳•׳™ ׳׳₪׳¡׳ ׳׳•׳×</Text>
           <Text style={styles.headerSubtitle}>{soldier.name}</Text>
         </View>
 
@@ -252,11 +235,11 @@ const ClothingReturnScreen: React.FC = () => {
           </View>
           <View style={styles.soldierInfo}>
             <Text style={styles.soldierName}>{soldier.name}</Text>
-            <Text style={styles.soldierNumber}>מ.א: {soldier.personalNumber}</Text>
+            <Text style={styles.soldierNumber}>׳.׳: {soldier.personalNumber}</Text>
           </View>
           <View style={styles.holdingsBadge}>
             <Text style={styles.holdingsCount}>{holdings.length}</Text>
-            <Text style={styles.holdingsLabel}>פריטים</Text>
+            <Text style={styles.holdingsLabel}>׳₪׳¨׳™׳˜׳™׳</Text>
           </View>
         </View>
 
@@ -267,8 +250,8 @@ const ClothingReturnScreen: React.FC = () => {
               <View style={{ marginBottom: 20 }}>
                 <View style={styles.emptyState}>
                   <Ionicons name="checkmark-done-circle" size={64} color={Colors.success} />
-                  <Text style={styles.emptyTitle}>החייל נקי מציוד</Text>
-                  <Text style={styles.emptySubtitle}>ניתן לאשר זיכוי סופי</Text>
+                  <Text style={styles.emptyTitle}>׳”׳—׳™׳™׳ ׳ ׳§׳™ ׳׳¦׳™׳•׳“</Text>
+                  <Text style={styles.emptySubtitle}>׳ ׳™׳×׳ ׳׳׳©׳¨ ׳–׳™׳›׳•׳™ ׳¡׳•׳₪׳™</Text>
                 </View>
                 <TouchableOpacity
                   style={[styles.continueButton, { backgroundColor: Colors.success, marginTop: 10 }]}
@@ -277,32 +260,33 @@ const ClothingReturnScreen: React.FC = () => {
                       setLoading(true);
                       await soldierService.updateClearance(soldier.id, 'logistics', true);
                       setModalType('success');
-                      setModalMessage('החייל זוכה בהצלחה באפסנאות.');
-                      setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => { setModalVisible(false); navigation.goBack(); } }]);
+                      setModalMessage('׳”׳—׳™׳™׳ ׳–׳•׳›׳” ׳‘׳”׳¦׳׳—׳” ׳‘׳׳₪׳¡׳ ׳׳•׳×.');
+                      setModalButtons([{ text: '׳׳™׳©׳•׳¨', style: 'primary', onPress: () => { setModalVisible(false); navigation.goBack(); } }]);
                       setModalVisible(true);
                     } catch (err) {
                       console.error(err);
+                      const message = (err as any)?.message;
                       setModalType('error');
-                      setModalMessage('שגיאה בביצוע זיכוי');
+                      setModalMessage(message || 'Error while completing zikuy');
                       setModalVisible(true);
                     } finally {
                       setLoading(false);
                     }
                   }}
                 >
-                  <Text style={styles.continueButtonText}>✓ אשר זיכוי סופי (Logistics Clearance)</Text>
+                  <Text style={styles.continueButtonText}>ג“ ׳׳©׳¨ ׳–׳™׳›׳•׳™ ׳¡׳•׳₪׳™ (Logistics Clearance)</Text>
                 </TouchableOpacity>
               </View>
             )}
 
             {/* Holdings List */}
-            <Text style={styles.sectionTitle}>ציוד להחזרה</Text>
+            <Text style={styles.sectionTitle}>׳¦׳™׳•׳“ ׳׳”׳—׳–׳¨׳”</Text>
 
             {holdings.length === 0 ? (
               <View style={styles.emptyState}>
                 <Ionicons name="checkmark-circle" size={64} color={Colors.success} />
-                <Text style={styles.emptyTitle}>אין ציוד להחזרה</Text>
-                <Text style={styles.emptySubtitle}>החייל החזיר את כל הציוד</Text>
+                <Text style={styles.emptyTitle}>׳׳™׳ ׳¦׳™׳•׳“ ׳׳”׳—׳–׳¨׳”</Text>
+                <Text style={styles.emptySubtitle}>׳”׳—׳™׳™׳ ׳”׳—׳–׳™׳¨ ׳׳× ׳›׳ ׳”׳¦׳™׳•׳“</Text>
               </View>
             ) : (
               <View style={styles.holdingsList}>
@@ -327,13 +311,13 @@ const ClothingReturnScreen: React.FC = () => {
                         </View>
                         <View style={styles.holdingInfo}>
                           <Text style={styles.holdingName}>{item.equipmentName}</Text>
-                          <Text style={styles.holdingQuantity}>כמות ברשות: {item.quantity}</Text>
+                          <Text style={styles.holdingQuantity}>׳›׳׳•׳× ׳‘׳¨׳©׳•׳×: {item.quantity}</Text>
                         </View>
                       </TouchableOpacity>
 
                       {isSelected && (
                         <View style={styles.returnDetails}>
-                          <Text style={styles.returnLabel}>כמות להחזרה:</Text>
+                          <Text style={styles.returnLabel}>׳›׳׳•׳× ׳׳”׳—׳–׳¨׳”:</Text>
                           <View style={styles.quantityControls}>
                             <TouchableOpacity
                               style={styles.quantityButton}
@@ -362,9 +346,9 @@ const ClothingReturnScreen: React.FC = () => {
               <View style={styles.summaryCard}>
                 <Ionicons name="return-up-back" size={24} color={Colors.warningDark} />
                 <View style={styles.summaryContent}>
-                  <Text style={styles.summaryTitle}>סיכום החזרה</Text>
+                  <Text style={styles.summaryTitle}>׳¡׳™׳›׳•׳ ׳”׳—׳–׳¨׳”</Text>
                   <Text style={styles.summaryText}>
-                    {Array.from(selectedReturns.values()).reduce((sum, item) => sum + item.quantity, 0)} פריטים להחזרה
+                    {Array.from(selectedReturns.values()).reduce((sum, item) => sum + item.quantity, 0)} ׳₪׳¨׳™׳˜׳™׳ ׳׳”׳—׳–׳¨׳”
                   </Text>
                 </View>
               </View>
@@ -379,14 +363,14 @@ const ClothingReturnScreen: React.FC = () => {
               onPress={validateAndContinue}
               disabled={selectedReturns.size === 0}
             >
-              <Text style={styles.continueButtonText}>המשך לחתימה</Text>
+              <Text style={styles.continueButtonText}>׳”׳׳©׳ ׳׳—׳×׳™׳׳”</Text>
               <Ionicons name="arrow-back" size={20} color={Colors.textWhite} />
             </TouchableOpacity>
           </>
         ) : (
           <>
             {/* Signature */}
-            <Text style={styles.sectionTitle}>חתימת החייל</Text>
+            <Text style={styles.sectionTitle}>׳—׳×׳™׳׳× ׳”׳—׳™׳™׳</Text>
 
             <View style={styles.signatureContainer}>
               <View style={styles.signatureWrapper}>
@@ -397,8 +381,8 @@ const ClothingReturnScreen: React.FC = () => {
                   onBegin={() => setScrollEnabled(false)}
                   onEmpty={() => setSignatureData(null)}
                   descriptionText=""
-                  clearText="נקה"
-                  confirmText="אישור"
+                  clearText="׳ ׳§׳”"
+                  confirmText="׳׳™׳©׳•׳¨"
                   webStyle={`
                     .m-signature-pad { box-shadow: none; border: none; }
                     .m-signature-pad--body { border: none; }
@@ -415,7 +399,7 @@ const ClothingReturnScreen: React.FC = () => {
                 onPress={handleClearSignature}
               >
                 <Ionicons name="trash-outline" size={20} color={Colors.danger} />
-                <Text style={styles.clearSignatureText}>נקה חתימה</Text>
+                <Text style={styles.clearSignatureText}>׳ ׳§׳” ׳—׳×׳™׳׳”</Text>
               </TouchableOpacity>
             </View>
 
@@ -425,7 +409,7 @@ const ClothingReturnScreen: React.FC = () => {
                 style={styles.backButton2}
                 onPress={() => setShowSignature(false)}
               >
-                <Text style={styles.backButton2Text}>חזור לבחירת פריטים</Text>
+                <Text style={styles.backButton2Text}>׳—׳–׳•׳¨ ׳׳‘׳—׳™׳¨׳× ׳₪׳¨׳™׳˜׳™׳</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -441,7 +425,7 @@ const ClothingReturnScreen: React.FC = () => {
                 ) : (
                   <>
                     <Ionicons name="checkmark-circle" size={24} color={Colors.textWhite} />
-                    <Text style={styles.submitButtonText}>שמור זיכוי</Text>
+                    <Text style={styles.submitButtonText}>׳©׳׳•׳¨ ׳–׳™׳›׳•׳™</Text>
                   </>
                 )}
               </TouchableOpacity>
