@@ -615,29 +615,32 @@ export async function returnEquipment(params: ReturnEquipmentParams): Promise<st
     return assignmentRef.id;
   });
 
-  // Mise ? jour de l'inventaire des armes APR?S la transaction
-  // (les requ?tes Firestore ne sont pas compatibles avec runTransaction)
-  // Un ?chec ici ne remet pas en cause le ����� d?j? enregistr? � on log et on continue
+  // Mise à jour de l'inventaire des armes APRÈS la transaction
+  // (les requêtes Firestore ne sont pas compatibles avec runTransaction)
+  // Un échec ici ne remet pas en cause le crédit déjà enregistré, on log et on continue
   if (type === 'combat') {
-    // Fire-and-forget pour ne pas bloquer le traitement global et ?viter les timeouts
-    Promise.all(items.map(async (item) => {
-      const serials = item.serial
-        ? item.serial.split(',').map((s: string) => s.trim()).filter(Boolean)
-        : [];
+    try {
+      await Promise.all(items.map(async (item) => {
+        const serials = item.serial
+          ? item.serial.split(',').map((s: string) => s.trim()).filter(Boolean)
+          : [];
 
-      await Promise.all(serials.map(async (serial) => {
-        try {
-          const weapon = await weaponInventoryService.getWeaponBySerialNumber(serial);
-          if (weapon) {
-            await weaponInventoryService.setWeaponAvailableStatusOnlyOffline(weapon.id);
-          } else {
-            console.warn(`[ReturnEquipment] Arme introuvable dans l'inventaire pour le ����: ${serial}`);
+        await Promise.all(serials.map(async (serial) => {
+          try {
+            const weapon = await weaponInventoryService.getWeaponBySerialNumber(serial);
+            if (weapon) {
+              await weaponInventoryService.setWeaponAvailableStatusOnlyOffline(weapon.id);
+            } else {
+              console.warn(`[ReturnEquipment] Arme introuvable dans l'inventaire pour le : ${serial}`);
+            }
+          } catch (err) {
+            console.warn(`[ReturnEquipment] echec mise à jour inventaire pour ${serial}:`, err);
           }
-        } catch (err) {
-          console.warn(`[ReturnEquipment] ?chec mise ? jour inventaire pour ���� ${serial}:`, err);
-        }
+        }));
       }));
-    })).catch(err => console.error("[ReturnEquipment] Erreur globale lors de la lib?ration des armes:", err));
+    } catch (err) {
+      console.error("[ReturnEquipment] Erreur globale lors de la libération des armes:", err);
+    }
   }
 
   return assignmentId;
