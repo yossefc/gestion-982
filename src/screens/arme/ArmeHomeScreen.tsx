@@ -135,7 +135,7 @@ const ArmeHomeScreen: React.FC = () => {
     },
     {
       id: 'quick-pdf',
-      title: 'טופס 982',
+      title: 'הדפסה',
       icon: '📄',
       color: '#9C27B0',
       action: () => navigation.navigate('UnprintedSignatures'),

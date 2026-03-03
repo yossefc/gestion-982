@@ -687,6 +687,7 @@ const CombatAssignmentScreen: React.FC = () => {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         scrollEnabled={scrollEnabled}
+        keyboardShouldPersistTaps="handled"
       >
         {/* Soldier Info */}
         <View style={styles.soldierCard}>
@@ -948,6 +949,9 @@ const CombatAssignmentScreen: React.FC = () => {
                                                 onChangeText={(text) => updateSerial(eq.id, idx, text)}
                                                 placeholder="הזן מספר סידורי"
                                                 placeholderTextColor={Colors.placeholder}
+                                                editable={true}
+                                                autoCorrect={false}
+                                                autoCapitalize="characters"
                                               />
                                             </View>
                                           );
@@ -2182,6 +2186,26 @@ const styles = StyleSheet.create({
     fontSize: FontSize.lg,
     fontWeight: '600',
     color: Colors.textWhite,
+  },
+
+  // Manual Serial Input
+  input: {
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: BorderRadius.sm,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    fontSize: FontSize.base,
+    color: Colors.text,
+    backgroundColor: Colors.backgroundCard,
+    textAlign: 'right',
+    flex: 1,
+  },
+
+  manualSerialInput: {
+    borderColor: Colors.arme,
+    minHeight: 40,
+    fontWeight: '500',
   },
 
 });

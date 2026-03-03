@@ -1,18 +1,19 @@
 import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
 import { Platform } from 'react-native';
 
 export interface PrintAssignmentData {
-    soldierName: string;
-    soldierPersonalNumber: string;
-    soldierPhone?: string;
-    soldierCompany?: string;
-    items: any[];
-    signature: string;
-    operatorSignature?: string;
-    operatorName?: string;
-    operatorRank?: string;
-    timestamp: Date;
-    assignmentId?: string;
+  soldierName: string;
+  soldierPersonalNumber: string;
+  soldierPhone?: string;
+  soldierCompany?: string;
+  items: any[];
+  signature: string;
+  operatorSignature?: string;
+  operatorName?: string;
+  operatorRank?: string;
+  timestamp: Date;
+  assignmentId?: string;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -277,25 +278,25 @@ const PRINT_STYLES = `
 // Contenu HTML d'un seul formulaire (sans <html>/<head>/<body>)
 // ─────────────────────────────────────────────────────────────
 const generatePageBodyHTML = (assignmentData: PrintAssignmentData): string => {
-    const dateStr = assignmentData.timestamp.toLocaleDateString('he-IL', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-    });
+  const dateStr = assignmentData.timestamp.toLocaleDateString('he-IL', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
 
-    const timeStr = assignmentData.timestamp.toLocaleTimeString('he-IL', {
-        hour: '2-digit',
-        minute: '2-digit',
-    });
+  const timeStr = assignmentData.timestamp.toLocaleTimeString('he-IL', {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 
-    const operatorText = assignmentData.operatorName || '';
+  const operatorText = assignmentData.operatorName || '';
 
-    const itemsRows = assignmentData.items
-        .map((item, index) => {
-            const serialDisplay = item.serial
-                ? item.serial.split(', ').join('<br>')
-                : '-';
-            return `
+  const itemsRows = assignmentData.items
+    .map((item, index) => {
+      const serialDisplay = item.serial
+        ? item.serial.split(', ').join('<br>')
+        : '-';
+      return `
     <tr>
       <td class="cell cell-center">${index + 1}</td>
       <td class="cell cell-right">${item.equipmentName || item.name}</td>
@@ -304,10 +305,10 @@ const generatePageBodyHTML = (assignmentData: PrintAssignmentData): string => {
       <td class="cell cell-right"></td>
     </tr>
   `;
-        }).join('');
+    }).join('');
 
-    const emptyRowsCount = Math.max(0, 10 - assignmentData.items.length);
-    const emptyRows = Array(emptyRowsCount).fill(0).map((_, index) => `
+  const emptyRowsCount = Math.max(0, 10 - assignmentData.items.length);
+  const emptyRows = Array(emptyRowsCount).fill(0).map((_, index) => `
     <tr>
       <td class="cell cell-center">${assignmentData.items.length + index + 1}</td>
       <td class="cell cell-right"></td>
@@ -317,11 +318,11 @@ const generatePageBodyHTML = (assignmentData: PrintAssignmentData): string => {
     </tr>
   `).join('');
 
-    const signatureImg = assignmentData.signature
-        ? `<img src="${assignmentData.signature}" class="signature-img" />`
-        : '<div class="signature-placeholder">חתימה</div>';
+  const signatureImg = assignmentData.signature
+    ? `<img src="${assignmentData.signature}" class="signature-img" />`
+    : '<div class="signature-placeholder">חתימה</div>';
 
-    return `
+  return `
   <!-- Header Section -->
   <div class="header">
     <div class="header-right">
@@ -381,8 +382,8 @@ const generatePageBodyHTML = (assignmentData: PrintAssignmentData): string => {
       </div>
       <div class="signature-area">
         ${assignmentData.operatorSignature
-            ? `<img src="${assignmentData.operatorSignature}" class="signature-img" />`
-            : '<div class="signature-placeholder">חתימת המנפק</div>'}
+      ? `<img src="${assignmentData.operatorSignature}" class="signature-img" />`
+      : '<div class="signature-placeholder">חתימת המנפק</div>'}
       </div>
     </div>
 
@@ -447,7 +448,7 @@ const generatePageBodyHTML = (assignmentData: PrintAssignmentData): string => {
 // HTML complet pour UN seul formulaire
 // ─────────────────────────────────────────────────────────────
 export const generatePDFHTML = (assignmentData: PrintAssignmentData): string => {
-    return `<!DOCTYPE html>
+  return `<!DOCTYPE html>
 <html dir="rtl" lang="he">
 <head>
   <meta charset="utf-8">
@@ -466,21 +467,21 @@ export const generatePDFHTML = (assignmentData: PrintAssignmentData): string => 
 // et fonctionne correctement sur Android
 // ─────────────────────────────────────────────────────────────
 export const generateMultiPDFHTML = (assignments: PrintAssignmentData[]): string => {
-    if (assignments.length === 0) return generatePDFHTML({ } as any);
-    if (assignments.length === 1) return generatePDFHTML(assignments[0]);
+  if (assignments.length === 0) return generatePDFHTML({} as any);
+  if (assignments.length === 1) return generatePDFHTML(assignments[0]);
 
-    const pages = assignments
-        .map((data, i) => {
-            const content = generatePageBodyHTML(data);
-            // Saut de page après chaque formulaire sauf le dernier
-            const pageBreak = i < assignments.length - 1
-                ? '<div class="page-break"></div>'
-                : '';
-            return `${content}${pageBreak}`;
-        })
-        .join('\n');
+  const pages = assignments
+    .map((data, i) => {
+      const content = generatePageBodyHTML(data);
+      // Saut de page après chaque formulaire sauf le dernier
+      const pageBreak = i < assignments.length - 1
+        ? '<div class="page-break"></div>'
+        : '';
+      return `${content}${pageBreak}`;
+    })
+    .join('\n');
 
-    return `<!DOCTYPE html>
+  return `<!DOCTYPE html>
 <html dir="rtl" lang="he">
 <head>
   <meta charset="utf-8">
@@ -497,48 +498,73 @@ export const generateMultiPDFHTML = (assignments: PrintAssignmentData[]): string
 // Impression d'un seul formulaire
 // ─────────────────────────────────────────────────────────────
 export const generateAndPrintPDF = async (
-    assignmentData: PrintAssignmentData,
-    printerToUse?: Print.Printer | null
+  assignmentData: PrintAssignmentData,
+  printerToUse?: Print.Printer | null
 ) => {
-    try {
-        const html = generatePDFHTML(assignmentData);
-        const printOptions: any = {
-            html,
-            orientation: Print.Orientation.portrait,
-        };
-        if (printerToUse && Platform.OS === 'ios') {
-            printOptions.printerUrl = printerToUse.url;
-            console.log('[PrintUtils] Using selected printer:', printerToUse.name);
-        }
-        await Print.printAsync(printOptions);
-        console.log('[PrintUtils] Document sent to printer successfully');
-    } catch (error) {
-        console.error('[PrintUtils] Error printing PDF:', error);
-        throw error;
+  try {
+    const html = generatePDFHTML(assignmentData);
+    const printOptions: any = {
+      html,
+      orientation: Print.Orientation.portrait,
+    };
+    if (printerToUse && Platform.OS === 'ios') {
+      printOptions.printerUrl = printerToUse.url;
+      console.log('[PrintUtils] Using selected printer:', printerToUse.name);
     }
+    await Print.printAsync(printOptions);
+    console.log('[PrintUtils] Document sent to printer successfully');
+  } catch (error) {
+    console.error('[PrintUtils] Error printing PDF:', error);
+    throw error;
+  }
 };
 
 // ─────────────────────────────────────────────────────────────
 // Impression de PLUSIEURS formulaires en un seul job
+// Sur Android: printToFileAsync → shareAsync (évite le bug d'impression à 1 seule page)
+// Sur iOS: printAsync standard (supporte bien le multi-page HTML)
 // ─────────────────────────────────────────────────────────────
 export const generateAndPrintMultiPDF = async (
-    assignments: PrintAssignmentData[],
-    printerToUse?: Print.Printer | null
+  assignments: PrintAssignmentData[],
+  printerToUse?: Print.Printer | null
 ) => {
-    if (assignments.length === 0) return;
-    try {
-        const html = generateMultiPDFHTML(assignments);
-        const printOptions: any = {
-            html,
-            orientation: Print.Orientation.portrait,
-        };
-        if (printerToUse && Platform.OS === 'ios') {
-            printOptions.printerUrl = printerToUse.url;
-        }
-        await Print.printAsync(printOptions);
-        console.log(`[PrintUtils] ${assignments.length} documents sent to printer`);
-    } catch (error) {
-        console.error('[PrintUtils] Error printing multi PDF:', error);
-        throw error;
+  if (assignments.length === 0) return;
+  try {
+    const html = generateMultiPDFHTML(assignments);
+
+    if (Platform.OS === 'android') {
+      // Sur Android, Print.printAsync avec HTML multi-pages n'imprime que la 1ère page.
+      // Solution: générer un vrai fichier PDF avec toutes les pages, puis le partager.
+      const { uri } = await Print.printToFileAsync({
+        html,
+        base64: false,
+      });
+      const canShare = await Sharing.isAvailableAsync();
+      if (canShare) {
+        await Sharing.shareAsync(uri, {
+          mimeType: 'application/pdf',
+          dialogTitle: `הדפסת ${assignments.length} טפסים`,
+          UTI: 'com.adobe.pdf',
+        });
+      } else {
+        // Fallback: essayer printAsync quand même
+        await Print.printAsync({ html, orientation: Print.Orientation.portrait });
+      }
+    } else {
+      // iOS: printAsync gère bien le HTML multi-pages
+      const printOptions: any = {
+        html,
+        orientation: Print.Orientation.portrait,
+      };
+      if (printerToUse && Platform.OS === 'ios') {
+        printOptions.printerUrl = printerToUse.url;
+      }
+      await Print.printAsync(printOptions);
     }
+
+    console.log(`[PrintUtils] ${assignments.length} documents sent to printer`);
+  } catch (error) {
+    console.error('[PrintUtils] Error printing multi PDF:', error);
+    throw error;
+  }
 };
