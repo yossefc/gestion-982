@@ -214,9 +214,15 @@ const CombatReturnScreen: React.FC = () => {
                 status: item.status,
               };
 
-              // Ajouter serial seulement s'il y a des serials sֳ©lectionnֳ©s
-              if (item.selectedSerials.length > 0) {
-                itemData.serial = item.selectedSerials.join(', ');
+              // Serials explicitement sélectionnés → priorité
+              // Sinon, fallback automatique sur availableSerials (limité à returnQuantity)
+              // → garantit que weapons_inventory est toujours mis à jour
+              const serialsToUse = item.selectedSerials.length > 0
+                ? item.selectedSerials
+                : item.availableSerials.slice(0, item.returnQuantity);
+
+              if (serialsToUse.length > 0) {
+                itemData.serial = serialsToUse.join(', ');
               }
 
               return itemData;
