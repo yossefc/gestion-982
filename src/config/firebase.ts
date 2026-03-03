@@ -1,6 +1,7 @@
 // Firebase configuration for Gestion 982
 import { getApp, getApps, initializeApp } from 'firebase/app';
-import { Auth, getAuth, initializeAuth } from 'firebase/auth';
+// @ts-ignore - Firebase v12 sometimes has missing type definition for this export
+import { Auth, getAuth, initializeAuth, getReactNativePersistence } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import ReactNativeAsyncStorage from '@react-native-async-storage/async-storage';
@@ -24,27 +25,19 @@ function createAuth(): Auth {
   }
 
   try {
-    // Load RN persistence only on native platforms.
-    const { getReactNativePersistence } = require('firebase/auth/react-native') as {
-      getReactNativePersistence?: (storage: typeof ReactNativeAsyncStorage) => any;
-    };
-
-    if (typeof getReactNativePersistence === 'function') {
-      return initializeAuth(app, {
-        persistence: getReactNativePersistence(ReactNativeAsyncStorage),
-      });
-    }
+    return initializeAuth(app, {
+      persistence: getReactNativePersistence(ReactNativeAsyncStorage),
+    });
   } catch (error: any) {
-    // During fast refresh or when submodule is unavailable, fallback is safe.
+    // If auth is already initialized, getAuth will return the existing instance
     if (error?.code !== 'auth/already-initialized') {
       console.warn(
-        '[Firebase] React Native persistence unavailable, using default auth.',
+        '[Firebase] React Native persistence error, using default auth fallback.',
         error
       );
     }
+    return getAuth(app);
   }
-
-  return getAuth(app);
 }
 
 const auth = createAuth();

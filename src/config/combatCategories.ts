@@ -12,7 +12,7 @@ export const COMBAT_CATEGORY_OTHER = '\u05d0\u05d7\u05e8'; // אחר
 export const COMBAT_CATEGORY_DEFINITIONS: CombatCategoryDefinition[] = [
   { id: '\u05e0\u05e9\u05e7', label: '\u05e0\u05e9\u05e7', icon: '🔫', color: '#E53935' }, // נשק
   { id: '\u05d0\u05d5\u05e4\u05d8\u05d9\u05e7\u05d4', label: '\u05d0\u05d5\u05e4\u05d8\u05d9\u05e7\u05d4', icon: '🔭', color: '#8E24AA' }, // אופטיקה
-  { id: '\u05e6\u05d9\u05d5\u05d3 \u05de\u05d2\u05df', label: '\u05e6\u05d9\u05d5\u05d3 \u05de\u05d2\u05df', icon: '🛡️', color: '#43A047' }, // ציוד מגן
+  { id: '\u05d0\u05de\u05e8"\u05dc', label: '\u05d0\u05de\u05e8"\u05dc', icon: '🛡️', color: '#43A047' }, // אמר"ל
   { id: '\u05d0\u05d1\u05d9\u05d6\u05e8\u05d9\u05dd', label: '\u05d0\u05d1\u05d9\u05d6\u05e8\u05d9\u05dd', icon: '🔧', color: '#FB8C00' }, // אביזרים
   { id: '\u05e6\u05d9\u05d5\u05d3 \u05dc\u05d5\u05d7\u05dd', label: '\u05e6\u05d9\u05d5\u05d3 \u05dc\u05d5\u05d7\u05dd', icon: '🎒', color: '#1E88E5' }, // ציוד לוחם
   { id: COMBAT_CATEGORY_OTHER, label: COMBAT_CATEGORY_OTHER, icon: '📦', color: '#757575' },

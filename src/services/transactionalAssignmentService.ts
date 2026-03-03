@@ -365,17 +365,17 @@ function getAssignmentTimestampMs(assignment: Assignment): number {
 function getStatusForAction(action: OperationType): string {
   switch (action) {
     case 'issue':
-      return '���� �����';
+      return 'נופק לחייל';
     case 'return':
-      return '�����';
+      return 'הוחזר';
     case 'add':
-      return '����';
+      return 'נוסף';
     case 'credit':
-      return '����';
+      return 'זוכה';
     case 'storage':
-      return '�����';
+      return 'הופקד';
     case 'retrieve':
-      return '����� ������';
+      return 'שוחרר מאפסון';
     default:
       return '';
   }
@@ -578,7 +578,7 @@ export async function issueEquipment(params: IssueEquipmentParams): Promise<stri
       type,
       action: 'issue',
       items,
-      status: '���� �����',
+      status: 'נופק לחייל',
       timestamp: Timestamp.now(),
       assignedBy,
       requestId,
@@ -633,6 +633,15 @@ export async function returnEquipment(params: ReturnEquipmentParams): Promise<st
     requestId,
   } = params;
 
+  // Pré-charger les issues avant la transaction (getDocs non compatible avec runTransaction)
+  const issueQuery = query(
+    collection(db, 'assignments'),
+    where('soldierId', '==', soldierId),
+    where('type', '==', type),
+    where('action', '==', 'issue')
+  );
+  const issueDocs = await getDocs(issueQuery);
+
   const assignmentId = await runTransaction(db, async (transaction: Transaction) => {
     // 0. Idempotence
     const assignmentRef = doc(db, 'assignments', requestId);
@@ -642,7 +651,7 @@ export async function returnEquipment(params: ReturnEquipmentParams): Promise<st
       return assignmentRef.id;
     }
 
-    // 1. Lire soldier_holdings et les assignments 'issue' existants (READ)
+    // 1. Lire soldier_holdings (READ)
     const holdingId = `${soldierId}_${type}`;
     const holdingRef = doc(db, 'soldier_holdings', holdingId);
     const extraRef = doc(db, 'soldier_equipment', soldierId);
@@ -652,17 +661,8 @@ export async function returnEquipment(params: ReturnEquipmentParams): Promise<st
       transaction.get(extraRef)
     ]);
 
-    // On pré-charge les issues pour pouvoir les supprimer si le solde tombe à 0
-    const issueQuery = query(
-      collection(db, 'assignments'),
-      where('soldierId', '==', soldierId),
-      where('type', '==', type),
-      where('action', '==', 'issue')
-    );
-    const issueDocs = await getDocs(issueQuery);
-
-    // 2. Cr?er l'assignment (historique - WRITE)
-    // action 'credit' + status '����' : coh?rent avec l'UI "����� ����"
+    // 2. Créer l'assignment (historique - WRITE)
+    // action 'credit' + status 'זוכה' : cohérent avec l'UI "זיכוי חייל"
     const assignmentData: any = {
       soldierId,
       soldierName,
@@ -670,7 +670,7 @@ export async function returnEquipment(params: ReturnEquipmentParams): Promise<st
       type,
       action: 'credit',
       items,
-      status: '����',
+      status: 'זוכה',
       timestamp: Timestamp.now(),
       assignedBy: returnedBy,
       requestId,
@@ -806,7 +806,7 @@ export async function addEquipment(params: AddEquipmentParams): Promise<string> 
       type,
       action: 'add',
       items,
-      status: '����',
+      status: 'נוסף',
       timestamp: Timestamp.now(),
       assignedBy: addedBy,
       requestId,
@@ -858,6 +858,15 @@ export async function creditEquipment(
 ): Promise<string> {
   let returnedHoldings: HoldingItem[] = [];
 
+  // Pré-charger les issues avant la transaction (getDocs non compatible avec runTransaction)
+  const issueQuery = query(
+    collection(db, 'assignments'),
+    where('soldierId', '==', soldierId),
+    where('type', '==', type),
+    where('action', '==', 'issue')
+  );
+  const issueDocs = await getDocs(issueQuery);
+
   const assignmentId = await runTransaction(db, async (transaction: Transaction) => {
     // 0. Idempotence
     const assignmentRef = doc(db, 'assignments', requestId);
@@ -867,7 +876,7 @@ export async function creditEquipment(
       return assignmentRef.id;
     }
 
-    // 1. Lire les holdings actuels et les assignments 'issue' (READ)
+    // 1. Lire les holdings actuels (READ)
     const holdingId = `${soldierId}_${type}`;
     const holdingRef = doc(db, 'soldier_holdings', holdingId);
     const extraRef = doc(db, 'soldier_equipment', soldierId);
@@ -881,14 +890,6 @@ export async function creditEquipment(
       throw new Error('No holdings to credit for this soldier');
     }
 
-    const issueQuery = query(
-      collection(db, 'assignments'),
-      where('soldierId', '==', soldierId),
-      where('type', '==', type),
-      where('action', '==', 'issue')
-    );
-    const issueDocs = await getDocs(issueQuery);
-
     const currentHoldings: HoldingItem[] = holdingSnap.data().items;
     returnedHoldings = currentHoldings; // Capture for weapon release after transaction
 
@@ -900,7 +901,7 @@ export async function creditEquipment(
       type,
       action: 'credit',
       items: currentHoldings,
-      status: '����',
+      status: 'זוכה',
       timestamp: Timestamp.now(),
       assignedBy: creditedBy,
       requestId,
@@ -951,10 +952,9 @@ export async function creditEquipment(
     return assignmentRef.id;
   });
 
-  // Mise ? jour de l'inventaire des armes APR?S la transaction r?ussie
+  // Mise à jour de l'inventaire des armes APRÈS la transaction réussie
   if (type === 'combat' && returnedHoldings.length > 0) {
-    // Fire-and-forget pour ne pas bloquer le traitement global et ?viter les timeouts
-    Promise.all(returnedHoldings.map(async (item) => {
+    await Promise.all(returnedHoldings.map(async (item) => {
       const serials = item.serials ? item.serials : [];
       await Promise.all(serials.map(async (serial) => {
         try {
@@ -962,13 +962,13 @@ export async function creditEquipment(
           if (weapon) {
             await weaponInventoryService.setWeaponAvailableStatusOnlyOffline(weapon.id);
           } else {
-            console.warn(`[CreditEquipment] Arme introuvable dans l'inventaire pour le ����: ${serial}`);
+            console.warn(`[CreditEquipment] Arme introuvable dans l'inventaire pour le מסטב: ${serial}`);
           }
         } catch (err) {
-          console.warn(`[CreditEquipment] ?chec mise ? jour inventaire pour ���� ${serial}:`, err);
+          console.warn(`[CreditEquipment] Échec mise à jour inventaire pour מסטב ${serial}:`, err);
         }
       }));
-    })).catch(err => console.error("[CreditEquipment] Erreur globale lors de la lib?ration des armes:", err));
+    })).catch(err => console.error("[CreditEquipment] Erreur globale lors de la libération des armes:", err));
   }
 
   return assignmentId;
@@ -1009,7 +1009,7 @@ export async function storageEquipment(
       type,
       action: 'storage',
       items,
-      status: '�����',
+      status: 'הופקד',
       timestamp: Timestamp.now(),
       assignedBy: storedBy,
       requestId,
@@ -1076,7 +1076,7 @@ export async function retrieveEquipment(
       type,
       action: 'retrieve',
       items,
-      status: '����� ������',
+      status: 'שוחרר מאפסון',
       timestamp: Timestamp.now(),
       assignedBy: retrievedBy,
       requestId,
@@ -1355,17 +1355,14 @@ async function issueEquipmentOffline(params: IssueEquipmentParams): Promise<stri
 
 /**
  * Wrapper pour returnEquipment avec support offline
- * AMÉLIORÉ: Attrape les erreurs réseau et met en queue automatiquement
+ * Tente toujours Firebase directement - isOnline() peut être un faux négatif (NetInfo peu fiable).
+ * L'erreur "connexion requise" n'est levée que si Firebase confirme l'échec réseau.
  */
 async function returnEquipmentOffline(params: ReturnEquipmentParams): Promise<string> {
-  if (!isOnline()) {
-    throw new Error('זיכוי דורש חיבור לאינטרנט');
-  }
-
   try {
-    return await runWithTimeout(returnEquipment(params), 2500);
+    return await runWithTimeout(returnEquipment(params), 5000);
   } catch (error: any) {
-    if (isNetworkOrTimeoutError(error)) {
+    if (isNetworkOrTimeoutError(error) || !isOnline()) {
       throw new Error('זיכוי דורש חיבור לאינטרנט');
     }
     throw error;
@@ -1405,14 +1402,10 @@ async function creditEquipmentOffline(
   creditedBy: string,
   requestId: string
 ): Promise<string> {
-  if (!isOnline()) {
-    throw new Error('זיכוי דורש חיבור לאינטרנט');
-  }
-
   try {
-    return await runWithTimeout(creditEquipment(soldierId, soldierName, soldierPersonalNumber, type, creditedBy, requestId), 2500);
+    return await runWithTimeout(creditEquipment(soldierId, soldierName, soldierPersonalNumber, type, creditedBy, requestId), 5000);
   } catch (error: any) {
-    if (isNetworkOrTimeoutError(error)) {
+    if (isNetworkOrTimeoutError(error) || !isOnline()) {
       throw new Error('זיכוי דורש חיבור לאינטרנט');
     }
     throw error;

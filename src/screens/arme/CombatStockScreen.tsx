@@ -28,17 +28,19 @@ const DATA_CELL_WIDTH = 46;
 const ROW_HEIGHT = 40;
 const HEADER_HEIGHT = 40;
 
+// Columns ordered RTL: scroll left reveals less-important cols; תקן is rightmost (closest to fixed col)
 const COLUMNS = [
-  { key: 'standard', label: 'תקן', width: DATA_CELL_WIDTH },
-  { key: 'shelf', label: 'מדף', width: DATA_CELL_WIDTH },
-  { key: 'loans', label: 'השאלות', width: DATA_CELL_WIDTH + 10 },
-  { key: 'compA', label: "א'", width: DATA_CELL_WIDTH - 6 },
-  { key: 'compB', label: "ב'", width: DATA_CELL_WIDTH - 6 },
-  { key: 'compC', label: "ג'", width: DATA_CELL_WIDTH - 6 },
-  { key: 'compD', label: "ד'", width: DATA_CELL_WIDTH - 6 },
-  { key: 'hq', label: 'מפקדה', width: DATA_CELL_WIDTH + 10 },
-  { key: 'stored', label: 'אפסון', width: DATA_CELL_WIDTH + 10 },
   { key: 'total', label: 'סה"כ', width: DATA_CELL_WIDTH },
+  { key: 'stored', label: 'אפסון', width: DATA_CELL_WIDTH + 10 },
+  { key: 'niud', label: 'ניוד', width: DATA_CELL_WIDTH + 4 },
+  { key: 'hq', label: 'מפקדה', width: DATA_CELL_WIDTH + 10 },
+  { key: 'compD', label: "ד'", width: DATA_CELL_WIDTH - 6 },
+  { key: 'compC', label: "ג'", width: DATA_CELL_WIDTH - 6 },
+  { key: 'compB', label: "ב'", width: DATA_CELL_WIDTH - 6 },
+  { key: 'compA', label: "א'", width: DATA_CELL_WIDTH - 6 },
+  { key: 'loans', label: 'השאלות', width: DATA_CELL_WIDTH + 10 },
+  { key: 'shelf', label: 'מדף', width: DATA_CELL_WIDTH },
+  { key: 'standard', label: 'תקן', width: DATA_CELL_WIDTH },
 ];
 
 const CombatStockScreen: React.FC = () => {
@@ -54,6 +56,7 @@ const CombatStockScreen: React.FC = () => {
   // Refs pour la synchronisation verticale
   const namesScrollRef = useRef<ScrollView>(null);
   const dataScrollRef = useRef<ScrollView>(null);
+  const horizontalScrollRef = useRef<ScrollView>(null);
 
   // OPTIMISÉ: Charger uniquement quand le cache est prêt
   useEffect(() => {
@@ -80,7 +83,8 @@ const CombatStockScreen: React.FC = () => {
         }
       });
 
-      setStocks(data);
+      // Only show equipment tracked by serial number (weapons_inventory)
+      setStocks(data.filter(s => s.equipmentId.startsWith('WEAPON_')));
     } catch (error) {
       console.error('Error loading stocks:', error);
       Alert.alert('שגיאה', 'לא ניתן לטעון את נתוני המלאי');
@@ -120,21 +124,29 @@ const CombatStockScreen: React.FC = () => {
 
   const getCompanyValue = (stock: EquipmentStock, companyName: string): number => {
     const company = stock.byCompany.find(c => c.company === companyName);
-    return company ? (company.issued + company.stored) : 0;
+    return company ? company.issued : 0;
   };
 
   const getRowValues = (stock: EquipmentStock) => {
-    const headquarters = getCompanyValue(stock, 'מפקדה/אגמ') + getCompanyValue(stock, 'מפקדה') + getCompanyValue(stock, 'ניוד');
+    const compA = getCompanyValue(stock, 'פלוגה א');
+    const compB = getCompanyValue(stock, 'פלוגה ב');
+    const compC = getCompanyValue(stock, 'פלוגה ג');
+    const compD = getCompanyValue(stock, 'פלוגה ד');
+    const hq = getCompanyValue(stock, 'מפקדה/אגמ') + getCompanyValue(stock, 'מפקדה');
+    const niud = getCompanyValue(stock, 'ניוד');
+    const loans = compA + compB + compC + compD + hq + niud + stock.stored;
     const totalCalc = stock.available + stock.stored;
+    const standardCalc = loans + stock.available;
     return {
-      standard: totalCalc > 0 ? totalCalc : '-',
+      standard: standardCalc > 0 ? standardCalc : '-',
       shelf: stock.available,
-      loans: stock.issued,
-      compA: getCompanyValue(stock, 'פלוגה א'),
-      compB: getCompanyValue(stock, 'פלוגה ב'),
-      compC: getCompanyValue(stock, 'פלוגה ג'),
-      compD: getCompanyValue(stock, 'פלוגה ד'),
-      hq: headquarters,
+      loans,
+      compA,
+      compB,
+      compC,
+      compD,
+      hq,
+      niud,
       stored: stock.stored,
       total: totalCalc,
     };
@@ -143,6 +155,7 @@ const CombatStockScreen: React.FC = () => {
   const getValueColor = (key: string, value: number | string) => {
     if (value === '-' || value === 0) return '#94A3B8';
     switch (key) {
+      case 'standard': return '#0F172A';
       case 'shelf': return '#2563EB';
       case 'loans': return '#059669';
       case 'stored': return '#D97706';
@@ -187,28 +200,14 @@ const CombatStockScreen: React.FC = () => {
         </View>
       ) : (
         <View style={styles.tableContainer}>
-          {/* 1. Zone Fixe (Noms) */}
-          <View style={styles.leftColumn}>
-            <View style={styles.headerCellFix}>
-              <Text style={styles.headerText}>ציוד</Text>
-            </View>
-            <ScrollView
-              ref={namesScrollRef}
-              style={styles.verticalList}
-              showsVerticalScrollIndicator={false}
-              scrollEnabled={false} // Désactivé, scrollé via dataScrollRef
-            >
-              {stocks.map((stock, index) => (
-                <View key={index} style={[styles.cellFix, index % 2 === 0 && styles.rowEven]}>
-                  <Text style={styles.equipmentName} numberOfLines={1}>{stock.equipmentName}</Text>
-                </View>
-              ))}
-              <View style={{ height: 40 }} />
-            </ScrollView>
-          </View>
-
-          {/* 2. Zone Scrollable (Données) */}
-          <ScrollView horizontal bounces={false} showsHorizontalScrollIndicator={true}>
+          {/* 1. Zone Scrollable (Données) — à gauche en RTL */}
+          <ScrollView
+            ref={horizontalScrollRef}
+            horizontal
+            bounces={false}
+            showsHorizontalScrollIndicator={true}
+            onContentSizeChange={() => horizontalScrollRef.current?.scrollToEnd({ animated: false })}
+          >
             <View style={{ width: totalContentWidth }}>
               {/* Header des données */}
               <View style={styles.dataHeaderRow}>
@@ -253,6 +252,26 @@ const CombatStockScreen: React.FC = () => {
               </ScrollView>
             </View>
           </ScrollView>
+
+          {/* 2. Zone Fixe (Noms) — à droite en RTL */}
+          <View style={styles.rightColumn}>
+            <View style={styles.headerCellFix}>
+              <Text style={styles.headerText}>ציוד</Text>
+            </View>
+            <ScrollView
+              ref={namesScrollRef}
+              style={styles.verticalList}
+              showsVerticalScrollIndicator={false}
+              scrollEnabled={false}
+            >
+              {stocks.map((stock, index) => (
+                <View key={index} style={[styles.cellFix, index % 2 === 0 && styles.rowEven]}>
+                  <Text style={styles.equipmentName} numberOfLines={1}>{stock.equipmentName}</Text>
+                </View>
+              ))}
+              <View style={{ height: 40 }} />
+            </ScrollView>
+          </View>
         </View>
       )}
     </View>
@@ -275,7 +294,7 @@ const styles = StyleSheet.create({
   headerButton: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
   headerTitle: { fontSize: 16, fontWeight: '700', color: '#FFF' },
   tableContainer: { flex: 1, flexDirection: 'row' },
-  leftColumn: { width: FIXED_COLUMN_WIDTH, borderRightWidth: 1, borderRightColor: '#E2E8F0', backgroundColor: '#FFF', zIndex: 10 },
+  rightColumn: { width: FIXED_COLUMN_WIDTH, borderLeftWidth: 1, borderLeftColor: '#E2E8F0', backgroundColor: '#FFF', zIndex: 10 },
   verticalList: { flex: 1 },
   headerCellFix: { height: HEADER_HEIGHT, backgroundColor: '#1E293B', justifyContent: 'center', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: '#334155' },
   headerCellData: { height: HEADER_HEIGHT, backgroundColor: '#1E293B', justifyContent: 'center', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: '#334155', borderRightWidth: 1, borderRightColor: '#334155' },

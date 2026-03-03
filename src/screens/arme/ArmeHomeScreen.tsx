@@ -145,13 +145,7 @@ const ArmeHomeScreen: React.FC = () => {
       title: 'דוחות',
       icon: '📊',
       color: '#FF5722',
-      action: () => {
-        setModalType('info');
-        setModalTitle('בקרוב');
-        setModalMessage('מסך דוחות יהיה זמין בקרוב');
-        setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
-        setModalVisible(true);
-      },
+      action: () => navigation.navigate('InventoryReport'),
     },
   ];
 

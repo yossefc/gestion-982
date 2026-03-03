@@ -60,8 +60,8 @@ const AdminPanelScreen: React.FC = () => {
     } catch (error) {
       console.error('Error loading inventory stats:', error);
       setModalType('error');
-      setModalMessage('לא ניתן לטעון את קטגוריות הנשק');
-      setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalMessage('אירעה שגיאה בטעינת נתוני המלאי');
+      setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
       setModalVisible(true);
     } finally {
       setLoading(false);
@@ -81,8 +81,8 @@ const AdminPanelScreen: React.FC = () => {
     const weaponsToDelete = categoryStats.total - categoryStats.assigned;
     if (weaponsToDelete <= 0) {
       setModalType('info');
-      setModalMessage('אין נשקים למחיקה בקטגוריה זו (כל הנשקים מוקצים)');
-      setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalMessage('אין נשקים זמינים למחיקה בקטגוריה זו (כל הנשקים מוקצים)');
+      setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
       setDeleteCategoryModalVisible(false);
       setModalVisible(true);
       return;
@@ -90,7 +90,7 @@ const AdminPanelScreen: React.FC = () => {
 
     setModalType('warning');
     setModalTitle('אישור מחיקה');
-    setModalMessage(`האם אתה בטוח שברצונך למחוק ${weaponsToDelete} נשקים מסוג ${selectedCategory}? \n\n${categoryStats.assigned} נשקים המוקצים לחיילים לא יימחקו.`);
+    setModalMessage(`האם אתה בטוח שברצונך למחוק ${weaponsToDelete} נשקים מהקטגוריה ${selectedCategory}? \n\n${categoryStats.assigned} נשקים מוקצים לחיילים ולא ימחקו.`);
     setModalButtons([
       { text: 'ביטול', style: 'outline', onPress: () => setModalVisible(false) },
       {
@@ -107,13 +107,13 @@ const AdminPanelScreen: React.FC = () => {
             setModalType('success');
             setModalTitle('הצלחה');
             setModalMessage(`נמחקו ${deletedCount} נשקים בהצלחה.`);
-            setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+            setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
             setModalVisible(true);
           } catch (error) {
             console.error('Error deleting weapons:', error);
             setModalType('error');
             setModalMessage('שגיאה במחיקת הנשקים');
-            setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+            setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
             setModalVisible(true);
           } finally {
             setLoading(false);
@@ -151,8 +151,8 @@ const AdminPanelScreen: React.FC = () => {
     } catch (error) {
       console.error('Error loading stats:', error);
       setModalType('error');
-      setModalMessage('לא ניתן לטעון את הנתונים');
-      setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalMessage('אירעה שגיאה בטעינת הנתונים');
+      setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
       setModalVisible(true);
     } finally {
       setLoading(false);
@@ -161,11 +161,11 @@ const AdminPanelScreen: React.FC = () => {
 
   const handleInitializeData = () => {
     setModalType('warning');
-    setModalTitle('אתחול נתוני ברירת מחדל');
-    setModalMessage('האם אתה בטוח? פעולה זו תוסיף ציוד ברירת מחדל למערכת.');
+    setModalTitle('איפוס נתוני ברירת מחדל');
+    setModalMessage('האם אתה בטוח? פעולה זו תאפס את כל נתוני ברירת המחדל.');
     setModalButtons([
       { text: 'ביטול', style: 'outline', onPress: () => setModalVisible(false) },
-      { text: 'אישור', style: 'destructive', onPress: () => { setModalVisible(false); initializeDefaultData(); } },
+      { text: 'אפס', style: 'destructive', onPress: () => { setModalVisible(false); initializeDefaultData(); } },
     ]);
     setModalVisible(true);
   };
@@ -174,16 +174,15 @@ const AdminPanelScreen: React.FC = () => {
     try {
       setLoading(true);
       // Initialize default equipment logic here
-      // Initialize default equipment logic here
       setModalType('success');
       setModalTitle('הצלחה');
-      setModalMessage('הנתונים אותחלו בהצלחה');
-      setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalMessage('הנתונים אופסו בהצלחה');
+      setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
       setModalVisible(true);
     } catch (error) {
       setModalType('error');
-      setModalMessage('לא ניתן לאתחל את הנתונים');
-      setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalMessage('אירעה שגיאה בטעינת הנתונים');
+      setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
       setModalVisible(true);
     } finally {
       setLoading(false);
@@ -193,11 +192,11 @@ const AdminPanelScreen: React.FC = () => {
   const handleMigrateStatuses = () => {
     setModalType('warning');
     setModalTitle('עדכון סטטוסים');
-    setModalMessage('פעולה זו תאחד את כל הסטטוסים של הציוד והנשק במערכת לפורמט החדש. האם להמשיך?');
+    setModalMessage('פעולה זו תעדכן את כל הסטטוסים בהתאם להגדרות הנשקייה החדשות. האם להמשיך?');
     setModalButtons([
       { text: 'ביטול', style: 'outline', onPress: () => setModalVisible(false) },
       {
-        text: 'אישור',
+        text: 'עדכן',
         style: 'primary',
         onPress: async () => {
           setModalVisible(false);
@@ -207,19 +206,19 @@ const AdminPanelScreen: React.FC = () => {
             if (result.success) {
               setModalType('success');
               setModalTitle('הצלחה');
-              setModalMessage(`התהליך הושלם. עודכנו ${result.updatedCount} מסמכים.`);
-              setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+              setModalMessage(`העדכון הסתיים. עודכנו ${result.updatedCount} רשומות.`);
+              setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
               setModalVisible(true);
             } else {
               setModalType('error');
-              setModalMessage('התהליך נכשל');
-              setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+              setModalMessage('העדכון נכשל');
+              setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
               setModalVisible(true);
             }
           } catch (error) {
             setModalType('error');
-            setModalMessage('אירעה שגיאה בלתי צפויה');
-            setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+            setModalMessage('אירעה שגיאה בביצוע העדכון');
+            setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
             setModalVisible(true);
           } finally {
             setLoading(false);
@@ -307,8 +306,8 @@ const AdminPanelScreen: React.FC = () => {
         </TouchableOpacity>
 
         <View style={styles.headerTitleContainer}>
-          <Text style={styles.headerTitle}>פאנל ניהול</Text>
-          <Text style={styles.headerSubtitle}>ניהול מערכת גדוד 982</Text>
+          <Text style={styles.headerTitle}>ניהול מערכת</Text>
+          <Text style={styles.headerSubtitle}>מחלקת לוגיסטיקה גדוד 982</Text>
         </View>
 
         <TouchableOpacity
@@ -326,8 +325,8 @@ const AdminPanelScreen: React.FC = () => {
       >
         {/* Database Debug - MOVED TO TOP FOR VISIBILITY */}
         <ActionCard
-          title="בדיקת מסד נתונים (Database Debug)"
-          subtitle="כלי דיאגנוסטיקה ותיקון"
+          title="בדיקת בסיס הנתונים (Database Debug)"
+          subtitle="בדוק מידע אבחון מהמסד"
           icon="server"
           color={Colors.danger}
           onPress={() => navigation.navigate('DatabaseDebug' as never)}
@@ -349,13 +348,13 @@ const AdminPanelScreen: React.FC = () => {
             color={Colors.success}
           />
           <StatCard
-            title="החתמות היום"
+            title="הקצאות היום"
             value={stats.todayAssignments}
             icon="today"
             color={Colors.warning}
           />
           <StatCard
-            title="סה״כ החתמות"
+            title='סה"כ הקצאות'
             value={stats.totalAssignments}
             icon="documents"
             color={Colors.soldats}
@@ -363,48 +362,48 @@ const AdminPanelScreen: React.FC = () => {
         </View>
 
         {/* Management Actions */}
-        <Text style={styles.sectionTitle}>ניהול משתמשים וחיילים</Text>
+        <Text style={styles.sectionTitle}>ניהול משתמשים ותצוגה</Text>
         <ActionCard
           title="ניהול משתמשים"
-          subtitle="הוספה, עריכה והרשאות משתמשים"
+          subtitle="הוסף, ערוך ומחק משתמשי מערכת"
           icon="people-circle"
           color={Colors.soldats}
           onPress={() => navigation.navigate('UserManagement' as never)}
         />
         <ActionCard
           title="היסטוריית חייל"
-          subtitle="צפייה בכל ההחתמות של חייל ספציפי"
+          subtitle="הצג את כל ההקצאות עבור כל חייל"
           icon="time"
           color={Colors.info}
           onPress={() => navigation.navigate('SoldierHistory' as never)}
         />
 
         {/* Database Actions */}
-        <Text style={styles.sectionTitle}>כלי מסד נתונים</Text>
+        <Text style={styles.sectionTitle}>כלי בסיס הנתונים</Text>
         <ActionCard
-          title="בדיקת מסד נתונים"
-          subtitle="סקירת אוספים ואבחון בעיות"
+          title="בדיקת בסיס הנתונים"
+          subtitle="בדוק ותקן בעיות בסיס נתונים"
           icon="server"
           color={Colors.info}
           onPress={() => navigation.navigate('DatabaseDebug' as never)}
         />
         <ActionCard
-          title="מיגרציות Firestore"
-          subtitle="ניקוי כפילויות והוספת nameKey"
+          title="מיגרציה Firestore"
+          subtitle="עדכון אוספים להשתמש ב-nameKey"
           icon="git-merge"
           color={Colors.danger}
           onPress={() => navigation.navigate('Migration' as never)}
         />
         <ActionCard
-          title="אתחול נתוני ברירת מחדל"
-          subtitle="הוספת ציוד ומנות ברירת מחדל"
+          title="איפוס נתוני ברירת מחדל"
+          subtitle="הגדר מחדש נתוני ברירת מחדל"
           icon="refresh-circle"
           color={Colors.warning}
           onPress={handleInitializeData}
         />
         <ActionCard
-          title="עדכון סטטוסים (אמל״ח)"
-          subtitle="איחוד סטטוסיםassigned/stored/defective"
+          title="עדכון סטטוסים (נשקייה)"
+          subtitle="תקן סטטוסים assigned/stored/defective"
           icon="sync-circle"
           color={Colors.arme}
           onPress={handleMigrateStatuses}
@@ -413,8 +412,8 @@ const AdminPanelScreen: React.FC = () => {
         {/* New Section: Weapon Inventory Management */}
         <Text style={styles.sectionTitle}>ניהול מלאי נשק</Text>
         <ActionCard
-          title="איפוס קטגוריה"
-          subtitle="מחיקת כל הנשקים הפנויים מקטגוריה"
+          title="מחיקת קטגוריה"
+          subtitle="מחק את הנשקים הלא מוקצים בקטגוריה"
           icon="trash"
           color={Colors.danger}
           onPress={handleOpenDeleteCategoryModal}
@@ -430,29 +429,29 @@ const AdminPanelScreen: React.FC = () => {
         {/* Export Actions */}
         <Text style={styles.sectionTitle}>ייצוא נתונים</Text>
         <ActionCard
-          title="ייצוא לאקסל"
-          subtitle="ייצוא כל הנתונים לקובץ Excel"
+          title="ייצוא נתונים"
+          subtitle='ייצא את הנתונים לגיליון Excel'
           icon="download"
           color={Colors.success}
           onPress={() => {
             setModalType('info');
             setModalTitle('בקרוב');
             setModalMessage('פיצ׳ר זה יהיה זמין בקרוב');
-            setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+            setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
             setModalVisible(true);
           }}
           disabled
         />
         <ActionCard
-          title="גיבוי מערכת"
-          subtitle="יצירת גיבוי מלא של המערכת"
+          title="גיבוי נתונים"
+          subtitle="צור גיבוי של כל הנתונים"
           icon="cloud-upload"
           color={Colors.primary}
           onPress={() => {
             setModalType('info');
             setModalTitle('בקרוב');
             setModalMessage('פיצ׳ר זה יהיה זמין בקרוב');
-            setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+            setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
             setModalVisible(true);
           }}
           disabled
@@ -465,7 +464,7 @@ const AdminPanelScreen: React.FC = () => {
             <Text style={styles.systemInfoValue}>1.0.0</Text>
           </View>
           <View style={styles.systemInfoRow}>
-            <Text style={styles.systemInfoLabel}>סטטוס Firebase:</Text>
+            <Text style={styles.systemInfoLabel}>חיבור Firebase:</Text>
             <View style={styles.statusBadge}>
               <View style={styles.statusDot} />
               <Text style={styles.statusText}>מחובר</Text>
@@ -492,7 +491,7 @@ const AdminPanelScreen: React.FC = () => {
         >
           <View style={styles.modalContent} onStartShouldSetResponder={() => true}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>בחירת קטגוריה למחיקה</Text>
+              <Text style={styles.modalTitle}>בחר קטגוריה למחיקה</Text>
               <TouchableOpacity onPress={() => setDeleteCategoryModalVisible(false)}>
                 <Ionicons name="close" size={24} color={Colors.textSecondary} />
               </TouchableOpacity>
@@ -516,7 +515,7 @@ const AdminPanelScreen: React.FC = () => {
                   </Text>
                   <View style={styles.categoryBadges}>
                     <Text style={styles.badgetext}>סה״כ: {cat.total}</Text>
-                    <Text style={[styles.badgetext, { color: Colors.warning }]}>מוקצה: {cat.assigned}</Text>
+                    <Text style={[styles.badgetext, { color: Colors.warning }]}>מוקצים: {cat.assigned}</Text>
                   </View>
                 </TouchableOpacity>
               ))}
@@ -525,17 +524,17 @@ const AdminPanelScreen: React.FC = () => {
             {selectedCategory && categoryStats && (
               <View style={styles.statsSummary}>
                 <Text style={styles.summaryText}>
-                  נשקים למחיקה (פנויים/תקולים): {categoryStats.total - categoryStats.assigned}
+                  זמינים למחיקה (זמינים/מאוחסנים): {categoryStats.total - categoryStats.assigned}
                 </Text>
                 <Text style={styles.summaryTextWarning}>
-                  נשקים מוגנים (מוקצים): {categoryStats.assigned}
+                  לא יימחקו (מוקצים): {categoryStats.assigned}
                 </Text>
 
                 <TouchableOpacity
                   style={styles.deleteButton}
                   onPress={executeCategoryDeletion}
                 >
-                  <Text style={styles.deleteButtonText}>מחק נשקים</Text>
+                  <Text style={styles.deleteButtonText}>מחק קטגוריה</Text>
                 </TouchableOpacity>
               </View>
             )}

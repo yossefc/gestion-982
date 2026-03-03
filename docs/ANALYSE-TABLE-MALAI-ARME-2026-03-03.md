@@ -1,4 +1,4 @@
-# Analyse `טבלת מלאי` - Module `arme` (2026-03-03)
+re# Analyse `טבלת מלאי` - Module `arme` (2026-03-03)
 
 ## Portee
 - Ecran analyse: `src/screens/arme/CombatStockScreen.tsx`

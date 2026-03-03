@@ -1,4 +1,4 @@
-// ֳ‰cran de retour d'ֳ©quipement ׳׳—׳™׳׳” (׳–׳™׳›׳•׳™ ׳—׳™׳™׳) avec WhatsApp
+// Écran de retour d'équipement לחימה (זיכוי חייל) avec WhatsApp
 import React, { useEffect, useState } from 'react';
 import {
   View,
@@ -33,7 +33,7 @@ interface ReturnItem extends AssignmentItem {
   selected: boolean;
   returnQuantity: number;
   availableSerials: string[]; // Serials disponibles (depuis serial string)
-  selectedSerials: string[]; // Serials sֳ©lectionnֳ©s pour le retour
+  selectedSerials: string[]; // Serials sélectionnés pour le retour
   status?: 'assigned' | 'stored';
 }
 
@@ -60,9 +60,9 @@ const CombatReturnScreen: React.FC = () => {
     if (!soldierId) {
       console.error('[CombatReturn] No soldierId provided in route params!');
       setModalType('error');
-      setModalMessage('׳׳ ׳ ׳׳¦׳ ׳׳–׳”׳” ׳—׳™׳™׳');
+      setModalMessage('לא נמצא מזהה חייל');
       setModalButtons([{
-        text: '׳¡׳’׳•׳¨',
+        text: 'סגור',
         style: 'primary',
         onPress: () => {
           setModalVisible(false);
@@ -112,7 +112,7 @@ const CombatReturnScreen: React.FC = () => {
           returnQuantity: 0,
           availableSerials: serialsArray,
           selectedSerials: [], // Initialement vide
-          status: item.status, // Transfֳ©rer le statut
+          status: item.status, // Transférer le statut
         };
       });
 
@@ -121,8 +121,8 @@ const CombatReturnScreen: React.FC = () => {
     } catch (error) {
       console.error('Error loading data:', error);
       setModalType('error');
-      setModalMessage('׳ ׳›׳©׳ ׳‘׳˜׳¢׳™׳ ׳× ׳”׳ ׳×׳•׳ ׳™׳');
-      setModalButtons([{ text: '׳¡׳’׳•׳¨', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalMessage('נכשל בטעינת הנתונים');
+      setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
       setModalVisible(true);
     } finally {
       setLoading(false);
@@ -166,26 +166,26 @@ const CombatReturnScreen: React.FC = () => {
 
     if (selectedItems.length === 0) {
       setModalType('error');
-      setModalMessage('׳׳ ׳ ׳‘׳—׳¨ ׳׳₪׳—׳•׳× ׳₪׳¨׳™׳˜ ׳׳—׳“ ׳׳–׳™׳›׳•׳™');
-      setModalButtons([{ text: '׳¡׳’׳•׳¨', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalMessage('אנא בחר לפחות פריט אחד לזיכוי');
+      setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
       setModalVisible(true);
       return;
     }
 
     setModalType('confirm');
-    setModalTitle('׳–׳™׳›׳•׳™ ׳¦׳™׳•׳“');
-    setModalMessage(`׳”׳׳ ׳׳×׳” ׳‘׳˜׳•׳— ׳©׳‘׳¨׳¦׳•׳ ׳ ׳׳–׳›׳•׳× ${selectedItems.length} ׳₪׳¨׳™׳˜׳™׳?`);
+    setModalTitle('זיכוי ציוד');
+    setModalMessage(`האם אתה בטוח שברצונך לזכות ${selectedItems.length} פריטים?`);
     setModalButtons([
-      { text: '׳‘׳™׳˜׳•׳', style: 'outline', onPress: () => setModalVisible(false) },
+      { text: 'ביטול', style: 'outline', onPress: () => setModalVisible(false) },
       {
-        text: '׳׳©׳¨',
+        text: 'אשר',
         style: 'primary',
         icon: 'checkmark-circle' as const,
         onPress: async () => {
           setModalVisible(false);
           setProcessing(true);
           try {
-            // Prֳ©parer les items pour le credit assignment
+            // Préparer les items pour le credit assignment
             const creditItems = selectedItems.map(item => {
               const itemData: any = {
                 equipmentId: item.equipmentId,
@@ -194,9 +194,9 @@ const CombatReturnScreen: React.FC = () => {
                 status: item.status,
               };
 
-              // Serials explicitement sélectionnés → priorité
-              // Sinon, fallback automatique sur availableSerials (limité à returnQuantity)
-              // → garantit que weapons_inventory est toujours mis à jour
+              // Serials explicitement s�lectionn�s � priorit�
+              // Sinon, fallback automatique sur availableSerials (limit� � returnQuantity)
+              // � garantit que weapons_inventory est toujours mis � jour
               const serialsToUse = item.selectedSerials.length > 0
                 ? item.selectedSerials
                 : item.availableSerials.slice(0, item.returnQuantity);
@@ -237,47 +237,47 @@ const CombatReturnScreen: React.FC = () => {
             const hasRemainingItems = remainingItems.length > 0;
             console.log('[CombatReturn] hasRemainingItems:', hasRemainingItems);
 
-            // Gֳ©nֳ©rer message WhatsApp
-            let whatsappMessage = `׳©׳׳•׳ ${soldier?.name},\n\n׳”׳–׳™׳›׳•׳™ ׳‘׳•׳¦׳¢ ׳‘׳”׳¦׳׳—׳”.\n\n`;
+            // Générer message WhatsApp
+            let whatsappMessage = `שלום ${soldier?.name},\n\nהזיכוי בוצע בהצלחה.\n\n`;
 
-            // Montrer ce qui a ֳ©tֳ© retournֳ©
-            whatsappMessage += '׳¦׳™׳•׳“ ׳©׳”׳•׳—׳–׳¨:\n';
+            // Montrer ce qui a été retourné
+            whatsappMessage += 'ציוד שהוחזר:\n';
             selectedItems.forEach(item => {
-              whatsappMessage += `ג€¢ ${item.equipmentName} - ׳›׳׳•׳×: ${item.returnQuantity}`;
+              whatsappMessage += `• ${item.equipmentName} - כמות: ${item.returnQuantity}`;
               if (item.selectedSerials && item.selectedSerials.length > 0) {
-                whatsappMessage += ` (׳׳¡׳˜׳‘: ${item.selectedSerials.join(', ')})`;
+                whatsappMessage += ` (מסטב: ${item.selectedSerials.join(', ')})`;
               }
               whatsappMessage += '\n';
             });
 
             // Montrer ce qui reste (s'il reste quelque chose)
             if (hasRemainingItems) {
-              whatsappMessage += '\n׳¦׳™׳•׳“ ׳©׳ ׳•׳×׳¨ ׳‘׳™׳“׳™׳:\n';
+              whatsappMessage += '\nציוד שנותר בידיך:\n';
               remainingItems.forEach((item: any) => {
-                whatsappMessage += `ג€¢ ${item.equipmentName} - ׳›׳׳•׳×: ${item.quantity}`;
+                whatsappMessage += `• ${item.equipmentName} - כמות: ${item.quantity}`;
                 const serialStr = (item.serials || []).join(',');
                 if (serialStr) {
-                  whatsappMessage += ` (׳׳¡׳˜׳‘: ${serialStr})`;
+                  whatsappMessage += ` (מסטב: ${serialStr})`;
                 }
                 whatsappMessage += '\n';
               });
             } else {
-              whatsappMessage += '\n׳›׳ ׳”׳¦׳™׳•׳“ ׳”׳•׳—׳–׳¨. ׳×׳•׳“׳”!\n';
+              whatsappMessage += '\nכל הציוד הוחזר. תודה!\n';
             }
 
-            whatsappMessage += `\n׳×׳•׳“׳”,\n׳’׳“׳•׳“ 982`;
+            whatsappMessage += `\nתודה,\nגדוד 982`;
 
-            // Afficher succֳ¨s avec options WhatsApp
+            // Afficher succès avec options WhatsApp
             const returnedCount = selectedItems.reduce((sum, item) => sum + item.returnQuantity, 0);
 
             setModalType('success');
-            setModalTitle('׳”׳¦׳׳—׳”');
+            setModalTitle('הצלחה');
             setModalMessage(hasRemainingItems
-              ? `׳”׳–׳™׳›׳•׳™ ׳‘׳•׳¦׳¢ ׳‘׳”׳¦׳׳—׳”!\n\n${returnedCount} ׳₪׳¨׳™׳˜׳™׳ ׳”׳•׳—׳–׳¨׳•.\n׳ ׳•׳×׳¨׳• ${remainingItems.length} ׳₪׳¨׳™׳˜׳™׳ ׳‘׳™׳“׳™ ׳”׳—׳™׳™׳.`
-              : `׳”׳–׳™׳›׳•׳™ ׳‘׳•׳¦׳¢ ׳‘׳”׳¦׳׳—׳”!\n\n${returnedCount} ׳₪׳¨׳™׳˜׳™׳ ׳”׳•׳—׳–׳¨׳•.\n׳”׳—׳™׳™׳ ׳”׳—׳–׳™׳¨ ׳׳× ׳›׳ ׳”׳¦׳™׳•׳“.`);
+              ? `הזיכוי בוצע בהצלחה!\n\n${returnedCount} פריטים הוחזרו.\nנותרו ${remainingItems.length} פריטים בידי החייל.`
+              : `הזיכוי בוצע בהצלחה!\n\n${returnedCount} פריטים הוחזרו.\nהחייל החזיר את כל הציוד.`);
             setModalButtons([
               {
-                text: '׳©׳׳— WhatsApp',
+                text: 'שלח WhatsApp',
                 style: 'primary',
                 icon: 'logo-whatsapp' as const,
                 onPress: async () => {
@@ -286,8 +286,8 @@ const CombatReturnScreen: React.FC = () => {
                     await openWhatsAppChat(soldier.phone, whatsappMessage);
                   } else {
                     setModalType('error');
-                    setModalMessage('׳׳™׳ ׳׳¡׳₪׳¨ ׳˜׳׳₪׳•׳ ׳׳—׳™׳™׳');
-                    setModalButtons([{ text: '׳¡׳’׳•׳¨', style: 'primary', onPress: () => setModalVisible(false) }]);
+                    setModalMessage('אין מספר טלפון לחייל');
+                    setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
                     setModalVisible(true);
                     return;
                   }
@@ -295,7 +295,7 @@ const CombatReturnScreen: React.FC = () => {
                 },
               },
               {
-                text: '׳¡׳’׳•׳¨',
+                text: 'סגור',
                 style: 'outline',
                 onPress: () => {
                   setModalVisible(false);
@@ -308,7 +308,7 @@ const CombatReturnScreen: React.FC = () => {
             const message = (error as any)?.message;
             setModalType('error');
             setModalMessage(message || 'Cannot complete zikuy');
-            setModalButtons([{ text: '׳¡׳’׳•׳¨', style: 'primary', onPress: () => setModalVisible(false) }]);
+            setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
             setModalVisible(true);
             console.error('Error returning equipment:', error);
           } finally {
@@ -323,8 +323,8 @@ const CombatReturnScreen: React.FC = () => {
   const handlePrintCurrentHoldings = async () => {
     if (!soldier || items.length === 0) {
       setModalType('error');
-      setModalMessage('׳׳™׳ ׳¦׳™׳•׳“ ׳׳”׳“׳₪׳¡׳”');
-      setModalButtons([{ text: '׳¡׳’׳•׳¨', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalMessage('אין ציוד להדפסה');
+      setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
       setModalVisible(true);
       return;
     }
@@ -358,8 +358,8 @@ const CombatReturnScreen: React.FC = () => {
     } catch (error) {
       console.error('Error printing holdings:', error);
       setModalType('error');
-      setModalMessage('׳׳™׳¨׳¢׳” ׳©׳’׳™׳׳” ׳‘׳”׳“׳₪׳¡׳× ׳”׳˜׳•׳₪׳¡');
-      setModalButtons([{ text: '׳¡׳’׳•׳¨', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalMessage('אירעה שגיאה בהדפסת הטופס');
+      setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
       setModalVisible(true);
     } finally {
       setPrinting(false);
@@ -374,11 +374,11 @@ const CombatReturnScreen: React.FC = () => {
             style={styles.backButton}
             onPress={() => navigation.goBack()}
           >
-            <Text style={styles.backButtonText}>ג†</Text>
+            <Text style={styles.backButtonText}>←</Text>
           </TouchableOpacity>
           <View style={styles.headerContent}>
-            <Text style={styles.title}>׳–׳™׳›׳•׳™ ׳—׳™׳™׳</Text>
-            <Text style={styles.subtitle}>׳”׳—׳–׳¨׳× ׳¦׳™׳•׳“</Text>
+            <Text style={styles.title}>זיכוי חייל</Text>
+            <Text style={styles.subtitle}>החזרת ציוד</Text>
           </View>
         </View>
         <View style={styles.loadingContainer}>
@@ -398,11 +398,11 @@ const CombatReturnScreen: React.FC = () => {
           onPress={() => navigation.goBack()}
           disabled={processing}
         >
-          <Text style={styles.backButtonText}>ג†</Text>
+          <Text style={styles.backButtonText}>←</Text>
         </TouchableOpacity>
         <View style={styles.headerContent}>
-          <Text style={styles.title}>׳–׳™׳›׳•׳™ ׳—׳™׳™׳</Text>
-          <Text style={styles.subtitle}>ג†©ן¸ ׳”׳—׳–׳¨׳× ׳¦׳™׳•׳“</Text>
+          <Text style={styles.title}>זיכוי חייל</Text>
+          <Text style={styles.subtitle}>↩️ החזרת ציוד</Text>
         </View>
       </View>
 
@@ -417,7 +417,7 @@ const CombatReturnScreen: React.FC = () => {
             <View style={styles.soldierInfo}>
               <Text style={styles.soldierName}>{soldier.name}</Text>
               <Text style={styles.soldierMeta}>
-                {soldier.personalNumber} ג€¢ {soldier.company}
+                {soldier.personalNumber} • {soldier.company}
               </Text>
             </View>
           </View>
@@ -425,15 +425,15 @@ const CombatReturnScreen: React.FC = () => {
 
         {/* Instructions */}
         <View style={styles.instructionsCard}>
-          <Text style={styles.instructionsTitle}>נ“‹ ׳”׳ ׳—׳™׳•׳×</Text>
+          <Text style={styles.instructionsTitle}>📋 הנחיות</Text>
           <Text style={styles.instructionsText}>
-            ג€¢ ׳‘׳—׳¨ ׳׳× ׳”׳₪׳¨׳™׳˜׳™׳ ׳©׳”׳—׳™׳™׳ ׳׳—׳–׳™׳¨{'\n'}
-            ג€¢ ׳”׳’׳“׳¨ ׳›׳׳•׳× ׳׳›׳ ׳₪׳¨׳™׳˜{'\n'}
+            • בחר את הפריטים שהחייל מחזיר{'\n'}
+            • הגדר כמות לכל פריט{'\n'}
           </Text>
         </View>
 
         <View style={styles.sectionHeaderLine}>
-          <Text style={styles.sectionTitle}>׳¦׳™׳•׳“ ׳₪׳¢׳™׳ ({items.length})</Text>
+          <Text style={styles.sectionTitle}>ציוד פעיל ({items.length})</Text>
 
           {items.length > 0 && (
             <TouchableOpacity
@@ -446,7 +446,7 @@ const CombatReturnScreen: React.FC = () => {
               ) : (
                 <>
                   <Ionicons name="print-outline" size={16} color={Colors.primary} />
-                  <Text style={styles.smallPrintText}>׳”׳“׳₪׳¡ ׳˜׳•׳₪׳¡</Text>
+                  <Text style={styles.smallPrintText}>הדפס טופס</Text>
                 </>
               )}
             </TouchableOpacity>
@@ -455,9 +455,9 @@ const CombatReturnScreen: React.FC = () => {
 
         {items.length === 0 ? (
           <View style={styles.emptyCard}>
-            <Text style={styles.emptyText}>׳׳™׳ ׳¦׳™׳•׳“ ׳₪׳¢׳™׳ ׳׳–׳™׳›׳•׳™</Text>
+            <Text style={styles.emptyText}>אין ציוד פעיל לזיכוי</Text>
             <Text style={styles.emptySubtext}>
-              ׳”׳—׳™׳™׳ ׳׳ ׳§׳™׳‘׳ ׳¦׳™׳•׳“ ׳׳• ׳›׳ ׳”׳¦׳™׳•׳“ ׳›׳‘׳¨ ׳–׳•׳›׳”
+              החייל לא קיבל ציוד או כל הציוד כבר זוכה
             </Text>
           </View>
         ) : (
@@ -476,14 +476,14 @@ const CombatReturnScreen: React.FC = () => {
                   disabled={processing}
                 >
                   <View style={styles.checkbox}>
-                    {item.selected && <Text style={styles.checkmark}>ג“</Text>}
+                    {item.selected && <Text style={styles.checkmark}>✓</Text>}
                   </View>
                   <View style={styles.itemInfo}>
                     <View style={styles.itemNameContainer}>
                       <Text style={styles.itemName}>{item.equipmentName}</Text>
                       {item.status === 'stored' && (
                         <View style={styles.storedBadge}>
-                          <Text style={styles.storedBadgeText}>׳‘׳׳₪׳¡׳•׳</Text>
+                          <Text style={styles.storedBadgeText}>באפסון</Text>
                         </View>
                       )}
                     </View>
@@ -491,7 +491,7 @@ const CombatReturnScreen: React.FC = () => {
                     {/* Display serials prominently */}
                     {item.availableSerials && item.availableSerials.length > 0 && (
                       <View style={styles.serialDisplayContainer}>
-                        <Text style={styles.serialDisplayLabel}>׳׳¡׳˜׳‘׳™׳:</Text>
+                        <Text style={styles.serialDisplayLabel}>מסטבים:</Text>
                         <Text style={styles.serialDisplayValue}>
                           {item.availableSerials.join(', ')}
                         </Text>
@@ -499,7 +499,7 @@ const CombatReturnScreen: React.FC = () => {
                     )}
 
                     <Text style={styles.itemQuantity}>
-                      ׳›׳׳•׳× ׳–׳׳™׳ ׳”: {item.quantity}
+                      כמות זמינה: {item.quantity}
                     </Text>
                   </View>
                 </TouchableOpacity>
@@ -508,7 +508,7 @@ const CombatReturnScreen: React.FC = () => {
                   <View style={styles.itemDetails}>
                     {/* Quantity selector */}
                     <View style={styles.quantitySection}>
-                      <Text style={styles.detailLabel}>׳›׳׳•׳× ׳׳”׳—׳–׳¨׳”:</Text>
+                      <Text style={styles.detailLabel}>כמות להחזרה:</Text>
                       <View style={styles.quantityControls}>
                         <TouchableOpacity
                           style={styles.quantityButton}
@@ -552,9 +552,9 @@ const CombatReturnScreen: React.FC = () => {
                 setProcessing(true);
                 await soldierService.updateClearance(soldierId, 'armory', true);
                 setModalType('success');
-                setModalTitle('׳–׳™׳›׳•׳™ ׳”׳•׳©׳׳');
-                setModalMessage('׳”׳—׳™׳™׳ ׳–׳•׳›׳” ׳‘׳”׳¦׳׳—׳” ׳‘׳ ׳©׳§׳™׳™׳”.');
-                setModalButtons([{ text: '׳׳™׳©׳•׳¨', style: 'primary', onPress: () => { setModalVisible(false); navigation.goBack(); } }]);
+                setModalTitle('זיכוי הושלם');
+                setModalMessage('החייל זוכה בהצלחה בנשקייה.');
+                setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => { setModalVisible(false); navigation.goBack(); } }]);
                 setModalVisible(true);
               } catch (err) {
                 console.error(err);
@@ -568,7 +568,7 @@ const CombatReturnScreen: React.FC = () => {
             }}
             disabled={processing}
           >
-            <Text style={styles.returnButtonText}>ג“ ׳׳©׳¨ ׳–׳™׳›׳•׳™ ׳¡׳•׳₪׳™ (Armory Clearance)</Text>
+            <Text style={styles.returnButtonText}>✓ אשר זיכוי סופי (Armory Clearance)</Text>
           </TouchableOpacity>
         )}
 
@@ -586,7 +586,7 @@ const CombatReturnScreen: React.FC = () => {
               <ActivityIndicator color="#fff" />
             ) : (
               <Text style={styles.returnButtonText}>
-                {isClearance ? `ג†©ן¸ ׳”׳—׳–׳¨ ׳₪׳¨׳™׳˜׳™׳ (׳׳₪׳ ׳™ ׳–׳™׳›׳•׳™)` : `ג†©ן¸ ׳–׳›׳” (${items.filter(i => i.selected).length})`}
+                {isClearance ? `↩️ החזר פריטים (לפני זיכוי)` : `↩️ זכה (${items.filter(i => i.selected).length})`}
               </Text>
             )}
           </TouchableOpacity>

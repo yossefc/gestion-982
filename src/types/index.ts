@@ -13,6 +13,7 @@ export interface User {
   role: UserRole;
   company?: string;     // פלוגה - Requis pour le rôle 'rsp'
   rank?: string;        // דרגה - Grade militaire du מנפק
+  personalNumber?: string; // מספר אישי
   signature?: string;   // Base64 image - signature du מנפק (sauvegardée une fois)
   createdAt: Date;
 }
@@ -196,6 +197,7 @@ export type RootStackParamList = {
   CombatStorage: { soldierId: string };
   CombatRetrieve: { soldierId: string };
   CombatStock: undefined;
+  InventoryReport: undefined;
   // Inventaire d'armes
   WeaponInventoryList: undefined;
   AddWeaponToInventory: { weaponId?: string };
