@@ -499,9 +499,19 @@ const WeaponInventoryListScreen: React.FC = () => {
 
                   <View style={styles.weaponStatus}>
                     {(weapon.status === 'assigned' || weapon.status === 'stored') && weapon.assignedTo ? (
-                      <View style={styles.soldierInfoRow}>
-                        <Ionicons name="person-outline" size={12} color={Colors.textSecondary} />
-                        <Text style={styles.soldierNameTable}>{weapon.assignedTo.soldierName}</Text>
+                      <View style={styles.weaponStatusInfo}>
+                        <View style={styles.soldierInfoRow}>
+                          <Ionicons name="person-outline" size={12} color={Colors.textSecondary} />
+                          <Text style={styles.soldierNameTable}>{weapon.assignedTo.soldierName}</Text>
+                        </View>
+                        {weapon.assignedTo.voucherNumber ? (
+                          <View style={styles.soldierInfoRow}>
+                            <Ionicons name="receipt-outline" size={11} color={Colors.textLight} />
+                            <Text style={styles.voucherNumberTable}>
+                              שובר: {weapon.assignedTo.voucherNumber.slice(-8)}
+                            </Text>
+                          </View>
+                        ) : null}
                       </View>
                     ) : weapon.status === 'available' ? (
                       <Text style={styles.availableTextTable}>מוכן להנפקה</Text>
@@ -705,6 +715,14 @@ const WeaponInventoryListScreen: React.FC = () => {
                         {selectedWeapon.assignedTo.soldierName}
                       </Text>
                       <Text style={styles.modalInfoLabel}>מוקצה ל:</Text>
+                    </View>
+                  )}
+                  {selectedWeapon.status === 'assigned' && selectedWeapon.assignedTo?.voucherNumber && (
+                    <View style={styles.modalInfoRow}>
+                      <Text style={[styles.modalInfoValue, styles.voucherNumberModal]}>
+                        {selectedWeapon.assignedTo.voucherNumber}
+                      </Text>
+                      <Text style={styles.modalInfoLabel}>מספר שובר:</Text>
                     </View>
                   )}
                 </View>
@@ -1052,6 +1070,23 @@ const styles = StyleSheet.create({
     fontSize: FontSize.sm,
     fontWeight: '600',
     color: Colors.success,
+  },
+
+  weaponStatusInfo: {
+    alignItems: 'flex-end',
+    gap: 2,
+  },
+
+  voucherNumberTable: {
+    fontSize: 10,
+    color: Colors.textLight,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+  },
+
+  voucherNumberModal: {
+    fontSize: FontSize.sm,
+    color: Colors.armeDark,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
   },
 
   storageTextTable: {

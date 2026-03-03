@@ -85,6 +85,7 @@ const CombatAssignmentScreen: React.FC = () => {
   const [successModalData, setSuccessModalData] = useState<{
     assignmentForPrint: any;
     whatsappMessage: string;
+    assignmentId: string;
   } | null>(null);
 
   // AppModal state
@@ -623,6 +624,7 @@ const CombatAssignmentScreen: React.FC = () => {
       setSuccessModalData({
         assignmentForPrint,
         whatsappMessage,
+        assignmentId,
       });
       setShowSuccessModal(true);
     } catch (error: any) {
@@ -1251,7 +1253,7 @@ const CombatAssignmentScreen: React.FC = () => {
         visible={showSuccessModal}
         type="success"
         title="הצלחה!"
-        message="ההחתמה בוצעה בהצלחה והמסמך נשלח למדפסת"
+        message={`ההחתמה בוצעה בהצלחה והמסמך נשלח למדפסת\n\nמספר שובר:\n${successModalData?.assignmentId ?? ''}`}
         buttons={[
           {
             text: 'סגור',
