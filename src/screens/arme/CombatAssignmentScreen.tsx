@@ -473,15 +473,18 @@ const CombatAssignmentScreen: React.FC = () => {
         if (item.equipment.requiresSerial && item.serials) {
           for (const serial of item.serials) {
             if (serial.trim()) {
-              // Find the weapon by serial number
-              const weapon = availableWeapons.find(
-                w => w.serialNumber === serial && w.category.toLowerCase() === item.equipment.name.toLowerCase()
-              );
+              // 1. Cherche d'abord dans availableWeapons (cache local, rapide)
+              let weapon: WeaponInventoryItem | undefined | null =
+                availableWeapons.find(w => w.serialNumber === serial.trim());
+
+              // 2. Fallback: cherche dans TOUS les nshqim via Firestore (couvre les réassignations)
+              if (!weapon) {
+                weapon = await weaponInventoryService.getWeaponBySerialNumber(serial.trim());
+              }
 
               if (weapon) {
                 console.log(`[CombatAssignment] Queuing weapon update: ${weapon.serialNumber} (${weapon.id})`);
                 weaponUpdatePromises.push(
-                  // Offline-aware: queues if offline
                   weaponInventoryService.setWeaponAssignedStatusOnlyOffline(weapon.id, {
                     soldierId: soldier.id,
                     soldierName: soldier.name,
@@ -490,7 +493,7 @@ const CombatAssignmentScreen: React.FC = () => {
                   })
                 );
               } else {
-                console.warn(`[CombatAssignment] Weapon not found for serial: ${serial}, category: ${item.equipment.name}`);
+                console.warn(`[CombatAssignment] Weapon not found for serial: ${serial}`);
               }
             }
           }

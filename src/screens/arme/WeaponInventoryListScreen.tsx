@@ -22,6 +22,18 @@ import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Co
 import { weaponInventoryService } from '../../services/weaponInventoryService';
 import { WeaponInventoryItem, WeaponStatus } from '../../types';
 import { AppModal, ModalType } from '../../components';
+import {
+  getFirestore,
+  collection,
+  getDocs,
+  doc,
+  updateDoc,
+  query,
+  where,
+} from 'firebase/firestore';
+import { app } from '../../config/firebase';
+
+const db = getFirestore(app);
 
 type FilterTab = 'all' | 'available' | 'assigned' | 'stored' | 'defective';
 
@@ -60,6 +72,84 @@ const WeaponInventoryListScreen: React.FC = () => {
     }, [])
   );
 
+  // Pour chaque arme assignée sans voucherNumber, cherche le שובר dans la collection assignments
+  const enrichWeaponsWithVoucherNumbers = async (
+    weaponsList: WeaponInventoryItem[]
+  ): Promise<WeaponInventoryItem[]> => {
+    const weaponsWithoutVoucher = weaponsList.filter(
+      w => w.status === 'assigned' && w.assignedTo && !w.assignedTo.voucherNumber
+    );
+    if (weaponsWithoutVoucher.length === 0) return weaponsList;
+
+    // Grouper par soldierId pour minimiser les requêtes Firestore
+    const bySoldier = new Map<string, WeaponInventoryItem[]>();
+    for (const weapon of weaponsWithoutVoucher) {
+      const sid = weapon.assignedTo!.soldierId;
+      if (!bySoldier.has(sid)) bySoldier.set(sid, []);
+      bySoldier.get(sid)!.push(weapon);
+    }
+
+    const updates: { weaponId: string; voucherNumber: string }[] = [];
+
+    for (const [soldierId, solWeapons] of bySoldier.entries()) {
+      const snap = await getDocs(
+        query(
+          collection(db, 'assignments'),
+          where('soldierId', '==', soldierId),
+          where('type', '==', 'combat')
+        )
+      );
+
+      for (const weapon of solWeapons) {
+        let bestId: string | null = null;
+        let bestTs = 0;
+
+        for (const assignDoc of snap.docs) {
+          const data = assignDoc.data();
+          if (data.action !== 'issue' && data.action !== 'add') continue;
+
+          const found = (data.items || []).some((item: any) => {
+            if (!item.serial) return false;
+            return item.serial
+              .split(',')
+              .map((s: string) => s.trim())
+              .includes(weapon.serialNumber);
+          });
+
+          if (found) {
+            const ts: number = data.timestamp?.seconds ?? 0;
+            if (ts > bestTs) {
+              bestTs = ts;
+              bestId = assignDoc.id;
+            }
+          }
+        }
+
+        if (bestId) {
+          updates.push({ weaponId: weapon.id, voucherNumber: bestId });
+        }
+      }
+    }
+
+    if (updates.length === 0) return weaponsList;
+
+    // Persister en Firestore (dot-notation = update partiel, sans écraser assignedTo)
+    for (const upd of updates) {
+      updateDoc(doc(db, 'weapons_inventory', upd.weaponId), {
+        'assignedTo.voucherNumber': upd.voucherNumber,
+      }).catch(e => console.warn('[WeaponInventory] voucherNumber persist failed:', e));
+    }
+
+    // Mettre à jour l'état local immédiatement
+    return weaponsList.map(w => {
+      const upd = updates.find(u => u.weaponId === w.id);
+      if (upd && w.assignedTo) {
+        return { ...w, assignedTo: { ...w.assignedTo, voucherNumber: upd.voucherNumber } };
+      }
+      return w;
+    });
+  };
+
   const loadWeapons = async () => {
     try {
       setLoading(true);
@@ -77,7 +167,10 @@ const WeaponInventoryListScreen: React.FC = () => {
       console.log('Weapon Inventory Stats:', inventoryStats);
       console.log('Total weapons loaded:', allWeapons.length);
 
-      setWeapons(allWeapons);
+      // Cherche les שוברים manquants dans la collection assignments
+      const enrichedWeapons = await enrichWeaponsWithVoucherNumbers(allWeapons);
+
+      setWeapons(enrichedWeapons);
       setStats({
         total: inventoryStats.total,
         available: inventoryStats.available,
@@ -87,7 +180,7 @@ const WeaponInventoryListScreen: React.FC = () => {
       });
 
       // Appliquer le filtre actuel
-      applyFilter(activeFilter, allWeapons);
+      applyFilter(activeFilter, enrichedWeapons);
     } catch (error) {
       console.error('Error loading weapons:', error);
       setAppModalType('error');

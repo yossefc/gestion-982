@@ -491,11 +491,15 @@ export function getCacheStats(): Record<CacheKey, { count: number; age: number; 
 const DEFAULT_CHUNK_SIZE = 50;
 
 function getChunkSize(key: CacheKey): number {
-  // Assignments can be large (lots of items). Max 10 per chunk.
+  // Assignments can be large (lots of items). Max 5 per chunk.
   if (key === 'combatAssignments' || key === 'clothingAssignments') {
+    return 5;
+  }
+  // Weapons Inventory can also be large
+  if (key === 'weaponsInventory') {
     return 10;
   }
-  return DEFAULT_CHUNK_SIZE;
+  return 20;
 }
 
 /**
@@ -509,10 +513,21 @@ async function persistToStorage(key: CacheKey): Promise<void> {
       return;
     }
 
+    // EXTREME FIX: Disable AsyncStorage persistence entirely for large growing datasets
+    // SQLite limits on Expo/React Native are too strict (2MB max per row, overall DB sizes).
+    // They will remain cached in RAM during the session but will be re-fetched on app reload.
+    const skipPersistenceData = ['combatAssignments', 'clothingAssignments', 'weaponsInventory', 'soldiers'];
+    if (skipPersistenceData.includes(key)) {
+      console.log(`[CacheService] Skip persist ${key}: Disabled to prevent SQLITE_FULL crashes`);
+      // Vider les vieux caches qui existeraient potentiellement encore pour libérer de l'espace disque
+      await clearSpecificStorage(key);
+      return;
+    }
+
     // Supprimer les anciens chunks d'abord pour éviter les conflits
     await clearSpecificStorage(key);
 
-    const isLargeData = ['combatAssignments', 'clothingAssignments', 'weaponsInventory', 'soldiers'].includes(key);
+    const isLargeData = skipPersistenceData.includes(key);
     const chunkSize = getChunkSize(key);
 
     if (isLargeData && entry.data.length > chunkSize) {
