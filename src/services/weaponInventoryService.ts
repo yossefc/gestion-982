@@ -15,7 +15,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { WeaponInventoryItem, WeaponStatus } from '../types';
-import { transactionalAssignmentService } from './transactionalAssignmentService';
+
 import cacheService from './cacheService';
 import { offlineService, isOnline, setTransactionFunctions } from './offlineService';
 
@@ -658,6 +658,7 @@ export const assignWeaponToSoldier = async (
     });
 
     // 3. Create Assignment (Standardized)
+    const { transactionalAssignmentService } = await import('./transactionalAssignmentService');
     await transactionalAssignmentService.addEquipment({
       soldierId: soldier.soldierId,
       soldierName: soldier.soldierName,
@@ -697,11 +698,13 @@ export const returnWeapon = async (weaponId: string): Promise<void> => {
 
     // 2. Update Soldier Holdings (Smart Return)
     if (previousOwner && previousOwner.soldierId) {
+      const { transactionalAssignmentService } = await import('./transactionalAssignmentService');
+
       // Find which Equipment ID holds this serial
       const currentHoldings = await transactionalAssignmentService.getCurrentHoldings(previousOwner.soldierId, 'combat');
 
       // Look for the specific serial number
-      const holdingItem = currentHoldings.find(h =>
+      const holdingItem = currentHoldings.find((h: any) =>
         h.serials && h.serials.includes(weapon.serialNumber)
       );
 
