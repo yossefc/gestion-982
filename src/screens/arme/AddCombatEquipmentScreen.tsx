@@ -43,6 +43,7 @@ const AddCombatEquipmentScreen: React.FC = () => {
   const [category, setCategory] = useState(DEFAULT_COMBAT_CATEGORY);
   const [requiresSerial, setRequiresSerial] = useState(false);
   const [requiresManualSerial, setRequiresManualSerial] = useState(false);
+  const [totalQuantity, setTotalQuantity] = useState('');
   const [hasSubEquipment, setHasSubEquipment] = useState(false);
   const [subEquipments, setSubEquipments] = useState<SubEquipment[]>([]);
   const [newSubEquipmentName, setNewSubEquipmentName] = useState('');
@@ -70,6 +71,7 @@ const AddCombatEquipmentScreen: React.FC = () => {
         setCategory(equipment.category);
         setRequiresSerial((equipment as any).requiresSerial || false);
         setRequiresManualSerial((equipment as any).requiresManualSerial || false);
+        setTotalQuantity(equipment.totalQuantity !== undefined ? String(equipment.totalQuantity) : '');
         setHasSubEquipment(equipment.hasSubEquipment);
         setSubEquipments(equipment.subEquipments || []);
       }
@@ -135,6 +137,11 @@ const AddCombatEquipmentScreen: React.FC = () => {
         requiresSerial,
         requiresManualSerial,
       };
+
+      if (requiresManualSerial) {
+        const qty = parseInt(totalQuantity, 10);
+        equipmentData.totalQuantity = isNaN(qty) ? 0 : qty;
+      }
 
       if (isEditMode && equipmentId) {
         await combatEquipmentService.update(equipmentId, equipmentData);
@@ -296,6 +303,22 @@ const AddCombatEquipmentScreen: React.FC = () => {
                 </Text>
               </View>
             </View>
+
+            {requiresManualSerial && (
+              <View style={[styles.section, { marginTop: Spacing.md }]}>
+                <View style={styles.labelRow}>
+                  <Text style={styles.label}>סה"כ כמות במלאי</Text>
+                </View>
+                <TextInput
+                  style={styles.input}
+                  value={String(totalQuantity)}
+                  onChangeText={setTotalQuantity}
+                  placeholder="הזן כמות כוללת (למשל 50)"
+                  placeholderTextColor={Colors.placeholder}
+                  keyboardType="numeric"
+                />
+              </View>
+            )}
           </View>
 
           {/* רכיבים נוספים */}

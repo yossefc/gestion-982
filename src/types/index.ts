@@ -90,6 +90,7 @@ export interface CombatEquipment {
   serial?: string;        // מסטב
   requiresSerial?: boolean; // מסטב מהמלאי
   requiresManualSerial?: boolean; // מסטב ידני
+  totalQuantity?: number; // כמות כוללת (לשילוב בטבלת מלאי)
   hasSubEquipment: boolean;
   subEquipments?: SubEquipment[];
 }

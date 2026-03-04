@@ -42,7 +42,10 @@ const InventoryReportScreen: React.FC = () => {
           .map(e => e.id)
       );
       setStocks(
-        data.filter(s => s.equipmentId.startsWith('WEAPON_') || serialGearIds.has(s.equipmentId))
+        data.filter(s =>
+          (s.equipmentId.startsWith('WEAPON_') || serialGearIds.has(s.equipmentId)) &&
+          s.total > 0
+        )
       );
     } catch (err) {
       console.error('[InventoryReport] Failed to load stocks:', err);
@@ -112,7 +115,7 @@ const InventoryReportScreen: React.FC = () => {
         {/* Stock preview table */}
         {!loading && !error && stocks.length > 0 && (
           <View style={styles.previewCard}>
-            <Text style={styles.previewTitle}>תצוגה מקדימה — {stocks.length} פריטי נשק</Text>
+            <Text style={styles.previewTitle}>תצוגה מקדימה — {stocks.length} פריטים עם מסט"ב</Text>
             {stocks.map((stock, i) => (
               <View
                 key={stock.equipmentId}
@@ -132,7 +135,7 @@ const InventoryReportScreen: React.FC = () => {
         {/* No data state */}
         {!loading && !error && stocks.length === 0 && (
           <View style={styles.centerCard}>
-            <Text style={styles.emptyText}>לא נמצאו פריטי נשק במלאי</Text>
+            <Text style={styles.emptyText}>לא נמצאו פריטים עם מסט"ב במלאי</Text>
           </View>
         )}
 
@@ -158,7 +161,7 @@ const InventoryReportScreen: React.FC = () => {
         {!loading && (
           <View style={styles.infoCard}>
             <Text style={styles.infoText}>
-              הדוח מופק בפורמט A4 לרוחב ומכיל חתימת המנפק הנוכחי, תאריך ושעה אוטומטיים.
+              הדוח מופק בפורמט A4 לאורך ומכיל את פרטי ומ.א. המנפק, תאריך ושעה אוטומטיים.
             </Text>
           </View>
         )}

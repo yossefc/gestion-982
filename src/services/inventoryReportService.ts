@@ -33,7 +33,7 @@ const generateInventoryReportHTML = (data: InventoryReportData): string => {
         <td class="cell cell-right"></td>
         <td class="cell cell-right">${stock.equipmentName}</td>
         <td class="cell cell-center">${stock.total > 0 ? stock.total : ''}</td>
-        <td class="cell cell-center">${stock.issued > 0 ? stock.issued : ''}</td>
+        <td class="cell cell-center">${(stock.issued + stock.stored) > 0 ? stock.issued + stock.stored : ''}</td>
         <td class="cell cell-center">${stock.available > 0 ? stock.available : ''}</td>
         <td class="cell cell-center">${stock.stored > 0 ? stock.stored : ''}</td>
         <td class="cell cell-center grey-cell">${totalInArmory > 0 ? totalInArmory : ''}</td>

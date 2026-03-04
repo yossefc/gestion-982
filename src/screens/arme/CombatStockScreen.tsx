@@ -20,7 +20,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { Colors, Shadows } from '../../theme/Colors';
 import { combatStockService, EquipmentStock } from '../../services/combatStockService';
-import { useData } from '../../contexts/DataContext';
+import { useData, useCombatEquipment } from '../../contexts/DataContext';
 import { combatStockDebugService } from '../../services/combatStockDebugService';
 
 const FIXED_COLUMN_WIDTH = 110;
@@ -48,6 +48,7 @@ const CombatStockScreen: React.FC = () => {
 
   // OPTIMISÉ: Vérifier si le DataContext est initialisé
   const { isInitialized } = useData();
+  const { equipment } = useCombatEquipment();
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -60,10 +61,10 @@ const CombatStockScreen: React.FC = () => {
 
   // OPTIMISÉ: Charger uniquement quand le cache est prêt
   useEffect(() => {
-    if (isInitialized) {
+    if (isInitialized && equipment.length > 0) {
       loadStocks();
     }
-  }, [isInitialized]);
+  }, [isInitialized, equipment.length]);
 
   const loadStocks = async () => {
     try {
@@ -83,8 +84,18 @@ const CombatStockScreen: React.FC = () => {
         }
       });
 
-      // Only show equipment tracked by serial number (weapons_inventory)
-      setStocks(data.filter(s => s.equipmentId.startsWith('WEAPON_')));
+      // Include weapons AND any combat gear that requires a מסט"ב
+      const serialGearIds = new Set(
+        equipment
+          .filter((e: any) => e.requiresSerial || e.requiresManualSerial)
+          .map((e: any) => e.id)
+      );
+      setStocks(
+        data.filter(s =>
+          (s.equipmentId.startsWith('WEAPON_') || serialGearIds.has(s.equipmentId)) &&
+          s.total > 0
+        )
+      );
     } catch (error) {
       console.error('Error loading stocks:', error);
       Alert.alert('שגיאה', 'לא ניתן לטעון את נתוני המלאי');
@@ -136,9 +147,8 @@ const CombatStockScreen: React.FC = () => {
     const niud = getCompanyValue(stock, 'ניוד');
     const loans = compA + compB + compC + compD + hq + niud + stock.stored;
     const totalCalc = stock.available + stock.stored;
-    const standardCalc = loans + stock.available;
     return {
-      standard: standardCalc > 0 ? standardCalc : '-',
+      standard: stock.total > 0 ? stock.total : '-',
       shelf: stock.available,
       loans,
       compA,

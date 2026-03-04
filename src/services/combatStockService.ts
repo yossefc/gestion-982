@@ -81,14 +81,20 @@ export const getAllEquipmentStocks = async (): Promise<EquipmentStock[]> => {
 
   // A. Weapons: source of truth is weapons_inventory.
   allWeapons.forEach((weapon: WeaponInventoryItem) => {
-    const stockKey = buildWeaponKey(weapon.category);
+    const originalGear = allGear.find(g => normalizeKey(g.name) === normalizeKey(weapon.category));
+    const realCategory = originalGear?.category || HEB_WEAPON_CATEGORY;
+    const isRealWeapon = realCategory === HEB_WEAPON_CATEGORY;
+
+    // For real weapons, keep using WEAPON_ prefix. For gear tracked by serials, use GEAR_ prefix to merge correctly
+    const stockKey = isRealWeapon ? buildWeaponKey(weapon.category) : buildGearKey(realCategory, weapon.category);
+
     let stock = stockMap.get(stockKey);
 
     if (!stock) {
       stock = {
-        equipmentId: `WEAPON_${weapon.category}`,
+        equipmentId: isRealWeapon ? `WEAPON_${weapon.category}` : (originalGear?.id || `GEAR_${weapon.category}`),
         equipmentName: weapon.category,
-        category: HEB_WEAPON_CATEGORY,
+        category: realCategory,
         available: 0,
         stored: 0,
         issued: 0,
@@ -179,13 +185,61 @@ export const getAllEquipmentStocks = async (): Promise<EquipmentStock[]> => {
 
       stock.issued += counts.issued;
       stock.stored += counts.stored;
-      stock.total += counts.issued + counts.stored;
 
       const companyDist = getCompanyDistribution(stock, companyName);
       companyDist.issued += counts.issued;
       companyDist.stored += counts.stored;
       companyDist.soldiers += 1;
     }
+  }
+
+  // C. Add unassigned / unused gear that implies a total quantity (like manual serial)
+  for (const gear of allGear) {
+    if (gear.requiresManualSerial || gear.requiresSerial) {
+      if (gear.id.startsWith('WEAPON_') || weaponCategoryKeySet.has(normalizeKey(gear.name))) {
+        continue;
+      }
+
+      const stockKey = buildGearKey(gear.category, gear.name);
+      let stock = stockMap.get(stockKey);
+
+      if (!stock) {
+        stock = {
+          equipmentId: gear.id,
+          equipmentName: gear.name,
+          category: gear.category,
+          available: 0,
+          stored: 0,
+          issued: 0,
+          defective: 0,
+          total: 0,
+          byCompany: [],
+        };
+        stockMap.set(stockKey, stock);
+      }
+
+      if (gear.requiresManualSerial) {
+        // Compute correct values dynamically for manual serial equipment
+        stock.total = gear.totalQuantity || 0;
+        // Note: issued and stored are already aggregated from holdings loops above
+        stock.available = stock.total - stock.issued - stock.stored - stock.defective;
+      }
+    }
+  }
+
+  // D. Compute total and available for standard (non-serial) gear only.
+  // Weapons (Section A) and manual-serial gear (Section C) must NOT be touched here.
+  for (const stock of stockMap.values()) {
+    // Weapons: fully computed in Section A — skip.
+    if (stock.equipmentId.startsWith('WEAPON_')) continue;
+
+    const gearInfo = gearById.get(stock.equipmentId);
+    // Manual-serial gear: total = totalQuantity, available already set in Section C — skip.
+    if (gearInfo?.requiresManualSerial) continue;
+
+    // Standard gear: no predefined total, everything in circulation.
+    stock.total = stock.issued + stock.stored + stock.defective;
+    stock.available = 0;
   }
 
   return Array.from(stockMap.values())

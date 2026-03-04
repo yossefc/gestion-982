@@ -470,73 +470,63 @@ const CombatReturnScreen: React.FC = () => {
                   item.selected && styles.itemCardSelected,
                 ]}
               >
-                <TouchableOpacity
-                  style={styles.itemHeader}
-                  onPress={() => toggleItem(item.itemKey)}
-                  disabled={processing}
-                >
-                  <View style={styles.checkbox}>
-                    {item.selected && <Text style={styles.checkmark}>✓</Text>}
-                  </View>
-                  <View style={styles.itemInfo}>
-                    <View style={styles.itemNameContainer}>
-                      <Text style={styles.itemName}>{item.equipmentName}</Text>
-                      {item.status === 'stored' && (
-                        <View style={styles.storedBadge}>
-                          <Text style={styles.storedBadgeText}>באפסון</Text>
+                <View style={styles.itemHeader}>
+                  <TouchableOpacity
+                    style={styles.itemHeaderTouch}
+                    onPress={() => toggleItem(item.itemKey)}
+                    disabled={processing}
+                  >
+                    <View style={styles.checkbox}>
+                      {item.selected && <Text style={styles.checkmark}>✓</Text>}
+                    </View>
+                    <View style={styles.itemInfoItems}>
+                      <View style={styles.itemNameContainer}>
+                        <Text style={styles.itemName} numberOfLines={1}>{item.equipmentName}</Text>
+                        {item.status === 'stored' && (
+                          <View style={styles.storedBadge}>
+                            <Text style={styles.storedBadgeText}>באפסון</Text>
+                          </View>
+                        )}
+                      </View>
+
+                      {/* Display serials plainly */}
+                      {item.availableSerials && item.availableSerials.length > 0 && (
+                        <View style={styles.serialDisplayContainer}>
+                          <Text style={styles.serialDisplayValue} numberOfLines={1}>
+                            {item.availableSerials.join(', ')}
+                          </Text>
                         </View>
                       )}
                     </View>
+                  </TouchableOpacity>
 
-                    {/* Display serials prominently */}
-                    {item.availableSerials && item.availableSerials.length > 0 && (
-                      <View style={styles.serialDisplayContainer}>
-                        <Text style={styles.serialDisplayLabel}>מסטבים:</Text>
-                        <Text style={styles.serialDisplayValue}>
-                          {item.availableSerials.join(', ')}
-                        </Text>
-                      </View>
-                    )}
-
-                    <Text style={styles.itemQuantity}>
-                      כמות זמינה: {item.quantity}
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-
-                {item.selected && (
-                  <View style={styles.itemDetails}>
-                    {/* Quantity selector */}
-                    <View style={styles.quantitySection}>
-                      <Text style={styles.detailLabel}>כמות להחזרה:</Text>
-                      <View style={styles.quantityControls}>
+                  {/* Quantity Controls inline on the same row */}
+                  <View style={styles.quantityContainerInline}>
+                    {item.selected ? (
+                      <View style={styles.inlineQuantityControls}>
                         <TouchableOpacity
-                          style={styles.quantityButton}
-                          onPress={() =>
-                            updateReturnQuantity(item.itemKey, -1)
-                          }
+                          style={styles.quantityButtonSmall}
+                          onPress={() => updateReturnQuantity(item.itemKey, -1)}
                           disabled={processing}
                         >
                           <Text style={styles.quantityButtonText}>-</Text>
                         </TouchableOpacity>
-                        <Text style={styles.quantityValue}>
-                          {item.returnQuantity}
-                        </Text>
+                        <Text style={styles.quantityValue}>{item.returnQuantity}</Text>
                         <TouchableOpacity
-                          style={styles.quantityButton}
-                          onPress={() =>
-                            updateReturnQuantity(item.itemKey, 1)
-                          }
+                          style={styles.quantityButtonSmall}
+                          onPress={() => updateReturnQuantity(item.itemKey, 1)}
                           disabled={processing}
                         >
                           <Text style={styles.quantityButtonText}>+</Text>
                         </TouchableOpacity>
                       </View>
-                    </View>
-
-
+                    ) : (
+                      <Text style={styles.itemQuantity}>
+                        כמות: {item.quantity}
+                      </Text>
+                    )}
                   </View>
-                )}
+                </View>
               </View>
             ))}
           </View>
@@ -746,6 +736,7 @@ const styles = StyleSheet.create({
   itemHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
   },
   checkbox: {
     width: 28,
@@ -762,18 +753,25 @@ const styles = StyleSheet.create({
     color: Colors.success,
     fontWeight: 'bold',
   },
-  itemInfo: {
+  itemInfoItems: {
     flex: 1,
-    alignItems: 'flex-end',
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    gap: 8,
+  },
+  quantityContainerInline: {
+    marginLeft: 8,
   },
   itemNameContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
+    flexShrink: 1,
   },
   storedBadge: {
     backgroundColor: '#E3F2FD',
-    paddingHorizontal: 8,
+    paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
   },
@@ -783,29 +781,22 @@ const styles = StyleSheet.create({
     color: '#1976D2',
   },
   itemName: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: 'bold',
     color: Colors.text,
-    marginBottom: 4,
+    flexShrink: 1,
   },
   serialDisplayContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: Colors.armeLight,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
-    marginBottom: 6,
-    alignSelf: 'flex-end',
-  },
-  serialDisplayLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: Colors.arme,
-    marginLeft: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    flexShrink: 1,
   },
   serialDisplayValue: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
     color: Colors.armeDark,
     fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
@@ -813,34 +804,24 @@ const styles = StyleSheet.create({
   itemQuantity: {
     fontSize: 13,
     color: Colors.textSecondary,
-  },
-  itemDetails: {
-    marginTop: 16,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: Colors.borderLight,
-  },
-  quantitySection: {
-    marginBottom: 12,
-  },
-  detailLabel: {
-    fontSize: 14,
     fontWeight: 'bold',
-    color: Colors.text,
-    marginBottom: 8,
-    textAlign: 'right',
   },
-  quantityControls: {
+  itemHeaderTouch: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  inlineQuantityControls: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-end',
-    gap: 16,
+    gap: 6,
   },
-  quantityButton: {
+  quantityButtonSmall: {
     backgroundColor: Colors.arme,
-    width: 40,
-    height: 40,
-    borderRadius: 8,
+    width: 28,
+    height: 28,
+    borderRadius: 6,
     justifyContent: 'center',
     alignItems: 'center',
   },

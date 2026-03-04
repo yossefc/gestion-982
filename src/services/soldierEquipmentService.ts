@@ -1,4 +1,4 @@
-m// Service unifié pour gérer TOUT l'équipement d'un soldat
+// Service unifié pour gérer TOUT l'équipement d'un soldat
 // Stocke combat + clothing dans le même document Firebase
 import {
     collection,
