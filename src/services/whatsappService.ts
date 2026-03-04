@@ -123,28 +123,42 @@ export async function openWhatsAppChat(
   message: string
 ): Promise<void> {
   try {
-    // Nettoyer le numéro de téléphone (garder uniquement les chiffres pour wa.me)
-    const cleanNumber = phoneNumber.replace(/\D/g, '');
+    // Nettoyer le numéro de téléphone (garder uniquement les chiffres)
+    let cleanNumber = phoneNumber.replace(/\D/g, '');
+
+    // Formatage pour Israël : WhatsApp exige le code pays.
+    // Si le numéro commence par 05 et a 10 chiffres, on le convertit en 972...
+    if (cleanNumber.startsWith('05') && cleanNumber.length === 10) {
+      cleanNumber = `972${cleanNumber.substring(1)}`;
+    }
 
     // Encoder le message pour URL
     const encodedMessage = encodeURIComponent(message);
 
-    // URL WhatsApp Universal Link (recommandé officiellement, fonctionne bien sur iOS)
-    const whatsappUrl = `https://wa.me/${cleanNumber}?text=${encodedMessage}`;
+    // URL native WhatsApp (préférable sur mobile si le LSApplicationQueriesSchemes est bien configuré)
+    const whatsappUrl = `whatsapp://send?phone=${cleanNumber}&text=${encodedMessage}`;
 
     // Ouvrir WhatsApp
     const { Linking } = require('react-native');
-    const canOpen = await Linking.canOpenURL(whatsappUrl);
+    try {
+      const canOpen = await Linking.canOpenURL(whatsappUrl);
 
-    if (!canOpen) {
+      if (!canOpen) {
+        Alert.alert(
+          'שגיאה',
+          'לא ניתן לפתוח את WhatsApp. ודא שהאפליקציה מותקנת במכשירך.'
+        );
+        return;
+      }
+
+      await Linking.openURL(whatsappUrl);
+    } catch (openError) {
+      console.error('Error opening WhatsApp:', openError);
       Alert.alert(
         'שגיאה',
-        'לא ניתן לפתוח את WhatsApp. ודא שיש לך חיבור לאינטרנט.'
+        'אירעה שגיאה בעת ניסיון לפתוח את WhatsApp.'
       );
-      return;
     }
-
-    await Linking.openURL(whatsappUrl);
   } catch (error) {
     Alert.alert(
       'שגיאה',
