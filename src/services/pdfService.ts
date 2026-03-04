@@ -11,7 +11,8 @@ import { Assignment } from '../types';
 
 export interface StorageWeaponItem {
   category: string;
-  serialNumber: string;
+  serialNumber?: string;
+  quantity?: number;
   notes?: string;
 }
 
@@ -32,6 +33,15 @@ export interface StoragePDFData {
   plannedReturnDate: Date;
   // Original voucher number from the weapon's assignment
   voucherNumber?: string;
+  // Signature captured in the storage flow (owner or depositor)
+  signerSignature?: string;
+  signatureRole?: 'owner' | 'depositor';
+  // Receiver in armory (from users collection)
+  receiverName?: string;
+  receiverPersonalNumber?: string;
+  receiverRank?: string;
+  receiverPhone?: string;
+  receiverSignature?: string;
   // Weapons selected for storage
   weapons: StorageWeaponItem[];
 }
@@ -58,19 +68,44 @@ export async function generateStoragePDF(data: StoragePDFData): Promise<void> {
 export function generateStorageHTML(data: StoragePDFData): string {
   const fmt = (d: Date) =>
     d.toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const esc = (value?: string | number | null) =>
+    String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
 
   const storageDateStr = fmt(data.storageDate);
   const returnDateStr = fmt(data.plannedReturnDate);
+  const rawVoucher = String(data.voucherNumber || '').trim();
+  const voucherDigits = rawVoucher.replace(/\D/g, '');
+  const voucherLast6 = voucherDigits
+    ? voucherDigits.slice(-6).padStart(6, '0')
+    : rawVoucher.slice(-6).padStart(6, '0');
+  const voucherDisplay = rawVoucher ? voucherLast6 : '______';
+  const hasDepositorDetails = Boolean(
+    data.depositorName || data.depositorPersonalNumber || data.depositorRank || data.depositorPhone
+  );
+  const signatureRole = data.signatureRole || (hasDepositorDetails ? 'depositor' : 'owner');
+  const signatureImg = data.signerSignature
+    ? `<img src="${esc(data.signerSignature)}" class="signature-img" />`
+    : '';
+  const ownerSignatureHTML = signatureRole === 'owner' ? signatureImg : '';
+  const depositorSignatureHTML = signatureRole === 'depositor' ? signatureImg : '';
+  const receiverSignatureHTML = data.receiverSignature
+    ? `<img src="${esc(data.receiverSignature)}" class="signature-img" />`
+    : '';
 
   const weaponRows = data.weapons
     .map(
       (w, i) => `
     <tr>
       <td class="c">${i + 1}</td>
-      <td class="r">${w.category}</td>
-      <td class="c">1</td>
-      <td class="c">${w.serialNumber}</td>
-      <td class="r">${w.notes || ''}</td>
+      <td class="r">${esc(w.category)}</td>
+      <td class="c">${Math.max(1, Math.floor(Number(w.quantity) || 1))}</td>
+      <td class="c">${esc(w.serialNumber || '')}</td>
+      <td class="r">${esc(w.notes || '')}</td>
     </tr>`
     )
     .join('');
@@ -82,110 +117,146 @@ export function generateStorageHTML(data: StoragePDFData): string {
 <style>
   @page { size: A4 portrait; margin: 9mm; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  html, body { overflow: hidden; }
+  html, body { overflow: visible; }
   body {
     font-family: Arial, 'David', sans-serif;
     direction: rtl;
     text-align: right;
-    font-size: 9px;
-    line-height: 1.35;
+    font-size: 10.5px;
+    line-height: 1.45;
     color: #000;
   }
   h1 {
     text-align: center;
-    font-size: 13px;
+    font-size: 18px;
     font-weight: bold;
     text-decoration: underline;
-    margin-bottom: 7px;
+    margin-bottom: 9px;
   }
   .voucher-box {
     text-align: right;
-    font-size: 10px;
-    margin-bottom: 5px;
+    font-size: 12px;
+    margin-bottom: 7px;
   }
   .voucher-val {
     font-weight: bold;
     text-decoration: underline;
-    letter-spacing: 0.5px;
+    letter-spacing: 1px;
+    font-size: 16px;
   }
   .dates-row {
     display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
     justify-content: space-between;
-    font-size: 9.5px;
-    margin-bottom: 9px;
+    font-size: 12px;
+    margin-bottom: 10px;
+  }
+  .date-pill {
+    background: #fff4bf;
+    border: 2px solid #f59e0b;
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-weight: 700;
   }
   .sec-label {
     font-weight: bold;
-    font-size: 9.5px;
+    font-size: 12px;
     text-decoration: underline;
-    margin-bottom: 3px;
+    margin-bottom: 5px;
   }
   table {
     width: 100%;
     border-collapse: collapse;
-    margin-bottom: 8px;
+    margin-bottom: 10px;
   }
   th {
     border: 1px solid #000;
-    padding: 3px 5px;
+    padding: 5px 6px;
     background: #d8d8d8;
-    font-size: 9px;
+    font-size: 10.5px;
     font-weight: bold;
     text-align: center;
   }
   td {
     border: 1px solid #000;
-    padding: 3px 5px;
-    font-size: 9px;
-    height: 22px;
+    padding: 6px 6px;
+    font-size: 10.5px;
+    height: 32px;
   }
   td.c { text-align: center; }
   td.r { text-align: right; }
+  .signature-cell {
+    text-align: center;
+    vertical-align: middle;
+    height: 72px;
+    background: #fffef7;
+  }
+  .signature-frame {
+    width: 100%;
+    min-height: 56px;
+    border: 1px dashed #777;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
+  }
   .depositor-box {
     border: 1px solid #000;
-    padding: 6px 8px;
-    margin-bottom: 8px;
+    padding: 9px 10px;
+    margin-bottom: 10px;
   }
   .inline-fields {
     display: flex;
     flex-wrap: wrap;
-    gap: 0 20px;
-    margin-bottom: 5px;
+    gap: 4px 20px;
+    margin-bottom: 7px;
   }
   .fg { display: flex; align-items: baseline; gap: 3px; }
-  .fl { font-weight: bold; font-size: 9px; white-space: nowrap; }
+  .fl { font-weight: bold; font-size: 10.5px; white-space: nowrap; }
   .fv {
     border-bottom: 1px solid #000;
-    min-width: 70px;
-    font-size: 9px;
+    min-width: 90px;
+    font-size: 10.5px;
     padding: 0 2px;
     display: inline-block;
-    min-height: 14px;
+    min-height: 18px;
   }
   .fv-sig {
     border-bottom: 1px solid #000;
-    min-width: 140px;
-    min-height: 14px;
+    min-width: 220px;
+    min-height: 64px;
     display: inline-block;
+    vertical-align: middle;
+    padding: 2px 4px;
+    background: #fffef7;
+  }
+  .signature-img {
+    max-width: 210px;
+    max-height: 58px;
+    object-fit: contain;
+    display: block;
+    margin: 0 auto;
   }
   .footer-note {
     border-top: 1px solid #888;
-    padding-top: 4px;
-    font-size: 8px;
+    padding-top: 6px;
+    font-size: 9px;
     text-align: center;
-    margin-top: 7px;
+    margin-top: 8px;
   }
 </style>
 </head>
 <body>
 
-<div class="voucher-box">מספר שובר: <span class="voucher-val">${data.voucherNumber || '___________'}</span></div>
+<div class="voucher-box">מספר שובר: <span class="voucher-val">${esc(voucherDisplay)}</span></div>
 
 <h1>אישור על אפסון ארמו"י (במקום ט' 1082)</h1>
 
 <div class="dates-row">
-  <span><b>תאריך האפסון:</b> ${storageDateStr}</span>
-  <span><b>תאריך מתוכנן של חזרת החייל:</b> ${returnDateStr}</span>
+  <span class="date-pill"><b>תאריך האפסון:</b> ${storageDateStr}</span>
+  <span class="date-pill"><b>תאריך מתוכנן של חזרת החייל:</b> ${returnDateStr}</span>
 </div>
 
 <!-- Table 1: weapon owner -->
@@ -201,12 +272,12 @@ export function generateStorageHTML(data: StoragePDFData): string {
     <th style="width:15%">הערות</th>
   </tr></thead>
   <tbody><tr>
-    <td class="c">${data.ownerPersonalNumber}</td>
-    <td class="r">${data.ownerName}</td>
-    <td class="c">${data.ownerRank || ''}</td>
-    <td class="c">${data.ownerCompany || ''}</td>
-    <td class="c">${data.ownerPhone || ''}</td>
-    <td></td>
+    <td class="c">${esc(data.ownerPersonalNumber)}</td>
+    <td class="r">${esc(data.ownerName)}</td>
+    <td class="c">${esc(data.ownerRank || '')}</td>
+    <td class="c">${esc(data.ownerCompany || '')}</td>
+    <td class="c">${esc(data.ownerPhone || '')}</td>
+    <td class="c signature-cell"><div class="signature-frame">${ownerSignatureHTML}</div></td>
     <td></td>
   </tr></tbody>
 </table>
@@ -215,12 +286,12 @@ export function generateStorageHTML(data: StoragePDFData): string {
 <div class="depositor-box">
   <div class="sec-label" style="margin-bottom:5px">פרטי גורם מאפסן (במידה והמאפסן אינו חתום על הציוד)</div>
   <div class="inline-fields">
-    <div class="fg"><span class="fl">שם המאפסן:</span><span class="fv">${data.depositorName || ''}</span></div>
-    <div class="fg"><span class="fl">מ.א:</span><span class="fv">${data.depositorPersonalNumber || ''}</span></div>
-    <div class="fg"><span class="fl">דרגה:</span><span class="fv">${data.depositorRank || ''}</span></div>
-    <div class="fg"><span class="fl">טלפון:</span><span class="fv">${data.depositorPhone || ''}</span></div>
+    <div class="fg"><span class="fl">שם המאפסן:</span><span class="fv">${esc(data.depositorName || '')}</span></div>
+    <div class="fg"><span class="fl">מ.א:</span><span class="fv">${esc(data.depositorPersonalNumber || '')}</span></div>
+    <div class="fg"><span class="fl">דרגה:</span><span class="fv">${esc(data.depositorRank || '')}</span></div>
+    <div class="fg"><span class="fl">טלפון:</span><span class="fv">${esc(data.depositorPhone || '')}</span></div>
   </div>
-  <div class="fg"><span class="fl">חתימה:</span><span class="fv-sig"></span></div>
+  <div class="fg"><span class="fl">חתימה:</span><span class="fv-sig">${depositorSignatureHTML}</span></div>
 </div>
 
 <!-- Table 2: equipment list -->
@@ -246,7 +317,13 @@ export function generateStorageHTML(data: StoragePDFData): string {
     <th style="width:22%">חתימה</th>
     <th style="width:24%">הערות</th>
   </tr></thead>
-  <tbody><tr><td></td><td></td><td></td><td></td><td></td></tr></tbody>
+  <tbody><tr>
+    <td class="c">${esc(data.receiverPersonalNumber || '')}</td>
+    <td class="r">${esc(data.receiverName || '')}</td>
+    <td class="c">${esc(data.receiverRank || '')}</td>
+    <td class="c signature-cell"><div class="signature-frame">${receiverSignatureHTML}</div></td>
+    <td class="r">${data.receiverPhone ? `טלפון: ${esc(data.receiverPhone)}` : ''}</td>
+  </tr></tbody>
 </table>
 
 <!-- Table 4: retrieval — left blank -->

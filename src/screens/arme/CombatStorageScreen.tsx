@@ -283,6 +283,7 @@ const CombatStorageScreen: React.FC = () => {
             );
 
             // Mettre à jour weapons_inventory
+            let detectedVoucherNumber: string | undefined;
             const updatePromises: Promise<void>[] = [];
             for (const item of selectedItems) {
               const serialsToUse = item.selectedSerials.length > 0
@@ -295,6 +296,9 @@ const CombatStorageScreen: React.FC = () => {
                   try {
                     const weapon = await weaponInventoryService.getWeaponBySerialNumber(s);
                     if (weapon) {
+                      if (!detectedVoucherNumber && weapon.assignedTo?.voucherNumber) {
+                        detectedVoucherNumber = weapon.assignedTo.voucherNumber;
+                      }
                       await weaponInventoryService.moveWeaponToStorageWithSoldier(weapon.id, {
                         soldierId: soldier!.id,
                         soldierName: soldier!.name,
@@ -312,17 +316,23 @@ const CombatStorageScreen: React.FC = () => {
             // ── Build PDF data ────────────────────────────────────────────────
             const { day, month, year } = dateState;
 
-            // Build weapon rows: one row per serial if available, else one row per item
-            const weaponRows: { category: string; serialNumber: string }[] = [];
+            // Build weapon rows:
+            // - serial-managed: one row per serial, qty=1
+            // - non-serial: one row with qty=item.storageQuantity
+            const weaponRows: { category: string; serialNumber?: string; quantity?: number }[] = [];
             for (const item of selectedItems) {
-              if (item.selectedSerials.length > 0) {
-                for (const serial of item.selectedSerials) {
-                  weaponRows.push({ category: item.equipmentName, serialNumber: serial });
+              const serialsToUse = item.selectedSerials.length > 0
+                ? item.selectedSerials
+                : item.availableSerials.slice(0, item.storageQuantity);
+
+              if (serialsToUse.length > 0) {
+                for (const serial of serialsToUse) {
+                  weaponRows.push({ category: item.equipmentName, serialNumber: serial, quantity: 1 });
                 }
               } else {
                 weaponRows.push({
                   category: item.equipmentName,
-                  serialNumber: `כמות: ${item.storageQuantity}`,
+                  quantity: item.storageQuantity,
                 });
               }
             }
@@ -332,9 +342,17 @@ const CombatStorageScreen: React.FC = () => {
               ownerPersonalNumber: soldier?.personalNumber || '',
               ownerCompany: soldier?.company,
               ownerPhone: soldier?.phone,
+              voucherNumber: detectedVoucherNumber,
               depositorName: depositor?.name,
               depositorPersonalNumber: depositor?.personalNumber,
               depositorPhone: depositor?.phone,
+              signerSignature: signature || undefined,
+              signatureRole: depositor ? 'depositor' : 'owner',
+              receiverName: user?.displayName || user?.name || user?.email || '',
+              receiverPersonalNumber: user?.personalNumber || '',
+              receiverRank: user?.rank || '',
+              receiverPhone: user?.phone || '',
+              receiverSignature: user?.signature || undefined,
               storageDate: new Date(),
               plannedReturnDate: new Date(year, month - 1, day),
               weapons: weaponRows,

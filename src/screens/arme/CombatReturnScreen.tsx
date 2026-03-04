@@ -331,8 +331,10 @@ const CombatReturnScreen: React.FC = () => {
     setPrinting(true);
     try {
       // Find the last assignment to get a signature if possible
-      const assignments = await assignmentService.getAssignmentsBySoldier(soldierId, 'combat');
-      const latestAssignmentWithSignature = assignments.find((a: any) => a.signature);
+      const assignments = await assignmentService.getBySoldier(soldierId);
+      const latestAssignmentWithSignature = assignments.find(
+        (a: any) => a.type === 'combat' && a.signature
+      );
 
       const printItems = items.map(item => ({
         equipmentId: item.equipmentId,

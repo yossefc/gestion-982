@@ -28,6 +28,7 @@ interface StoredItem {
   serialNumber: string;
   selected: boolean;
   type: 'weapon' | 'general';
+  quantity?: number; // for non-serial items: actual stored quantity
 }
 
 const CombatRetrieveScreen: React.FC = () => {
@@ -102,14 +103,15 @@ const CombatRetrieveScreen: React.FC = () => {
           }
         });
 
-        // Items sans serial
-        if (h.serials.length === 0) {
+        // Items sans serial: une seule ligne avec la vraie quantité stockée
+        if (h.serials.length === 0 && h.quantity > 0) {
           items.push({
             id: h.equipmentId,
             category: h.equipmentName,
             serialNumber: '',
             selected: false,
             type: 'general',
+            quantity: h.quantity,
           });
         }
       });
@@ -163,7 +165,8 @@ const handleRetrieve = async () => {
 
   setModalType('confirm');
   setModalTitle('החזרה מאפסון');
-  setModalMessage(`האם להחזיר ${selectedItems.length} פריטים לחייל?`);
+  const totalQty = selectedItems.reduce((sum, it) => sum + (it.serialNumber ? 1 : (it.quantity || 1)), 0);
+  setModalMessage(`האם להחזיר ${totalQty} פריטים לחייל?`);
   setModalButtons([
     { text: 'ביטול', style: 'outline', onPress: () => setModalVisible(false) },
     {
@@ -191,7 +194,8 @@ const handleRetrieve = async () => {
           const groups = new Map<string, { name: string, qty: number, serials: string[] }>();
           selectedItems.forEach(it => {
             const group = groups.get(it.id) || { name: it.category, qty: 0, serials: [] };
-            group.qty += 1;
+            // For serial items count 1 per row; for non-serial items use the stored quantity
+            group.qty += it.serialNumber ? 1 : (it.quantity || 1);
             if (it.serialNumber) group.serials.push(it.serialNumber);
             groups.set(it.id, group);
           });
@@ -215,7 +219,7 @@ const handleRetrieve = async () => {
 
           setModalType('success');
           setModalTitle('הצלחה');
-          setModalMessage(`${selectedItems.length} פריטים הוחזרו לחייל`);
+          setModalMessage(`${totalQty} פריטים הוחזרו לחייל`);
           setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => { setModalVisible(false); navigation.goBack(); } }]);
           setModalVisible(true);
         } catch (error) {
@@ -322,7 +326,11 @@ const handleRetrieve = async () => {
                 </View>
                 <View style={styles.weaponInfo}>
                   <Text style={styles.weaponCategory}>{item.category}</Text>
-                  <Text style={styles.weaponSerial}>{item.serialNumber}</Text>
+                  {item.serialNumber ? (
+                    <Text style={styles.weaponSerial}>{item.serialNumber}</Text>
+                  ) : (
+                    <Text style={styles.weaponSerial}>כמות: {item.quantity || 1}</Text>
+                  )}
                 </View>
               </TouchableOpacity>
             ))}
@@ -342,7 +350,7 @@ const handleRetrieve = async () => {
               <ActivityIndicator color="#fff" />
             ) : (
               <Text style={styles.retrieveButtonText}>
-                📤 החזר ({storedItems.filter(it => it.selected).length})
+                📤 החזר ({storedItems.filter(it => it.selected).reduce((sum, it) => sum + (it.serialNumber ? 1 : (it.quantity || 1)), 0)})
               </Text>
             )}
           </TouchableOpacity>

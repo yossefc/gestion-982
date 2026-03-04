@@ -24,9 +24,11 @@ import { WeaponInventoryItem } from '../../types';
 import { AppModal, ModalType } from '../../components';
 import WeaponStorageFormModal, { StorageFormResult } from './WeaponStorageFormModal';
 import StorageDocumentViewerModal from './StorageDocumentViewerModal';
+import { useAuth } from '../../contexts/AuthContext';
 
 const WeaponStorageScreen: React.FC = () => {
   const navigation = useNavigation<any>();
+  const { user } = useAuth();
 
   const [loading, setLoading] = useState(true);
   const [formLoading, setFormLoading] = useState(false);
@@ -117,6 +119,11 @@ const WeaponStorageScreen: React.FC = () => {
         depositorName: formData.depositor?.name,
         depositorPersonalNumber: formData.depositor?.personalNumber,
         depositorPhone: formData.depositor?.phone,
+        receiverName: user?.displayName || user?.name || user?.email || '',
+        receiverPersonalNumber: user?.personalNumber || '',
+        receiverRank: user?.rank || '',
+        receiverPhone: user?.phone || '',
+        receiverSignature: user?.signature || undefined,
         storageDate: new Date(),
         plannedReturnDate: formData.plannedReturnDate,
         weapons: selectedWeapons.map((w) => ({

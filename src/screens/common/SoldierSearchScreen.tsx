@@ -66,13 +66,28 @@ const SoldierSearchScreen: React.FC = () => {
       fallbackData = data;
 
       if (mode === 'retrieve' && type === 'combat') {
-        // Pour le mode retrieve, afficher uniquement les soldats avec des armes en storage
-        const soldiersWithStorage = await weaponInventoryService.getSoldiersWithStoredWeapons();
+        // Pour le mode retrieve, afficher les soldats avec des armes OU du matériel en storage
+        const [soldiersWithStoredWeapons, allCombatHoldings] = await Promise.all([
+          weaponInventoryService.getSoldiersWithStoredWeapons(),
+          transactionalAssignmentService.getAllHoldings('combat'),
+        ]);
 
-        // Créer une map pour lookup rapide
-        const storageMap = new Map(soldiersWithStorage.map(s => [s.soldierId, s.count]));
+        // Départ: map depuis weapons_inventory
+        const storageMap = new Map<string, number>(
+          soldiersWithStoredWeapons.map(s => [s.soldierId, s.count])
+        );
 
-        // Filtrer uniquement les soldats qui ont des armes en storage
+        // Fusionner avec les items non-armes stockés dans soldier_holdings
+        allCombatHoldings.forEach((holding: any) => {
+          const storedQty = (holding.items || [])
+            .filter((item: any) => item.status === 'stored')
+            .reduce((sum: number, item: any) => sum + (item.quantity || 0), 0);
+          if (storedQty > 0) {
+            storageMap.set(holding.soldierId, (storageMap.get(holding.soldierId) || 0) + storedQty);
+          }
+        });
+
+        // Filtrer uniquement les soldats qui ont du matériel en storage (armes OU autres)
         data = data
           .filter((s: any) => storageMap.has(s.id))
           .map((s: any) => ({
@@ -80,7 +95,7 @@ const SoldierSearchScreen: React.FC = () => {
             outstandingCount: storageMap.get(s.id) || 0,
           }));
 
-        // Trier: soldats avec plus d'armes en premier
+        // Trier: soldats avec plus de matériel en premier
         data.sort((a: any, b: any) => (b.outstandingCount || 0) - (a.outstandingCount || 0));
       } else if ((mode === 'return' || mode === 'storage') && type) {
         // Obtenir tous les holdings directement depuis soldier_holdings (plus précis et rapide)
