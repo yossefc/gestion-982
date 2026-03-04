@@ -21,7 +21,8 @@ module.exports = {
       },
       infoPlist: {
         NSLocalNetworkUsageDescription: "האפליקציה זקוקה לגישה לרשת המקומית לצורך זיהוי חיבור האינטרנט.",
-        NSBonjourServices: ["_http._tcp"]
+        NSBonjourServices: ["_http._tcp"],
+        LSApplicationQueriesSchemes: ["whatsapp"]
       }
     },
     android: {

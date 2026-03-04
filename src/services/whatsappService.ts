@@ -123,15 +123,14 @@ export async function openWhatsAppChat(
   message: string
 ): Promise<void> {
   try {
-    // Nettoyer le numéro de téléphone (enlever espaces, tirets, etc.)
-    const cleanNumber = phoneNumber.replace(/[^\d+]/g, '');
+    // Nettoyer le numéro de téléphone (garder uniquement les chiffres pour wa.me)
+    const cleanNumber = phoneNumber.replace(/\D/g, '');
 
     // Encoder le message pour URL
     const encodedMessage = encodeURIComponent(message);
 
-    // URL WhatsApp (fonctionne sur iOS et Android)
-    const whatsappUrl = `whatsapp://send?phone=${cleanNumber}&text=${encodedMessage}`;
-
+    // URL WhatsApp Universal Link (recommandé officiellement, fonctionne bien sur iOS)
+    const whatsappUrl = `https://wa.me/${cleanNumber}?text=${encodedMessage}`;
 
     // Ouvrir WhatsApp
     const { Linking } = require('react-native');
@@ -140,7 +139,7 @@ export async function openWhatsAppChat(
     if (!canOpen) {
       Alert.alert(
         'שגיאה',
-        'WhatsApp אינו מותקן במכשיר זה'
+        'לא ניתן לפתוח את WhatsApp. ודא שיש לך חיבור לאינטרנט.'
       );
       return;
     }

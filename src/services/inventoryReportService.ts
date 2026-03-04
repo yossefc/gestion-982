@@ -55,7 +55,7 @@ const generateInventoryReportHTML = (data: InventoryReportData): string => {
   <style>
     @page {
       size: A4;
-      margin: 6mm;
+      margin: 15mm; /* הגדלת שוליים - Margins accrus */
     }
     * {
       box-sizing: border-box;
@@ -76,6 +76,7 @@ const generateInventoryReportHTML = (data: InventoryReportData): string => {
       flex-direction: column;
       height: 100%;
       padding: 0;
+      zoom: 0.9; /* זום קטן החוצה - Petit dézoom pour tout faire rentrer */
     }
 
     /* ── Header ── */
