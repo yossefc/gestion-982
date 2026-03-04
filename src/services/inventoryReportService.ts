@@ -43,7 +43,7 @@ const generateInventoryReportHTML = (data: InventoryReportData): string => {
     .join('');
 
   const signatureImg = data.operatorSignature
-    ? `<img src="${data.operatorSignature}" style="max-width: 110px; max-height: 38px; object-fit: contain;" />`
+    ? `<img src="${data.operatorSignature}" style="max-width: 180px; max-height: 60px; object-fit: contain; filter: contrast(1.4) brightness(0.85);" />`
     : '';
 
   return `<!DOCTYPE html>
@@ -173,7 +173,7 @@ const generateInventoryReportHTML = (data: InventoryReportData): string => {
       min-width: 120px;
     }
     .sig-area {
-      height: 44px;
+      height: 60px;
       display: flex;
       align-items: center;
       justify-content: center;

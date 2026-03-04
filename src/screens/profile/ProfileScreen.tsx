@@ -43,6 +43,8 @@ const ProfileScreen: React.FC = () => {
   const [loadingUser, setLoadingUser] = useState(isEditingOtherUser);
 
   const [rank, setRank] = useState('');
+  const [displayName, setDisplayName] = useState('');
+  const [personalNumber, setPersonalNumber] = useState('');
   const [newSignatureData, setNewSignatureData] = useState<string | null>(null);
   const [showCanvas, setShowCanvas] = useState(false);
   const [scrollEnabled, setScrollEnabled] = useState(true);
@@ -60,6 +62,8 @@ const ProfileScreen: React.FC = () => {
     if (!isEditingOtherUser) {
       // Use currentUser data
       setRank(currentUser?.rank || '');
+      setDisplayName(currentUser?.displayName || currentUser?.name || '');
+      setPersonalNumber((currentUser as any)?.personalNumber || '');
       return;
     }
     const loadUser = async () => {
@@ -68,6 +72,8 @@ const ProfileScreen: React.FC = () => {
         const userData = await userService.getById(targetUserId);
         setTargetUser(userData);
         setRank(userData?.rank || '');
+        setDisplayName(userData?.displayName || (userData as any)?.name || '');
+        setPersonalNumber((userData as any)?.personalNumber || '');
       } catch (e) {
         console.error('[ProfileScreen] Error loading user:', e);
       } finally {
@@ -117,6 +123,10 @@ const ProfileScreen: React.FC = () => {
       setSaving(true);
       await userService.updateSignature(targetUserId, signatureToSave);
       await userService.updateRank(targetUserId, rank.trim());
+      await userService.updatePersonalNumber(targetUserId, personalNumber.trim());
+      if (displayName.trim()) {
+        await userService.updateDisplayName(targetUserId, displayName.trim());
+      }
 
       // If editing current user, refresh their session data
       if (!isEditingOtherUser) {
@@ -174,7 +184,7 @@ const ProfileScreen: React.FC = () => {
           <Text style={styles.headerTitle}>
             {isEditingOtherUser ? 'עריכת פרופיל משתמש' : 'הפרופיל שלי'}
           </Text>
-          <Text style={styles.headerSubtitle}>חתימה ודרגה</Text>
+          <Text style={styles.headerSubtitle}>שם | מ.א. | דרגה | חתימה</Text>
         </View>
         <View style={styles.headerSpacer} />
       </View>
@@ -195,6 +205,33 @@ const ProfileScreen: React.FC = () => {
             </Text>
             <Text style={styles.userEmail}>{displayUser?.email || ''}</Text>
           </View>
+        </View>
+
+        {/* Name field */}
+        <Text style={styles.sectionTitle}>שם ומשפחה</Text>
+        <View style={styles.inputContainer}>
+          <TextInput
+            style={styles.rankInput}
+            value={displayName}
+            onChangeText={setDisplayName}
+            placeholder="הזן שם מלא"
+            placeholderTextColor={Colors.textLight}
+            textAlign="right"
+          />
+        </View>
+
+        {/* Personal number field */}
+        <Text style={styles.sectionTitle}>מ.א. — מספר אישי</Text>
+        <View style={styles.inputContainer}>
+          <TextInput
+            style={styles.rankInput}
+            value={personalNumber}
+            onChangeText={setPersonalNumber}
+            placeholder="הזן מספר אישי"
+            placeholderTextColor={Colors.textLight}
+            textAlign="right"
+            keyboardType="numeric"
+          />
         </View>
 
         {/* Rank field */}

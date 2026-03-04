@@ -135,6 +135,30 @@ export const updateUserRank = async (userId: string, rank: string): Promise<void
 };
 
 /**
+ * Met à jour le numéro personnel (מ.א.) d'un utilisateur
+ */
+export const updateUserPersonalNumber = async (userId: string, personalNumber: string): Promise<void> => {
+  try {
+    const userRef = doc(db, USERS_COLLECTION, userId);
+    await updateDoc(userRef, { personalNumber: personalNumber || null });
+  } catch (error) {
+    throw error;
+  }
+};
+
+/**
+ * Met à jour le nom affiché d'un utilisateur
+ */
+export const updateUserDisplayName = async (userId: string, displayName: string): Promise<void> => {
+  try {
+    const userRef = doc(db, USERS_COLLECTION, userId);
+    await updateDoc(userRef, { displayName: displayName || null, name: displayName || null });
+  } catch (error) {
+    throw error;
+  }
+};
+
+/**
  * Supprime un utilisateur
  */
 export const deleteUser = async (userId: string): Promise<void> => {
@@ -212,6 +236,8 @@ export const userService = {
   updateCompany: updateUserCompany,
   updateSignature: updateUserSignature,
   updateRank: updateUserRank,
+  updatePersonalNumber: updateUserPersonalNumber,
+  updateDisplayName: updateUserDisplayName,
   delete: deleteUser,
   getByRole: getUsersByRole,
   getCount: getUserCount,
