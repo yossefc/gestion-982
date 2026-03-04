@@ -535,6 +535,7 @@ const CombatAssignmentScreen: React.FC = () => {
         operatorSignature: user?.signature || undefined,
         operatorName: user?.displayName || user?.name || user?.email || '',
         operatorRank: user?.rank || '',
+        operatorPersonalNumber: user?.personalNumber || '',
         timestamp: new Date(),
         assignmentId,
       }).then(() => {
@@ -567,6 +568,7 @@ const CombatAssignmentScreen: React.FC = () => {
         operatorSignature: user?.signature || undefined,
         operatorName: user?.displayName || user?.name || '',
         operatorRank: user?.rank || '',
+        operatorPersonalNumber: user?.personalNumber || '',
         timestamp: new Date(),
         assignmentId,
       };

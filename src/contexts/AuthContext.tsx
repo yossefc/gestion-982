@@ -56,11 +56,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             setUser({
               id: fbUser.uid,
               email: fbUser.email || '',
-              name: userData.name || '',
+              name: userData.name || userData.displayName || '',
+              displayName: userData.displayName || userData.name || '',
               phone: userData.phone,
               role: userData.role as UserRole,
               company: userData.company,  // פלוגה pour RSP
               rank: userData.rank,
+              personalNumber: userData.personalNumber || '',
               signature: userData.signature,
               createdAt: userData.createdAt?.toDate() || new Date(),
             });
@@ -157,11 +159,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         setUser({
           id: fbUser.uid,
           email: fbUser.email || '',
-          name: userData.name || '',
+          name: userData.name || userData.displayName || '',
+          displayName: userData.displayName || userData.name || '',
           phone: userData.phone,
           role: userData.role as UserRole,
           company: userData.company,
           rank: userData.rank,
+          personalNumber: userData.personalNumber || '',
           signature: userData.signature,
           createdAt: userData.createdAt?.toDate() || new Date(),
         });

@@ -12,6 +12,7 @@ export interface PrintAssignmentData {
   operatorSignature?: string;
   operatorName?: string;
   operatorRank?: string;
+  operatorPersonalNumber?: string;
   timestamp: Date;
   assignmentId?: string;
 }
@@ -307,17 +308,6 @@ const generatePageBodyHTML = (assignmentData: PrintAssignmentData): string => {
   `;
     }).join('');
 
-  const emptyRowsCount = Math.max(0, 10 - assignmentData.items.length);
-  const emptyRows = Array(emptyRowsCount).fill(0).map((_, index) => `
-    <tr>
-      <td class="cell cell-center">${assignmentData.items.length + index + 1}</td>
-      <td class="cell cell-right"></td>
-      <td class="cell cell-center"></td>
-      <td class="cell cell-center"></td>
-      <td class="cell cell-right"></td>
-    </tr>
-  `).join('');
-
   const signatureImg = assignmentData.signature
     ? `<img src="${assignmentData.signature}" class="signature-img" />`
     : '<div class="signature-placeholder">חתימה</div>';
@@ -353,7 +343,6 @@ const generatePageBodyHTML = (assignmentData: PrintAssignmentData): string => {
     </thead>
     <tbody>
       ${itemsRows}
-      ${emptyRows}
     </tbody>
   </table>
 
@@ -371,7 +360,7 @@ const generatePageBodyHTML = (assignmentData: PrintAssignmentData): string => {
       </div>
       <div class="signature-row">
         <span class="signature-label">מ"א:</span>
-        <span class="signature-value"></span>
+        <span class="signature-value">${assignmentData.operatorPersonalNumber || ''}</span>
       </div>
       <div class="signature-row">
         <span class="signature-label">תאריך:</span>

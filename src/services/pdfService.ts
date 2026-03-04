@@ -69,10 +69,8 @@ function generateAssignmentHTML(assignment: Assignment): string {
 
   const operatorText = assignment.assignedByName || assignment.assignedByEmail || '';
 
-  // Limiter à 15 items et calculer les lignes vides pour remplir le tableau
-  const maxItems = 15;
-  const itemsToShow = assignment.items.slice(0, maxItems);
-  const emptyRowsCount = Math.max(0, 10 - itemsToShow.length); // Au moins 10 lignes au total
+  // Only show items that were actually assigned (no empty rows)
+  const itemsToShow = assignment.items.slice(0, 20);
 
   // Générer les lignes du tableau avec numéro de série
   const itemsRows = itemsToShow
@@ -82,17 +80,6 @@ function generateAssignmentHTML(assignment: Assignment): string {
       <td class="cell cell-right">${item.equipmentName}</td>
       <td class="cell cell-center">${item.quantity}</td>
       <td class="cell cell-center">${item.serial || '-'}</td>
-      <td class="cell cell-right"></td>
-    </tr>
-  `).join('');
-
-  // Lignes vides pour le formulaire
-  const emptyRows = Array(emptyRowsCount).fill(0).map((_, index) => `
-    <tr>
-      <td class="cell cell-center">${itemsToShow.length + index + 1}</td>
-      <td class="cell cell-right"></td>
-      <td class="cell cell-center"></td>
-      <td class="cell cell-center"></td>
       <td class="cell cell-right"></td>
     </tr>
   `).join('');
@@ -111,7 +98,7 @@ function generateAssignmentHTML(assignment: Assignment): string {
   <style>
     @page {
       size: A4;
-      margin: 10mm;
+      margin: 6mm;
     }
     * {
       box-sizing: border-box;
@@ -122,9 +109,9 @@ function generateAssignmentHTML(assignment: Assignment): string {
       font-family: Arial, 'David', sans-serif;
       direction: rtl;
       text-align: right;
-      font-size: 11px;
-      line-height: 1.3;
-      padding: 5mm;
+      font-size: 10px;
+      line-height: 1.25;
+      padding: 3mm;
     }
     
     /* Header */
@@ -187,8 +174,8 @@ function generateAssignmentHTML(assignment: Assignment): string {
     }
     .cell {
       border: 1px solid #000;
-      padding: 5px 4px;
-      min-height: 22px;
+      padding: 3px 3px;
+      min-height: 18px;
       font-size: 10px;
     }
     .cell-center {
@@ -328,7 +315,6 @@ function generateAssignmentHTML(assignment: Assignment): string {
     </thead>
     <tbody>
       ${itemsRows}
-      ${emptyRows}
     </tbody>
   </table>
 
