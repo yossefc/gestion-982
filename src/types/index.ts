@@ -200,6 +200,7 @@ export type RootStackParamList = {
   CombatRetrieve: { soldierId: string };
   CombatStock: undefined;
   InventoryReport: undefined;
+  PlugaReport: undefined;
   // Inventaire d'armes
   WeaponInventoryList: undefined;
   AddWeaponToInventory: { weaponId?: string };

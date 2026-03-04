@@ -1,6 +1,8 @@
 /**
  * WeaponStorageScreen.tsx - Mise en אפסון d'armes
- * Permet de mettre des armes assignées en אפסון (dépôt/stockage)
+ * Allows moving assigned weapons to אפסון with a storage confirmation PDF.
+ * Supports multi-selection: tap a weapon card to select/deselect it,
+ * then tap the bottom action bar to open the storage form + generate the document.
  */
 
 import React, { useState, useEffect } from 'react';
@@ -17,16 +19,25 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
 import { weaponInventoryService } from '../../services/weaponInventoryService';
+import { generateStoragePDF, StoragePDFData } from '../../services/pdfService';
 import { WeaponInventoryItem } from '../../types';
 import { AppModal, ModalType } from '../../components';
+import WeaponStorageFormModal, { StorageFormResult } from './WeaponStorageFormModal';
 
 const WeaponStorageScreen: React.FC = () => {
   const navigation = useNavigation<any>();
+
   const [loading, setLoading] = useState(true);
-  const [processing, setProcessing] = useState(false);
+  const [formLoading, setFormLoading] = useState(false);
   const [assignedWeapons, setAssignedWeapons] = useState<WeaponInventoryItem[]>([]);
 
-  // Modal state
+  // Multi-selection state
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  // Form modal state
+  const [formModalVisible, setFormModalVisible] = useState(false);
+
+  // Feedback modal state
   const [modalVisible, setModalVisible] = useState(false);
   const [modalType, setModalType] = useState<ModalType>('info');
   const [modalMessage, setModalMessage] = useState('');
@@ -42,55 +53,88 @@ const WeaponStorageScreen: React.FC = () => {
       setLoading(true);
       const weapons = await weaponInventoryService.getAssignedWeapons();
       setAssignedWeapons(weapons);
+      setSelectedIds(new Set());
     } catch (error) {
       console.error('Error loading assigned weapons:', error);
-      setModalType('error');
-      setModalMessage('לא ניתן לטעון נשקים מוקצים');
-      setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
-      setModalVisible(true);
+      showModal('error', 'לא ניתן לטעון נשקים מוקצים');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleMoveToStorage = (weapon: WeaponInventoryItem) => {
-    if (!weapon.assignedTo) return;
+  // ── Selection helpers ─────────────────────────────────────────────────────
 
-    setModalType('confirm');
-    setModalTitle('העברה לאפסון');
-    setModalMessage(`להעביר ${weapon.category} ${weapon.serialNumber} של ${weapon.assignedTo.soldierName} לאפסון?`);
+  const toggleSelection = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const selectedWeapons = assignedWeapons.filter((w) => selectedIds.has(w.id));
+
+  // ── Feedback modal helper ─────────────────────────────────────────────────
+
+  const showModal = (type: ModalType, message: string, title?: string) => {
+    setModalType(type);
+    setModalMessage(message);
+    setModalTitle(title);
     setModalButtons([
-      { text: 'ביטול', style: 'outline', onPress: () => setModalVisible(false) },
-      {
-        text: 'אשר',
-        style: 'primary',
-        icon: 'archive' as const,
-        onPress: async () => {
-          setModalVisible(false);
-          try {
-            setProcessing(true);
-            await weaponInventoryService.moveWeaponToStorage(weapon.id);
-            setModalType('success');
-            setModalTitle(undefined);
-            setModalMessage('הנשק הועבר לאפסון');
-            setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
-            setModalVisible(true);
-            loadAssignedWeapons();
-          } catch (error) {
-            console.error('Error moving to storage:', error);
-            setModalType('error');
-            setModalTitle(undefined);
-            setModalMessage('לא ניתן להעביר את הנשק לאפסון');
-            setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
-            setModalVisible(true);
-          } finally {
-            setProcessing(false);
-          }
-        },
-      },
+      { text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) },
     ]);
     setModalVisible(true);
   };
+
+  // ── Storage confirmation ──────────────────────────────────────────────────
+
+  const handleConfirmStorage = async (formData: StorageFormResult) => {
+    if (selectedWeapons.length === 0) return;
+    setFormLoading(true);
+    try {
+      // 1. Move all selected weapons to storage in Firestore
+      await Promise.all(
+        selectedWeapons.map((w) => weaponInventoryService.moveWeaponToStorage(w.id))
+      );
+
+      // 2. Build PDF data — use first weapon's owner as the signing soldier
+      const firstWeapon = selectedWeapons[0];
+      const pdfData: StoragePDFData = {
+        ownerName: firstWeapon.assignedTo?.soldierName || '',
+        ownerPersonalNumber: firstWeapon.assignedTo?.soldierPersonalNumber || '',
+        // rank / company not available in WeaponInventoryItem.assignedTo
+        depositorName: formData.depositor?.name,
+        depositorPersonalNumber: formData.depositor?.personalNumber,
+        depositorPhone: formData.depositor?.phone,
+        storageDate: new Date(),
+        plannedReturnDate: formData.plannedReturnDate,
+        weapons: selectedWeapons.map((w) => ({
+          category: w.category,
+          serialNumber: w.serialNumber,
+        })),
+      };
+
+      // 3. Generate and share the PDF
+      await generateStoragePDF(pdfData);
+
+      setFormModalVisible(false);
+      setSelectedIds(new Set());
+      showModal('success', `${selectedWeapons.length} נשקים הועברו לאפסון`, 'אפסון הצליח');
+      loadAssignedWeapons();
+    } catch (error) {
+      console.error('Error during storage:', error);
+      setFormModalVisible(false);
+      showModal('error', 'שגיאה בתהליך האפסון');
+    } finally {
+      setFormLoading(false);
+    }
+  };
+
+  // ── Render ────────────────────────────────────────────────────────────────
 
   if (loading) {
     return (
@@ -110,9 +154,19 @@ const WeaponStorageScreen: React.FC = () => {
         </TouchableOpacity>
         <View style={styles.headerTitleContainer}>
           <Text style={styles.headerTitle}>אפסון נשק</Text>
-          <Text style={styles.headerSubtitle}>{assignedWeapons.length} נשקים מוקצים</Text>
+          <Text style={styles.headerSubtitle}>
+            {assignedWeapons.length} מוקצים
+            {selectedIds.size > 0 ? ` · ${selectedIds.size} נבחרו` : ''}
+          </Text>
         </View>
-        <View style={styles.headerSpacer} />
+        {/* Tap to deselect all when something is selected */}
+        {selectedIds.size > 0 ? (
+          <TouchableOpacity style={styles.headerActionBtn} onPress={() => setSelectedIds(new Set())}>
+            <Ionicons name="close-circle-outline" size={26} color="rgba(255,255,255,0.85)" />
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.headerSpacer} />
+        )}
       </View>
 
       <ScrollView style={styles.content} contentContainerStyle={styles.scrollContent}>
@@ -125,69 +179,91 @@ const WeaponStorageScreen: React.FC = () => {
         ) : (
           <>
             <View style={styles.infoCard}>
-              <Ionicons name="information-circle" size={24} color={Colors.info} />
+              <Ionicons name="information-circle" size={22} color={Colors.info} />
               <Text style={styles.infoText}>
-                בחר נשק להעברה לאפסון. הנשק יהיה מסומן כ"אפסון" ולא יהיה מוקצה לחייל.
+                לחץ על נשק לבחירה. לאחר הבחירה לחץ על &quot;אפסן נבחרים&quot; לאישור ויצירת מסמך.
               </Text>
             </View>
 
-            {assignedWeapons.map((weapon) => (
-              <View key={weapon.id} style={styles.weaponCard}>
-                <View style={styles.weaponHeader}>
-                  <Text style={styles.weaponCategory}>{weapon.category}</Text>
-                  <View style={styles.statusBadge}>
-                    <Text style={styles.statusText}>מוקצה</Text>
-                  </View>
-                </View>
-
-                <View style={styles.serialContainer}>
-                  <Ionicons name="barcode-outline" size={20} color={Colors.arme} />
-                  <Text style={styles.serialNumber}>{weapon.serialNumber}</Text>
-                </View>
-
-                {weapon.assignedTo && (
-                  <View style={styles.soldierInfo}>
-                    <View style={styles.soldierRow}>
-                      <Text style={styles.soldierValue}>{weapon.assignedTo.soldierName}</Text>
-                      <Text style={styles.soldierLabel}>חייל:</Text>
-                    </View>
-                    <View style={styles.soldierRow}>
-                      <Text style={styles.soldierValue}>
-                        {weapon.assignedTo.soldierPersonalNumber}
-                      </Text>
-                      <Text style={styles.soldierLabel}>מ.א:</Text>
-                    </View>
-                    <View style={styles.soldierRow}>
-                      <Text style={styles.soldierValue}>
-                        {weapon.assignedTo.assignedDate.toLocaleDateString('he-IL')}
-                      </Text>
-                      <Text style={styles.soldierLabel}>תאריך הקצאה:</Text>
-                    </View>
-                  </View>
-                )}
-
+            {assignedWeapons.map((weapon) => {
+              const isSelected = selectedIds.has(weapon.id);
+              return (
                 <TouchableOpacity
-                  style={styles.storageButton}
-                  onPress={() => handleMoveToStorage(weapon)}
-                  disabled={processing}
+                  key={weapon.id}
+                  style={[styles.weaponCard, isSelected && styles.weaponCardSelected]}
+                  onPress={() => toggleSelection(weapon.id)}
+                  activeOpacity={0.75}
                 >
-                  <Ionicons name="archive" size={20} color={Colors.textWhite} />
-                  <Text style={styles.storageButtonText}>העבר לאפסון</Text>
+                  {/* Card header: name + checkbox */}
+                  <View style={styles.weaponHeader}>
+                    <Text style={styles.weaponCategory}>{weapon.category}</Text>
+                    <View style={[styles.checkbox, isSelected && styles.checkboxChecked]}>
+                      {isSelected && <Ionicons name="checkmark" size={14} color="#fff" />}
+                    </View>
+                  </View>
+
+                  {/* Serial number */}
+                  <View style={styles.serialContainer}>
+                    <Ionicons name="barcode-outline" size={20} color={Colors.arme} />
+                    <Text style={styles.serialNumber}>{weapon.serialNumber}</Text>
+                  </View>
+
+                  {/* Soldier info */}
+                  {weapon.assignedTo && (
+                    <View style={styles.soldierInfo}>
+                      <View style={styles.soldierRow}>
+                        <Text style={styles.soldierValue}>{weapon.assignedTo.soldierName}</Text>
+                        <Text style={styles.soldierLabel}>חייל:</Text>
+                      </View>
+                      <View style={styles.soldierRow}>
+                        <Text style={styles.soldierValue}>
+                          {weapon.assignedTo.soldierPersonalNumber}
+                        </Text>
+                        <Text style={styles.soldierLabel}>מ.א:</Text>
+                      </View>
+                      <View style={styles.soldierRow}>
+                        <Text style={styles.soldierValue}>
+                          {weapon.assignedTo.assignedDate.toLocaleDateString('he-IL')}
+                        </Text>
+                        <Text style={styles.soldierLabel}>תאריך הקצאה:</Text>
+                      </View>
+                    </View>
+                  )}
                 </TouchableOpacity>
-              </View>
-            ))}
+              );
+            })}
           </>
         )}
+        {/* Bottom padding to avoid action bar overlap */}
+        <View style={{ height: selectedIds.size > 0 ? 88 : 20 }} />
       </ScrollView>
 
-      {processing && (
-        <View style={styles.overlay}>
-          <ActivityIndicator size="large" color={Colors.arme} />
-          <Text style={styles.overlayText}>מעביר לאפסון...</Text>
+      {/* Bottom action bar — visible when ≥1 weapon is selected */}
+      {selectedIds.size > 0 && (
+        <View style={styles.actionBar}>
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={() => setFormModalVisible(true)}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="archive" size={22} color="#fff" />
+            <Text style={styles.actionButtonText}>
+              אפסן נבחרים ({selectedIds.size})
+            </Text>
+          </TouchableOpacity>
         </View>
       )}
 
-      {/* App Modal */}
+      {/* Storage form modal */}
+      <WeaponStorageFormModal
+        visible={formModalVisible}
+        weapons={selectedWeapons}
+        loading={formLoading}
+        onClose={() => !formLoading && setFormModalVisible(false)}
+        onConfirm={handleConfirmStorage}
+      />
+
+      {/* Feedback modal */}
       <AppModal
         visible={modalVisible}
         type={modalType}
@@ -205,14 +281,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
   },
-
   loadingContainer: {
     flex: 1,
     backgroundColor: Colors.background,
     alignItems: 'center',
     justifyContent: 'center',
   },
-
   loadingText: {
     marginTop: Spacing.md,
     fontSize: FontSize.base,
@@ -229,7 +303,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     ...Shadows.medium,
   },
-
   backButton: {
     width: 44,
     height: 44,
@@ -238,38 +311,36 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-
   headerTitleContainer: {
     flex: 1,
     alignItems: 'center',
   },
-
   headerTitle: {
     fontSize: FontSize.xxl,
     fontWeight: '700',
     color: Colors.textWhite,
   },
-
   headerSubtitle: {
     fontSize: FontSize.md,
     color: 'rgba(255, 255, 255, 0.8)',
     marginTop: Spacing.xs,
   },
-
   headerSpacer: {
     width: 44,
+    height: 44,
+  },
+  headerActionBtn: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
   // Content
-  content: {
-    flex: 1,
-  },
+  content: { flex: 1 },
+  scrollContent: { padding: Spacing.lg },
 
-  scrollContent: {
-    padding: Spacing.lg,
-  },
-
-  // Info Card
+  // Info card
   infoCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -279,7 +350,6 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.lg,
     gap: Spacing.md,
   },
-
   infoText: {
     flex: 1,
     fontSize: FontSize.sm,
@@ -287,61 +357,67 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
 
-  // Empty State
+  // Empty state
   emptyState: {
     alignItems: 'center',
     paddingVertical: Spacing.xxxl,
   },
-
   emptyTitle: {
     fontSize: FontSize.lg,
     fontWeight: '600',
     color: Colors.textSecondary,
     marginTop: Spacing.lg,
   },
-
   emptySubtitle: {
     fontSize: FontSize.md,
     color: Colors.textLight,
     marginTop: Spacing.sm,
   },
 
-  // Weapon Card
+  // Weapon card
   weaponCard: {
     backgroundColor: Colors.backgroundCard,
     borderRadius: BorderRadius.lg,
     padding: Spacing.lg,
     marginBottom: Spacing.md,
+    borderWidth: 2,
+    borderColor: 'transparent',
     ...Shadows.small,
   },
-
+  weaponCardSelected: {
+    borderColor: Colors.arme,
+    backgroundColor: '#EFF6FF',
+  },
   weaponHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: Spacing.md,
   },
-
   weaponCategory: {
     fontSize: FontSize.lg,
     fontWeight: '600',
     color: Colors.text,
+    flex: 1,
+    textAlign: 'right',
+  },
+  checkbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#CBD5E1',
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: Spacing.sm,
+  },
+  checkboxChecked: {
+    backgroundColor: Colors.arme,
+    borderColor: Colors.arme,
   },
 
-  statusBadge: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.xs,
-    borderRadius: BorderRadius.full,
-    backgroundColor: Colors.warning,
-  },
-
-  statusText: {
-    fontSize: FontSize.sm,
-    fontWeight: '600',
-    color: Colors.textWhite,
-  },
-
-  // Serial Number
+  // Serial
   serialContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -352,7 +428,6 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.md,
     gap: Spacing.sm,
   },
-
   serialNumber: {
     fontSize: FontSize.lg,
     fontWeight: '700',
@@ -360,60 +435,54 @@ const styles = StyleSheet.create({
     fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
   },
 
-  // Soldier Info
+  // Soldier info
   soldierInfo: {
     backgroundColor: Colors.backgroundInput,
     padding: Spacing.md,
     borderRadius: BorderRadius.md,
-    marginBottom: Spacing.md,
   },
-
   soldierRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: Spacing.xs,
   },
-
   soldierLabel: {
     fontSize: FontSize.sm,
     color: Colors.textSecondary,
     fontWeight: '600',
   },
-
   soldierValue: {
     fontSize: FontSize.sm,
     color: Colors.text,
   },
 
-  // Storage Button
-  storageButton: {
+  // Bottom action bar
+  actionBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#fff',
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    paddingBottom: Platform.OS === 'ios' ? 28 : Spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+    ...Shadows.medium,
+  },
+  actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Colors.info,
-    paddingVertical: Spacing.md,
-    borderRadius: BorderRadius.md,
     gap: Spacing.sm,
+    backgroundColor: Colors.arme,
+    paddingVertical: 14,
+    borderRadius: BorderRadius.lg,
   },
-
-  storageButtonText: {
+  actionButtonText: {
     fontSize: FontSize.base,
-    fontWeight: '600',
-    color: Colors.textWhite,
-  },
-
-  // Overlay
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  overlayText: {
-    marginTop: Spacing.md,
-    fontSize: FontSize.base,
-    color: Colors.textWhite,
+    fontWeight: '700',
+    color: '#fff',
   },
 });
 

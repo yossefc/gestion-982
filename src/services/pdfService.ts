@@ -1,7 +1,260 @@
 // Service de génération de PDF pour les attributions d'équipement
 import * as Print from 'expo-print';
 import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
+import { Platform } from 'react-native';
 import { Assignment } from '../types';
+
+// ============================================================
+// STORAGE (אפסון) PDF — אישור על אפסון ארמו"י
+// ============================================================
+
+export interface StorageWeaponItem {
+  category: string;
+  serialNumber: string;
+  notes?: string;
+}
+
+export interface StoragePDFData {
+  // Weapon owner — the soldier the weapon is signed to
+  ownerName: string;
+  ownerPersonalNumber: string;
+  ownerRank?: string;
+  ownerCompany?: string;
+  ownerPhone?: string;
+  // Depositor — may differ from owner (גורם מאפסן)
+  depositorName?: string;
+  depositorPersonalNumber?: string;
+  depositorRank?: string;
+  depositorPhone?: string;
+  // Dates
+  storageDate: Date;
+  plannedReturnDate: Date;
+  // Weapons selected for storage
+  weapons: StorageWeaponItem[];
+}
+
+/**
+ * Generates and prints/shares the אפסון confirmation document.
+ * iOS: triggers system print dialog.
+ * Android: exports PDF via Share sheet.
+ */
+export async function generateStoragePDF(data: StoragePDFData): Promise<void> {
+  const html = generateStorageHTML(data);
+  if (Platform.OS === 'ios') {
+    await Print.printAsync({ html });
+  } else {
+    const { uri } = await Print.printToFileAsync({ html, base64: false });
+    await Sharing.shareAsync(uri, {
+      mimeType: 'application/pdf',
+      UTI: 'com.adobe.pdf',
+      dialogTitle: 'אישור אפסון',
+    });
+  }
+}
+
+function generateStorageHTML(data: StoragePDFData): string {
+  const fmt = (d: Date) =>
+    d.toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+  const storageDateStr = fmt(data.storageDate);
+  const returnDateStr = fmt(data.plannedReturnDate);
+
+  const weaponRows = data.weapons
+    .map(
+      (w, i) => `
+    <tr>
+      <td class="c">${i + 1}</td>
+      <td class="r">${w.category}</td>
+      <td class="c">1</td>
+      <td class="c">${w.serialNumber}</td>
+      <td class="r">${w.notes || ''}</td>
+    </tr>`
+    )
+    .join('');
+
+  return `<!DOCTYPE html>
+<html dir="rtl" lang="he">
+<head>
+<meta charset="utf-8">
+<style>
+  @page { size: A4 portrait; margin: 9mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { overflow: hidden; }
+  body {
+    font-family: Arial, 'David', sans-serif;
+    direction: rtl;
+    text-align: right;
+    font-size: 9px;
+    line-height: 1.35;
+    color: #000;
+  }
+  h1 {
+    text-align: center;
+    font-size: 13px;
+    font-weight: bold;
+    text-decoration: underline;
+    margin-bottom: 7px;
+  }
+  .dates-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 9.5px;
+    margin-bottom: 9px;
+  }
+  .sec-label {
+    font-weight: bold;
+    font-size: 9.5px;
+    text-decoration: underline;
+    margin-bottom: 3px;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 8px;
+  }
+  th {
+    border: 1px solid #000;
+    padding: 3px 5px;
+    background: #d8d8d8;
+    font-size: 9px;
+    font-weight: bold;
+    text-align: center;
+  }
+  td {
+    border: 1px solid #000;
+    padding: 3px 5px;
+    font-size: 9px;
+    height: 22px;
+  }
+  td.c { text-align: center; }
+  td.r { text-align: right; }
+  .depositor-box {
+    border: 1px solid #000;
+    padding: 6px 8px;
+    margin-bottom: 8px;
+  }
+  .inline-fields {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 20px;
+    margin-bottom: 5px;
+  }
+  .fg { display: flex; align-items: baseline; gap: 3px; }
+  .fl { font-weight: bold; font-size: 9px; white-space: nowrap; }
+  .fv {
+    border-bottom: 1px solid #000;
+    min-width: 70px;
+    font-size: 9px;
+    padding: 0 2px;
+    display: inline-block;
+    min-height: 14px;
+  }
+  .fv-sig {
+    border-bottom: 1px solid #000;
+    min-width: 140px;
+    min-height: 14px;
+    display: inline-block;
+  }
+  .footer-note {
+    border-top: 1px solid #888;
+    padding-top: 4px;
+    font-size: 8px;
+    text-align: center;
+    margin-top: 7px;
+  }
+</style>
+</head>
+<body>
+
+<h1>אישור על אפסון ארמו"י (במקום ט' 1082)</h1>
+
+<div class="dates-row">
+  <span><b>תאריך האפסון:</b> ${storageDateStr}</span>
+  <span><b>תאריך מתוכנן של חזרת החייל:</b> ${returnDateStr}</span>
+</div>
+
+<!-- Table 1: weapon owner -->
+<div class="sec-label">פרטי החייל (שחתום על הארמו"י)</div>
+<table>
+  <thead><tr>
+    <th style="width:12%">מ.א.</th>
+    <th style="width:20%">שם ומשפחה</th>
+    <th style="width:10%">דרגה</th>
+    <th style="width:13%">מסגרת</th>
+    <th style="width:14%">מס' טל' נייד</th>
+    <th style="width:16%">חתימה</th>
+    <th style="width:15%">הערות</th>
+  </tr></thead>
+  <tbody><tr>
+    <td class="c">${data.ownerPersonalNumber}</td>
+    <td class="r">${data.ownerName}</td>
+    <td class="c">${data.ownerRank || ''}</td>
+    <td class="c">${data.ownerCompany || ''}</td>
+    <td class="c">${data.ownerPhone || ''}</td>
+    <td></td>
+    <td></td>
+  </tr></tbody>
+</table>
+
+<!-- Depositor section -->
+<div class="depositor-box">
+  <div class="sec-label" style="margin-bottom:5px">פרטי גורם מאפסן (במידה והמאפסן אינו חתום על הציוד)</div>
+  <div class="inline-fields">
+    <div class="fg"><span class="fl">שם המאפסן:</span><span class="fv">${data.depositorName || ''}</span></div>
+    <div class="fg"><span class="fl">מ.א:</span><span class="fv">${data.depositorPersonalNumber || ''}</span></div>
+    <div class="fg"><span class="fl">דרגה:</span><span class="fv">${data.depositorRank || ''}</span></div>
+    <div class="fg"><span class="fl">טלפון:</span><span class="fv">${data.depositorPhone || ''}</span></div>
+  </div>
+  <div class="fg"><span class="fl">חתימה:</span><span class="fv-sig"></span></div>
+</div>
+
+<!-- Table 2: equipment list -->
+<div class="sec-label">פריטים לאפסון</div>
+<table>
+  <thead><tr>
+    <th style="width:7%">מס"ד</th>
+    <th style="width:30%">שם פריט</th>
+    <th style="width:9%">כמות</th>
+    <th style="width:32%">מזהה (מסט"ב)</th>
+    <th style="width:22%">הערות</th>
+  </tr></thead>
+  <tbody>${weaponRows}</tbody>
+</table>
+
+<!-- Table 3: armoury receiver — left blank -->
+<div class="sec-label">פרטי הגורם המקבל במחסן</div>
+<table>
+  <thead><tr>
+    <th style="width:14%">מ.א.</th>
+    <th style="width:26%">שם ומשפחה</th>
+    <th style="width:14%">דרגה</th>
+    <th style="width:22%">חתימה</th>
+    <th style="width:24%">הערות</th>
+  </tr></thead>
+  <tbody><tr><td></td><td></td><td></td><td></td><td></td></tr></tbody>
+</table>
+
+<!-- Table 4: retrieval — left blank -->
+<div class="sec-label">פרטי החייל שמושך את הארמו"י מהאפסון</div>
+<table>
+  <thead><tr>
+    <th style="width:14%">מ.א.</th>
+    <th style="width:26%">שם ומשפחה</th>
+    <th style="width:14%">דרגה</th>
+    <th style="width:20%">תאריך</th>
+    <th style="width:26%">חתימה</th>
+  </tr></thead>
+  <tbody><tr><td></td><td></td><td></td><td></td><td></td></tr></tbody>
+</table>
+
+<div class="footer-note">
+  טופס זה יישמר למשך כשלושה חודשים במחסן לאחר הניפוק חזרה לחייל המאפסן.
+</div>
+
+</body>
+</html>`;
+}
 
 /**
  * Génère un PDF 1 page A4 pour une attribution d'équipement

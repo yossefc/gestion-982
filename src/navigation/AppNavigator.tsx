@@ -38,6 +38,7 @@ import AssignWeaponScreen from '../screens/arme/AssignWeaponScreen';
 import WeaponStorageScreen from '../screens/arme/WeaponStorageScreen';
 import UnprintedSignaturesScreen from '../screens/arme/UnprintedSignaturesScreen';
 import InventoryReportScreen from '../screens/arme/InventoryReportScreen';
+import PlugaReportScreen from '../screens/arme/PlugaReportScreen';
 import AdminPanelScreen from '../screens/admin/AdminPanelScreen';
 import UserManagementScreen from '../screens/admin/UserManagementScreen';
 import ProfileScreen from '../screens/profile/ProfileScreen';
@@ -124,6 +125,7 @@ const AppNavigator: React.FC = () => {
               <Stack.Screen name="WeaponStorage" component={WeaponStorageScreen} />
               <Stack.Screen name="UnprintedSignatures" component={UnprintedSignaturesScreen} />
               <Stack.Screen name="InventoryReport" component={InventoryReportScreen} />
+              <Stack.Screen name="PlugaReport" component={PlugaReportScreen} />
 
               {/* Module Admin */}
               <Stack.Screen name="AdminPanel" component={AdminPanelScreen} />

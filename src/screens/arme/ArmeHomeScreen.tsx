@@ -10,6 +10,7 @@ import {
   ScrollView,
   ActivityIndicator,
   RefreshControl,
+  Alert,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
@@ -38,6 +39,26 @@ const ArmeHomeScreen: React.FC = () => {
   const { equipment, loading: equipmentLoading } = useCombatEquipment();
 
   const [refreshing, setRefreshing] = useState(false);
+
+  // Rapport menu
+  const showReportMenu = () => {
+    Alert.alert(
+      'דוחות',
+      'בחר סוג דוח',
+      [
+        {
+          text: 'דוח מלאי',
+          onPress: () => navigation.navigate('InventoryReport'),
+        },
+        {
+          text: 'דוח ציוד חתום לפי פלוגה',
+          onPress: () => navigation.navigate('PlugaReport'),
+        },
+        { text: 'ביטול', style: 'cancel' as const },
+      ],
+      { cancelable: true }
+    );
+  };
 
   // Calcul des stats depuis le cache
   const stats = {
@@ -145,7 +166,7 @@ const ArmeHomeScreen: React.FC = () => {
       title: 'דוחות',
       icon: '📊',
       color: '#FF5722',
-      action: () => navigation.navigate('InventoryReport'),
+      action: showReportMenu,
     },
   ];
 
