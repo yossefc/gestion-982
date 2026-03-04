@@ -53,7 +53,7 @@ export async function generateStoragePDF(data: StoragePDFData): Promise<void> {
   }
 }
 
-function generateStorageHTML(data: StoragePDFData): string {
+export function generateStorageHTML(data: StoragePDFData): string {
   const fmt = (d: Date) =>
     d.toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit', year: 'numeric' });
 

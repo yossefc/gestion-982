@@ -19,10 +19,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
 import { weaponInventoryService } from '../../services/weaponInventoryService';
-import { generateStoragePDF, StoragePDFData } from '../../services/pdfService';
+import { generateStorageHTML, StoragePDFData } from '../../services/pdfService';
 import { WeaponInventoryItem } from '../../types';
 import { AppModal, ModalType } from '../../components';
 import WeaponStorageFormModal, { StorageFormResult } from './WeaponStorageFormModal';
+import StorageDocumentViewerModal from './StorageDocumentViewerModal';
 
 const WeaponStorageScreen: React.FC = () => {
   const navigation = useNavigation<any>();
@@ -36,6 +37,11 @@ const WeaponStorageScreen: React.FC = () => {
 
   // Form modal state
   const [formModalVisible, setFormModalVisible] = useState(false);
+
+  // Document viewer state (shown after storage is confirmed)
+  const [viewerVisible, setViewerVisible] = useState(false);
+  const [viewerHTML, setViewerHTML] = useState('');
+  const [viewerPdfData, setViewerPdfData] = useState<StoragePDFData | null>(null);
 
   // Feedback modal state
   const [modalVisible, setModalVisible] = useState(false);
@@ -118,12 +124,14 @@ const WeaponStorageScreen: React.FC = () => {
         })),
       };
 
-      // 3. Generate and share the PDF
-      await generateStoragePDF(pdfData);
+      // 3. Build HTML and open document viewer
+      const html = generateStorageHTML(pdfData);
+      setViewerPdfData(pdfData);
+      setViewerHTML(html);
 
       setFormModalVisible(false);
       setSelectedIds(new Set());
-      showModal('success', `${selectedWeapons.length} נשקים הועברו לאפסון`, 'אפסון הצליח');
+      setViewerVisible(true);
       loadAssignedWeapons();
     } catch (error) {
       console.error('Error during storage:', error);
@@ -262,6 +270,16 @@ const WeaponStorageScreen: React.FC = () => {
         onClose={() => !formLoading && setFormModalVisible(false)}
         onConfirm={handleConfirmStorage}
       />
+
+      {/* Document viewer — shown after successful storage */}
+      {viewerPdfData && (
+        <StorageDocumentViewerModal
+          visible={viewerVisible}
+          html={viewerHTML}
+          pdfData={viewerPdfData}
+          onClose={() => setViewerVisible(false)}
+        />
+      )}
 
       {/* Feedback modal */}
       <AppModal

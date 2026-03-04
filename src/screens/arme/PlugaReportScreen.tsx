@@ -49,41 +49,84 @@ const PlugaReportScreen: React.FC = () => {
     const [printing, setPrinting] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    // Load all combat holdings once
+    // Load all combat holdings — ONE Firestore query, computed in-memory
     useEffect(() => {
         const load = async () => {
             try {
                 setLoading(true);
                 setError(null);
-                const raw = await assignmentService.getSoldiersWithCurrentHoldings('combat');
-                // Fetch company info – we need it from a broader query since
-                // getSoldiersWithCurrentHoldings doesn't return soldierCompany.
-                // We pull all assignments and extract the latest company per soldier.
+
+                // Single Firestore read — all combat assignments
                 const allAssignments = await assignmentService.getAssignmentsByType('combat');
 
-                // Map: soldierId → most recent soldierCompany
-                const companyMap = new Map<string, string>();
-                const sorted = [...allAssignments].sort(
-                    (a, b) => b.timestamp.getTime() - a.timestamp.getTime()
+                // Sort oldest→newest so we can replay history in order
+                const byAge = [...allAssignments].sort(
+                    (a, b) => a.timestamp.getTime() - b.timestamp.getTime()
                 );
-                for (const a of sorted) {
-                    if (!companyMap.has(a.soldierId) && a.soldierCompany) {
-                        companyMap.set(a.soldierId, a.soldierCompany);
+
+                // Maps: soldierId → data
+                const nameMap = new Map<string, string>();
+                const pnMap = new Map<string, string>();
+                const companyMap = new Map<string, string>();
+
+                // holdings: soldierId → equipmentId → { name, qty, serial }
+                const holdingsMap = new Map<string, Map<string, { name: string; qty: number; serial?: string }>>();
+
+                for (const a of byAge) {
+                    nameMap.set(a.soldierId, a.soldierName);
+                    pnMap.set(a.soldierId, a.soldierPersonalNumber);
+                    if (a.soldierCompany) companyMap.set(a.soldierId, a.soldierCompany);
+
+                    if (!holdingsMap.has(a.soldierId)) {
+                        holdingsMap.set(a.soldierId, new Map());
+                    }
+                    const soldier = holdingsMap.get(a.soldierId)!;
+                    const action = a.action || 'issue';
+
+                    for (const item of a.items) {
+                        const key = item.equipmentId;
+                        if (action === 'issue' || action === 'add') {
+                            if (soldier.has(key)) {
+                                const ex = soldier.get(key)!;
+                                ex.qty += item.quantity;
+                                if (item.serial && !ex.serial?.includes(item.serial)) {
+                                    ex.serial = ex.serial ? `${ex.serial}, ${item.serial}` : item.serial;
+                                }
+                            } else {
+                                soldier.set(key, { name: item.equipmentName, qty: item.quantity, serial: item.serial });
+                            }
+                        } else if (action === 'credit' || action === 'return') {
+                            if (soldier.has(key)) {
+                                const ex = soldier.get(key)!;
+                                ex.qty -= item.quantity;
+                                if (ex.qty <= 0) soldier.delete(key);
+                            }
+                        }
+                        // storage / retrieve — no quantity change
                     }
                 }
 
-                const holdings: SoldierHolding[] = raw.map(r => ({
-                    soldierId: r.soldierId,
-                    soldierName: r.soldierName,
-                    soldierPersonalNumber: r.soldierPersonalNumber,
-                    soldierCompany: companyMap.get(r.soldierId) || '',
-                    items: r.items.map(i => ({
-                        equipmentId: i.equipmentId,
-                        equipmentName: i.equipmentName,
-                        quantity: i.quantity,
-                        serial: i.serial,
-                    })),
-                }));
+                // Build final SoldierHolding array
+                const holdings: SoldierHolding[] = [];
+                for (const [soldierId, itemsMap] of holdingsMap.entries()) {
+                    const positiveItems = Array.from(itemsMap.entries())
+                        .filter(([, v]) => v.qty > 0)
+                        .map(([equipmentId, v]) => ({
+                            equipmentId,
+                            equipmentName: v.name,
+                            quantity: v.qty,
+                            serial: v.serial,
+                        }));
+                    if (positiveItems.length > 0) {
+                        holdings.push({
+                            soldierId,
+                            soldierName: nameMap.get(soldierId) || '',
+                            soldierPersonalNumber: pnMap.get(soldierId) || '',
+                            soldierCompany: companyMap.get(soldierId) || '',
+                            items: positiveItems,
+                        });
+                    }
+                }
 
                 setAllHoldings(holdings);
             } catch (e: any) {
@@ -124,26 +167,26 @@ const PlugaReportScreen: React.FC = () => {
                     <Text style={styles.groupCount}>{group.total} יח'</Text>
                 </View>
 
-                {/* Column headers */}
+                {/* Column headers — RTL order: מסט"ב | שם פריט | מ.א. | שם החייל | מס"ד */}
                 <View style={[styles.tableRow, styles.columnHeader]}>
-                    <Text style={[styles.colIdx, styles.colHeaderText]}>מס"ד</Text>
-                    <Text style={[styles.colName, styles.colHeaderText]}>שם החייל</Text>
-                    <Text style={[styles.colPN, styles.colHeaderText]}>מ.א.</Text>
                     <Text style={[styles.colSerial, styles.colHeaderText]}>מסט"ב</Text>
+                    <Text style={[styles.colPN, styles.colHeaderText]}>מ.א.</Text>
+                    <Text style={[styles.colName, styles.colHeaderText]}>שם החייל</Text>
+                    <Text style={[styles.colIdx, styles.colHeaderText]}>מס"ד</Text>
                 </View>
 
-                {/* Data rows */}
+                {/* Data rows — RTL order */}
                 {group.rows.map((row, idx) => (
                     <View
                         key={`${row.soldierPersonalNumber}-${row.serial}`}
                         style={[styles.tableRow, idx % 2 === 0 ? styles.rowEven : styles.rowOdd]}
                     >
-                        <Text style={[styles.colIdx, styles.cellText]}>{idx + 1}</Text>
+                        <Text style={[styles.colSerial, styles.cellText]}>{row.serial}</Text>
+                        <Text style={[styles.colPN, styles.cellText]}>{row.soldierPersonalNumber}</Text>
                         <Text style={[styles.colName, styles.cellText]} numberOfLines={1}>
                             {row.soldierName}
                         </Text>
-                        <Text style={[styles.colPN, styles.cellText]}>{row.soldierPersonalNumber}</Text>
-                        <Text style={[styles.colSerial, styles.cellText]}>{row.serial}</Text>
+                        <Text style={[styles.colIdx, styles.cellText]}>{idx + 1}</Text>
                     </View>
                 ))}
 
@@ -283,7 +326,7 @@ const styles = StyleSheet.create({
 
     // Company picker
     companyBar: {
-        maxHeight: 52,
+        height: 56,
         backgroundColor: '#fff',
         borderBottomWidth: 1,
         borderBottomColor: '#e0e0e0',
@@ -291,8 +334,8 @@ const styles = StyleSheet.create({
     companyBarContent: {
         paddingHorizontal: 12,
         paddingVertical: 8,
-        gap: 8,
         flexDirection: 'row',
+        alignItems: 'center',
     },
     companyChip: {
         paddingHorizontal: 14,
@@ -301,6 +344,7 @@ const styles = StyleSheet.create({
         borderWidth: 1.5,
         borderColor: Colors.arme,
         backgroundColor: '#fff',
+        marginRight: 8,
     },
     companyChipActive: {
         backgroundColor: Colors.arme,
@@ -363,14 +407,14 @@ const styles = StyleSheet.create({
         borderRadius: 10,
     },
 
-    // Table
+    // Table — RTL layout
     columnHeader: {
         backgroundColor: '#eceff1',
         paddingVertical: 6,
     },
-    colHeaderText: { fontWeight: 'bold', fontSize: 11, color: '#333' },
+    colHeaderText: { fontWeight: 'bold', fontSize: 11, color: '#333', textAlign: 'center' },
     tableRow: {
-        flexDirection: 'row',
+        flexDirection: 'row',          // RTL: items placed right→left
         paddingHorizontal: 8,
         paddingVertical: 6,
         borderBottomWidth: 0.5,
@@ -380,11 +424,11 @@ const styles = StyleSheet.create({
     rowEven: { backgroundColor: '#fff' },
     rowOdd: { backgroundColor: '#f5f5f5' },
 
-    // Columns
+    // Columns (widths unchanged, alignment RTL)
     colIdx: { width: 36, textAlign: 'center' },
-    colName: { flex: 1, textAlign: 'right', paddingRight: 4 },
+    colName: { flex: 1, textAlign: 'right', paddingHorizontal: 4 },
     colPN: { width: 72, textAlign: 'center' },
-    colSerial: { width: 80, textAlign: 'center' },
+    colSerial: { width: 90, textAlign: 'center' },
     cellText: { fontSize: 11, color: '#222' },
 
     // Total row
