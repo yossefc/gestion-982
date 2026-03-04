@@ -57,6 +57,7 @@ interface IssueEquipmentParams {
   assignedBy: string;
   assignedByName?: string;
   assignedByRank?: string;
+  assignedByPersonalNumber?: string;
   requestId: string; // ID stable pour l'idempotence
 }
 
@@ -83,6 +84,7 @@ interface AddEquipmentParams {
   addedBy: string;
   addedByName?: string;
   addedByRank?: string;
+  addedByPersonalNumber?: string;
   requestId: string;
 }
 
@@ -553,6 +555,7 @@ export async function issueEquipment(params: IssueEquipmentParams): Promise<stri
     assignedBy,
     assignedByName,
     assignedByRank,
+    assignedByPersonalNumber,
     requestId,
   } = params;
 
@@ -590,6 +593,7 @@ export async function issueEquipment(params: IssueEquipmentParams): Promise<stri
     if (signaturePdfUrl) assignmentData.signaturePdfUrl = signaturePdfUrl;
     if (assignedByName) assignmentData.assignedByName = assignedByName;
     if (assignedByRank) assignmentData.assignedByRank = assignedByRank;
+    if (assignedByPersonalNumber) assignmentData.assignedByPersonalNumber = assignedByPersonalNumber;
 
     transaction.set(assignmentRef, assignmentData);
 
@@ -781,6 +785,7 @@ export async function addEquipment(params: AddEquipmentParams): Promise<string> 
     addedBy,
     addedByName,
     addedByRank,
+    addedByPersonalNumber,
     requestId,
   } = params;
 
@@ -818,6 +823,7 @@ export async function addEquipment(params: AddEquipmentParams): Promise<string> 
     if (signaturePdfUrl) assignmentData.signaturePdfUrl = signaturePdfUrl;
     if (addedByName) assignmentData.assignedByName = addedByName;
     if (addedByRank) assignmentData.assignedByRank = addedByRank;
+    if (addedByPersonalNumber) assignmentData.assignedByPersonalNumber = addedByPersonalNumber;
 
     transaction.set(assignmentRef, assignmentData);
 

@@ -342,12 +342,12 @@ function generateAssignmentHTML(assignment: Assignment): string {
         <span class="signature-value">${operatorText}</span>
       </div>
       <div class="signature-row">
-        <span class="signature-label">דרגה:</span>
-        <span class="signature-value"></span>
+        <span class="signature-label">מ"א:</span>
+        <span class="signature-value">${assignment.assignedByPersonalNumber || ''}</span>
       </div>
       <div class="signature-row">
-        <span class="signature-label">מ"א:</span>
-        <span class="signature-value"></span>
+        <span class="signature-label">דרגה:</span>
+        <span class="signature-value">${assignment.assignedByRank || ''}</span>
       </div>
       <div class="signature-row">
         <span class="signature-label">תאריך:</span>

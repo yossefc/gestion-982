@@ -92,7 +92,7 @@ export const getAllEquipmentStocks = async (): Promise<EquipmentStock[]> => {
 
     if (!stock) {
       stock = {
-        equipmentId: isRealWeapon ? `WEAPON_${weapon.category}` : (originalGear?.id || `GEAR_${weapon.category}`),
+        equipmentId: `WEAPON_${weapon.category}`,
         equipmentName: weapon.category,
         category: realCategory,
         available: 0,
@@ -258,6 +258,12 @@ export const getAllEquipmentStocks = async (): Promise<EquipmentStock[]> => {
       })),
     }))
     .sort((a, b) => {
+      // Weapons always at the top
+      const aIsWeapon = a.equipmentId.startsWith('WEAPON_');
+      const bIsWeapon = b.equipmentId.startsWith('WEAPON_');
+      if (aIsWeapon && !bIsWeapon) return -1;
+      if (!aIsWeapon && bIsWeapon) return 1;
+
       const orderCompare = getCombatCategorySortRank(a.category) - getCombatCategorySortRank(b.category);
       if (orderCompare !== 0) return orderCompare;
       const catCompare = a.category.localeCompare(b.category, 'he');

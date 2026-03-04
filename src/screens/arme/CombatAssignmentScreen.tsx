@@ -446,6 +446,7 @@ const CombatAssignmentScreen: React.FC = () => {
           addedBy: user?.id || '',
           addedByName: user?.displayName || user?.name || user?.email || '',
           addedByRank: user?.rank || '',
+          addedByPersonalNumber: user?.personalNumber || '',
           requestId,
         })
         : await transactionalAssignmentService.issueEquipment({
@@ -460,6 +461,7 @@ const CombatAssignmentScreen: React.FC = () => {
           assignedBy: user?.id || '',
           assignedByName: user?.displayName || user?.name || user?.email || '',
           assignedByRank: user?.rank || '',
+          assignedByPersonalNumber: user?.personalNumber || '',
           requestId,
         });
 
