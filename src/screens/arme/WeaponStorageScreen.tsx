@@ -19,6 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
 import { weaponInventoryService } from '../../services/weaponInventoryService';
+import { assignmentService } from '../../services/firebaseService';
 import { generateStorageHTML, StoragePDFData } from '../../services/pdfService';
 import { WeaponInventoryItem } from '../../types';
 import { AppModal, ModalType } from '../../components';
@@ -111,10 +112,25 @@ const WeaponStorageScreen: React.FC = () => {
 
       // 2. Build PDF data — use first weapon's owner as the signing soldier
       const firstWeapon = selectedWeapons[0];
+      let voucherNumber = firstWeapon.assignedTo?.voucherNumber;
+      if (!voucherNumber && firstWeapon.assignedTo?.soldierId) {
+        try {
+          const soldierAssignments = await assignmentService.getBySoldier(firstWeapon.assignedTo.soldierId);
+          const latestCombatVoucher = soldierAssignments.find(
+            (a: any) =>
+              a.type === 'combat' &&
+              (a.action === undefined || a.action === 'issue' || a.action === 'add')
+          );
+          voucherNumber = latestCombatVoucher?.id;
+        } catch (voucherErr) {
+          console.warn('[WeaponStorage] Could not resolve voucher number from assignments:', voucherErr);
+        }
+      }
+
       const pdfData: StoragePDFData = {
         ownerName: firstWeapon.assignedTo?.soldierName || '',
         ownerPersonalNumber: firstWeapon.assignedTo?.soldierPersonalNumber || '',
-        voucherNumber: firstWeapon.assignedTo?.voucherNumber,
+        voucherNumber,
         // rank / company not available in WeaponInventoryItem.assignedTo
         depositorName: formData.depositor?.name,
         depositorPersonalNumber: formData.depositor?.personalNumber,

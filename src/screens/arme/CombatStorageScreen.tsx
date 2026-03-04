@@ -14,7 +14,7 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import SignatureCanvas from 'react-native-signature-canvas';
 import { Ionicons } from '@expo/vector-icons';
 import { RootStackParamList, Soldier, AssignmentItem } from '../../types';
-import { soldierService } from '../../services/firebaseService';
+import { soldierService, assignmentService } from '../../services/firebaseService';
 import { transactionalAssignmentService } from '../../services/transactionalAssignmentService';
 import { weaponInventoryService } from '../../services/weaponInventoryService';
 import { generateStorageHTML, generateStoragePDF, StoragePDFData } from '../../services/pdfService';
@@ -312,6 +312,20 @@ const CombatStorageScreen: React.FC = () => {
               }
             }
             if (updatePromises.length > 0) await Promise.all(updatePromises);
+
+            if (!detectedVoucherNumber && soldierId) {
+              try {
+                const soldierAssignments = await assignmentService.getBySoldier(soldierId);
+                const latestCombatVoucher = soldierAssignments.find(
+                  (a: any) =>
+                    a.type === 'combat' &&
+                    (a.action === undefined || a.action === 'issue' || a.action === 'add')
+                );
+                detectedVoucherNumber = latestCombatVoucher?.id;
+              } catch (voucherErr) {
+                console.warn('[CombatStorage] Could not resolve voucher number from assignments:', voucherErr);
+              }
+            }
 
             // ── Build PDF data ────────────────────────────────────────────────
             const { day, month, year } = dateState;

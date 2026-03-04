@@ -115,140 +115,148 @@ export function generateStorageHTML(data: StoragePDFData): string {
 <head>
 <meta charset="utf-8">
 <style>
-  @page { size: A4 portrait; margin: 9mm; }
+  @page { size: A4 portrait; margin: 5mm; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { overflow: visible; }
   body {
     font-family: Arial, 'David', sans-serif;
     direction: rtl;
     text-align: right;
-    font-size: 10.5px;
-    line-height: 1.45;
+    font-size: 12.5px;
+    line-height: 1.28;
     color: #000;
+  }
+  .page {
+    min-height: calc(297mm - 10mm);
+    display: flex;
+    flex-direction: column;
   }
   h1 {
     text-align: center;
-    font-size: 18px;
+    font-size: 22px;
     font-weight: bold;
     text-decoration: underline;
-    margin-bottom: 9px;
+    margin-bottom: 6px;
   }
   .voucher-box {
     text-align: right;
-    font-size: 12px;
-    margin-bottom: 7px;
+    font-size: 14px;
+    margin-bottom: 4px;
   }
   .voucher-val {
     font-weight: bold;
     text-decoration: underline;
-    letter-spacing: 1px;
-    font-size: 16px;
+    letter-spacing: 0.8px;
+    font-size: 18px;
   }
   .dates-row {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 6px;
     justify-content: space-between;
-    font-size: 12px;
-    margin-bottom: 10px;
+    font-size: 13px;
+    margin-bottom: 6px;
   }
   .date-pill {
     background: #fff4bf;
     border: 2px solid #f59e0b;
-    border-radius: 8px;
-    padding: 6px 10px;
+    border-radius: 6px;
+    padding: 4px 8px;
     font-weight: 700;
   }
   .sec-label {
     font-weight: bold;
-    font-size: 12px;
+    font-size: 13px;
     text-decoration: underline;
-    margin-bottom: 5px;
+    margin-bottom: 3px;
   }
   table {
     width: 100%;
     border-collapse: collapse;
-    margin-bottom: 10px;
+    margin-bottom: 5px;
   }
   th {
     border: 1px solid #000;
-    padding: 5px 6px;
+    padding: 3px 4px;
     background: #d8d8d8;
-    font-size: 10.5px;
+    font-size: 11.5px;
     font-weight: bold;
     text-align: center;
+    line-height: 1.15;
   }
   td {
     border: 1px solid #000;
-    padding: 6px 6px;
-    font-size: 10.5px;
-    height: 32px;
+    padding: 3px 4px;
+    font-size: 11.5px;
+    height: 28px;
+    line-height: 1.15;
   }
   td.c { text-align: center; }
   td.r { text-align: right; }
   .signature-cell {
     text-align: center;
     vertical-align: middle;
-    height: 72px;
+    height: 56px;
     background: #fffef7;
   }
   .signature-frame {
     width: 100%;
-    min-height: 56px;
+    min-height: 44px;
     border: 1px dashed #777;
-    border-radius: 6px;
+    border-radius: 4px;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 4px;
+    padding: 2px;
   }
   .depositor-box {
     border: 1px solid #000;
-    padding: 9px 10px;
-    margin-bottom: 10px;
+    padding: 5px 6px;
+    margin-bottom: 5px;
   }
   .inline-fields {
     display: flex;
     flex-wrap: wrap;
-    gap: 4px 20px;
-    margin-bottom: 7px;
+    gap: 2px 12px;
+    margin-bottom: 4px;
   }
   .fg { display: flex; align-items: baseline; gap: 3px; }
-  .fl { font-weight: bold; font-size: 10.5px; white-space: nowrap; }
+  .fl { font-weight: bold; font-size: 11.5px; white-space: nowrap; }
   .fv {
     border-bottom: 1px solid #000;
-    min-width: 90px;
-    font-size: 10.5px;
+    min-width: 86px;
+    font-size: 11.5px;
     padding: 0 2px;
     display: inline-block;
-    min-height: 18px;
+    min-height: 16px;
   }
   .fv-sig {
     border-bottom: 1px solid #000;
-    min-width: 220px;
-    min-height: 64px;
+    min-width: 180px;
+    min-height: 50px;
     display: inline-block;
     vertical-align: middle;
-    padding: 2px 4px;
+    padding: 1px 2px;
     background: #fffef7;
   }
   .signature-img {
-    max-width: 210px;
-    max-height: 58px;
+    max-width: 190px;
+    max-height: 46px;
     object-fit: contain;
     display: block;
     margin: 0 auto;
   }
   .footer-note {
     border-top: 1px solid #888;
-    padding-top: 6px;
-    font-size: 9px;
+    padding-top: 4px;
+    font-size: 10.5px;
     text-align: center;
-    margin-top: 8px;
+    margin-top: auto;
   }
 </style>
 </head>
 <body>
+<div class="page">
 
 <div class="voucher-box">מספר שובר: <span class="voucher-val">${esc(voucherDisplay)}</span></div>
 
@@ -343,6 +351,7 @@ export function generateStorageHTML(data: StoragePDFData): string {
   טופס זה יישמר למשך כשלושה חודשים במחסן לאחר הניפוק חזרה לחייל המאפסן.
 </div>
 
+</div>
 </body>
 </html>`;
 }

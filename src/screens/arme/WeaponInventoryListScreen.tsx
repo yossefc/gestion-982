@@ -46,6 +46,7 @@ const WeaponInventoryListScreen: React.FC = () => {
   const [groupedWeapons, setGroupedWeapons] = useState<Map<string, WeaponInventoryItem[]>>(new Map());
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [activeFilter, setActiveFilter] = useState<FilterTab>('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const [stats, setStats] = useState({
     total: 0,
     available: 0,
@@ -193,7 +194,11 @@ const WeaponInventoryListScreen: React.FC = () => {
     }
   };
 
-  const applyFilter = (filter: FilterTab, weaponsList: WeaponInventoryItem[] = weapons) => {
+  const applyFilter = (
+    filter: FilterTab,
+    weaponsList: WeaponInventoryItem[] = weapons,
+    search: string = searchQuery
+  ) => {
     setActiveFilter(filter);
 
     let filtered: WeaponInventoryItem[];
@@ -217,6 +222,16 @@ const WeaponInventoryListScreen: React.FC = () => {
         filtered = weaponsList;
     }
 
+    // Apply search query across serial number, category and soldier name
+    const q = search.trim().toLowerCase();
+    if (q) {
+      filtered = filtered.filter((w) =>
+        w.serialNumber.toLowerCase().includes(q) ||
+        w.category.toLowerCase().includes(q) ||
+        (w.assignedTo?.soldierName || '').toLowerCase().includes(q)
+      );
+    }
+
     setFilteredWeapons(filtered);
 
     // Grouper par catégorie
@@ -234,6 +249,16 @@ const WeaponInventoryListScreen: React.FC = () => {
     });
 
     setGroupedWeapons(grouped);
+
+    // Auto-expand all matching categories when a search is active
+    if (q) {
+      setExpandedCategories(new Set(grouped.keys()));
+    }
+  };
+
+  const handleSearch = (query: string) => {
+    setSearchQuery(query);
+    applyFilter(activeFilter, weapons, query);
   };
 
   const onRefresh = () => {
@@ -727,6 +752,33 @@ const WeaponInventoryListScreen: React.FC = () => {
         </TouchableOpacity>
       </View>
 
+      {/* Search Bar */}
+      <View style={styles.searchContainer}>
+        <TouchableOpacity
+          style={styles.searchClearButton}
+          onPress={() => handleSearch('')}
+          disabled={!searchQuery}
+        >
+          <Ionicons
+            name={searchQuery ? 'close-circle' : 'search-outline'}
+            size={20}
+            color={searchQuery ? Colors.textSecondary : Colors.textLight}
+          />
+        </TouchableOpacity>
+        <TextInput
+          style={styles.searchInput}
+          value={searchQuery}
+          onChangeText={handleSearch}
+          placeholder="חפש לפי מסטב, קטגוריה או שם חייל..."
+          placeholderTextColor={Colors.textLight}
+          textAlign="right"
+          returnKeyType="search"
+          autoCorrect={false}
+          autoCapitalize="none"
+        />
+        <Ionicons name="search-outline" size={20} color={Colors.textSecondary} />
+      </View>
+
       {/* Weapons List */}
       <ScrollView
         style={styles.content}
@@ -739,9 +791,11 @@ const WeaponInventoryListScreen: React.FC = () => {
             <Ionicons name="cube-outline" size={64} color={Colors.textLight} />
             <Text style={styles.emptyTitle}>אין נשקים להצגה</Text>
             <Text style={styles.emptySubtitle}>
-              {activeFilter === 'all'
-                ? 'לחץ על + להוספת נשק למלאי'
-                : 'אין נשקים בסטטוס זה'}
+              {searchQuery.trim()
+                ? `אין תוצאות עבור "${searchQuery.trim()}"`
+                : activeFilter === 'all'
+                  ? 'לחץ על + להוספת נשק למלאי'
+                  : 'אין נשקים בסטטוס זה'}
             </Text>
           </View>
         ) : (
@@ -1001,6 +1055,33 @@ const styles = StyleSheet.create({
     fontSize: FontSize.base,
     fontWeight: '600',
     color: Colors.arme,
+  },
+
+  // Search Bar
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.backgroundCard,
+    marginHorizontal: Spacing.lg,
+    marginBottom: Spacing.md,
+    paddingHorizontal: Spacing.md,
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    ...Shadows.small,
+  },
+
+  searchInput: {
+    flex: 1,
+    fontSize: FontSize.base,
+    color: Colors.text,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.sm,
+    textAlign: 'right',
+  },
+
+  searchClearButton: {
+    padding: Spacing.xs,
   },
 
   // Filter Tabs
