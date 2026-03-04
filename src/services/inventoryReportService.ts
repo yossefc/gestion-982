@@ -10,6 +10,7 @@ export interface InventoryReportData {
   operatorRank?: string;
   operatorSignature?: string;
   timestamp: Date;
+  reportType: 'פתיחה' | 'סגירה';
 }
 
 const generateInventoryReportHTML = (data: InventoryReportData): string => {
@@ -185,7 +186,7 @@ const generateInventoryReportHTML = (data: InventoryReportData): string => {
   <div class="page-header">
     <div class="header-side" style="text-align:right;">תאריך: ${dateStr}</div>
     <div style="text-align:center; flex:1;">
-      <div class="doc-title">ספירת מחסן ארמו"ן – פתיחה / סגירה</div>
+      <div class="doc-title">ספירת מחסן ארמו"ן – ${data.reportType}</div>
       <div class="doc-subtitle">גדוד 982 | שעה: ${timeStr}</div>
     </div>
     <div class="header-side" style="text-align:left;"></div>
@@ -263,7 +264,7 @@ export const printInventoryReport = async (data: InventoryReportData): Promise<v
     if (canShare) {
       await Sharing.shareAsync(uri, {
         mimeType: 'application/pdf',
-        dialogTitle: 'ספירת מחסן ארמו"ן',
+        dialogTitle: `ספירת מחסן ארמו"ן – ${data.reportType}`,
         UTI: 'com.adobe.pdf',
       });
     } else {

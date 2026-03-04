@@ -32,6 +32,7 @@ interface StorageItem extends AssignmentItem {
   storageQuantity: number;
   availableSerials: string[];
   selectedSerials: string[];
+  status?: 'assigned' | 'stored';
 }
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
@@ -174,11 +175,9 @@ const CombatStorageScreen: React.FC = () => {
 
       const storageItems: StorageItem[] = currentItems
         .filter((item: any) => {
-          const isStored = item.status === 'stored' || item.status === 'storage';
           const hasQty = (item.quantity || 0) > 0;
-          if (isStored) console.log(`[CombatStorage] skip stored: ${item.equipmentName}`);
           if (!hasQty) console.log(`[CombatStorage] skip qty=0: ${item.equipmentName}`);
-          return !isStored && hasQty;
+          return hasQty;
         })
         .map((item: any) => ({
           itemKey: `${item.equipmentId}_${item.status || 'assigned'}`,
@@ -190,6 +189,7 @@ const CombatStorageScreen: React.FC = () => {
           storageQuantity: 0,
           availableSerials: item.serials || [],
           selectedSerials: [],
+          status: item.status,
         }));
 
       console.log(`[CombatStorage] Displaying ${storageItems.length} items`);
@@ -206,11 +206,13 @@ const CombatStorageScreen: React.FC = () => {
 
   const toggleItem = (itemKey: string) => {
     setItems(prev =>
-      prev.map(item =>
-        item.itemKey === itemKey
+      prev.map(item => {
+        const isStored = item.status === 'stored';
+        if (isStored) return item;
+        return item.itemKey === itemKey
           ? { ...item, selected: !item.selected, storageQuantity: !item.selected ? item.quantity : 0, selectedSerials: [] }
-          : item
-      )
+          : item;
+      })
     );
   };
 
@@ -218,6 +220,8 @@ const CombatStorageScreen: React.FC = () => {
     setItems(prev =>
       prev.map(item => {
         if (item.itemKey !== itemKey) return item;
+        const isStored = item.status === 'stored';
+        if (isStored) return item;
         return { ...item, storageQuantity: Math.max(0, Math.min(item.quantity, item.storageQuantity + delta)) };
       })
     );
@@ -544,60 +548,66 @@ const CombatStorageScreen: React.FC = () => {
           </View>
         ) : (
           <View style={styles.itemsList}>
-            {items.map(item => (
-              <View key={item.itemKey} style={[styles.itemCard, item.selected && styles.itemCardSelected]}>
-                {/* ── Row: checkbox + info + quantity inline ── */}
-                <View style={styles.itemRow}>
-                  <TouchableOpacity
-                    style={styles.itemHeaderTouch}
-                    onPress={() => toggleItem(item.itemKey)}
-                    disabled={processing}
-                  >
-                    <View style={styles.checkbox}>
-                      {item.selected && <Text style={styles.checkmark}>✓</Text>}
-                    </View>
-                    <View style={styles.itemInfoItems}>
-                      <View style={styles.itemNameContainer}>
-                        <Text style={styles.itemName} numberOfLines={1}>{item.equipmentName}</Text>
+            {items.map(item => {
+              const isStored = item.status === 'stored';
+              return (
+                <View key={item.itemKey} style={[styles.itemCard, item.selected && styles.itemCardSelected, isStored && { opacity: 0.6 }]}>
+                  {/* ── Row: checkbox + info + quantity inline ── */}
+                  <View style={styles.itemRow}>
+                    <TouchableOpacity
+                      style={styles.itemHeaderTouch}
+                      onPress={() => toggleItem(item.itemKey)}
+                      disabled={processing || isStored}
+                    >
+                      <View style={[styles.checkbox, isStored && { backgroundColor: Colors.border, borderColor: Colors.border }]}>
+                        {item.selected && <Text style={styles.checkmark}>✓</Text>}
                       </View>
-                      {item.availableSerials.length > 0 && (
-                        <View style={styles.serialDisplayContainer}>
-                          <Text style={styles.serialDisplayValue} numberOfLines={1}>
-                            {item.availableSerials.join(', ')}
-                          </Text>
+                      <View style={styles.itemInfoItems}>
+                        <View style={styles.itemNameContainer}>
+                          <Text style={[styles.itemName, isStored && { color: Colors.textSecondary }]} numberOfLines={1}>{item.equipmentName}</Text>
                         </View>
+                        {item.availableSerials.length > 0 && (
+                          <View style={styles.serialDisplayContainer}>
+                            <Text style={[styles.serialDisplayValue, isStored && { color: Colors.textSecondary }]} numberOfLines={1}>
+                              {item.availableSerials.join(', ')}
+                            </Text>
+                          </View>
+                        )}
+                        {isStored && (
+                          <Text style={{ fontSize: 12, color: Colors.info, marginTop: 2, fontWeight: 'bold' }}>כבר באפסון</Text>
+                        )}
+                      </View>
+                    </TouchableOpacity>
+
+                    {/* Quantity controls inline */}
+                    <View style={styles.quantityContainerInline}>
+                      {item.selected ? (
+                        <View style={styles.inlineQuantityControls}>
+                          <TouchableOpacity
+                            style={styles.quantityButtonSmall}
+                            onPress={() => updateStorageQuantity(item.itemKey, -1)}
+                            disabled={processing || isStored}
+                          >
+                            <Text style={styles.quantityButtonText}>-</Text>
+                          </TouchableOpacity>
+                          <Text style={styles.quantityValue}>{item.storageQuantity}</Text>
+                          <TouchableOpacity
+                            style={styles.quantityButtonSmall}
+                            onPress={() => updateStorageQuantity(item.itemKey, 1)}
+                            disabled={processing || isStored}
+                          >
+                            <Text style={styles.quantityButtonText}>+</Text>
+                          </TouchableOpacity>
+                        </View>
+                      ) : (
+                        <Text style={[styles.itemQuantity, isStored && { color: Colors.textSecondary }]}>כמות: {item.quantity}</Text>
                       )}
                     </View>
-                  </TouchableOpacity>
-
-                  {/* Quantity controls inline */}
-                  <View style={styles.quantityContainerInline}>
-                    {item.selected ? (
-                      <View style={styles.inlineQuantityControls}>
-                        <TouchableOpacity
-                          style={styles.quantityButtonSmall}
-                          onPress={() => updateStorageQuantity(item.itemKey, -1)}
-                          disabled={processing}
-                        >
-                          <Text style={styles.quantityButtonText}>-</Text>
-                        </TouchableOpacity>
-                        <Text style={styles.quantityValue}>{item.storageQuantity}</Text>
-                        <TouchableOpacity
-                          style={styles.quantityButtonSmall}
-                          onPress={() => updateStorageQuantity(item.itemKey, 1)}
-                          disabled={processing}
-                        >
-                          <Text style={styles.quantityButtonText}>+</Text>
-                        </TouchableOpacity>
-                      </View>
-                    ) : (
-                      <Text style={styles.itemQuantity}>כמות: {item.quantity}</Text>
-                    )}
                   </View>
-                </View>
 
-              </View>
-            ))}
+                </View>
+              );
+            })}
           </View>
         )}
 

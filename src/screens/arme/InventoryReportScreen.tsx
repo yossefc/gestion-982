@@ -24,6 +24,7 @@ const InventoryReportScreen: React.FC = () => {
   const [printing, setPrinting] = useState(false);
   const [stocks, setStocks] = useState<EquipmentStock[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [reportType, setReportType] = useState<'פתיחה' | 'סגירה' | null>(null);
 
   useEffect(() => {
     loadStocks();
@@ -60,6 +61,10 @@ const InventoryReportScreen: React.FC = () => {
       Alert.alert('שגיאה', 'אין נתוני מלאי להדפסה');
       return;
     }
+    if (!reportType) {
+      Alert.alert('שגיאה', 'יש לבחור סוג ספירה — פתיחה או סגירה');
+      return;
+    }
     setPrinting(true);
     try {
       await printInventoryReport({
@@ -69,6 +74,7 @@ const InventoryReportScreen: React.FC = () => {
         operatorRank: user?.rank,
         operatorSignature: user?.signature,
         timestamp: new Date(),
+        reportType,
       });
     } catch (err) {
       console.error('[InventoryReport] Print error:', err);
@@ -86,7 +92,9 @@ const InventoryReportScreen: React.FC = () => {
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>ספירת מחסן</Text>
-          <Text style={styles.headerSubtitle}>ארמו"ן - פתיחה / סגירה</Text>
+          <Text style={styles.headerSubtitle}>
+            ארמו"ן — {reportType ?? 'פתיחה / סגירה'}
+          </Text>
         </View>
         <View style={styles.headerIcon}>
           <Text style={styles.headerIconText}>📋</Text>
@@ -139,19 +147,50 @@ const InventoryReportScreen: React.FC = () => {
           </View>
         )}
 
+        {/* Report type selector */}
+        {!loading && !error && (
+          <View style={styles.typeCard}>
+            <Text style={styles.typeTitle}>סוג ספירה</Text>
+            <View style={styles.typeRow}>
+              <TouchableOpacity
+                style={[styles.typeButton, reportType === 'פתיחה' && styles.typeButtonActive]}
+                onPress={() => setReportType('פתיחה')}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.typeButtonIcon]}>🌅</Text>
+                <Text style={[styles.typeButtonText, reportType === 'פתיחה' && styles.typeButtonTextActive]}>
+                  פתיחה
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.typeButton, reportType === 'סגירה' && styles.typeButtonActive]}
+                onPress={() => setReportType('סגירה')}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.typeButtonIcon]}>🌙</Text>
+                <Text style={[styles.typeButtonText, reportType === 'סגירה' && styles.typeButtonTextActive]}>
+                  סגירה
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
         {/* Print button */}
         {!loading && !error && (
           <TouchableOpacity
-            style={[styles.printButton, (printing || stocks.length === 0) && styles.printButtonDisabled]}
+            style={[styles.printButton, (printing || stocks.length === 0 || !reportType) && styles.printButtonDisabled]}
             onPress={handlePrint}
-            disabled={printing || stocks.length === 0}
+            disabled={printing || stocks.length === 0 || !reportType}
           >
             {printing ? (
               <ActivityIndicator color={Colors.textWhite} />
             ) : (
               <>
                 <Text style={styles.printButtonIcon}>🖨️</Text>
-                <Text style={styles.printButtonText}>הדפסת דוח ספירת מחסן</Text>
+                <Text style={styles.printButtonText}>
+                  {reportType ? `הדפסת דוח ${reportType}` : 'בחר סוג ספירה תחילה'}
+                </Text>
               </>
             )}
           </TouchableOpacity>
@@ -317,6 +356,51 @@ const styles = StyleSheet.create({
   previewValue: {
     fontSize: FontSize.xs,
     color: Colors.textSecondary,
+  },
+  typeCard: {
+    backgroundColor: Colors.backgroundCard,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.lg,
+    marginBottom: Spacing.xl,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+    ...Shadows.small,
+  },
+  typeTitle: {
+    fontSize: FontSize.base,
+    fontWeight: 'bold',
+    color: Colors.text,
+    textAlign: 'center',
+    marginBottom: Spacing.md,
+  },
+  typeRow: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+  },
+  typeButton: {
+    flex: 1,
+    paddingVertical: Spacing.lg,
+    borderRadius: BorderRadius.md,
+    alignItems: 'center',
+    gap: Spacing.xs,
+    borderWidth: 2,
+    borderColor: Colors.border,
+    backgroundColor: Colors.background,
+  },
+  typeButtonActive: {
+    borderColor: Colors.arme,
+    backgroundColor: Colors.arme,
+  },
+  typeButtonIcon: {
+    fontSize: 26,
+  },
+  typeButtonText: {
+    fontSize: FontSize.lg,
+    fontWeight: 'bold',
+    color: Colors.textSecondary,
+  },
+  typeButtonTextActive: {
+    color: Colors.textWhite,
   },
   printButton: {
     backgroundColor: Colors.arme,
