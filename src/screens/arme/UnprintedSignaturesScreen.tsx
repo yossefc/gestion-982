@@ -18,7 +18,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
-import { assignmentService } from '../../services/assignmentService';
+import { assignmentService, calculateCurrentHoldings } from '../../services/assignmentService';
 import { Assignment } from '../../types';
 import { generateAndPrintMultiPDF, PrintAssignmentData } from '../../utils/printUtils';
 import { AppModal } from '../../components';
@@ -83,6 +83,14 @@ const UnprintedSignaturesScreen: React.FC = () => {
     [assignments]
   );
 
+  // Nombre de soldats uniques dans la sélection (= nombre de feuilles qui seront imprimées)
+  const uniqueSoldiersSelectedCount = useMemo(() => {
+    const soldierIds = new Set(
+      assignments.filter(a => selectedIds.has(a.id!)).map(a => a.soldierId)
+    );
+    return soldierIds.size;
+  }, [assignments, selectedIds]);
+
   const allFilteredSelected =
     filteredAssignments.length > 0 &&
     filteredAssignments.every(a => selectedIds.has(a.id!));
@@ -118,24 +126,77 @@ const UnprintedSignaturesScreen: React.FC = () => {
     try {
       const selected = assignments.filter(a => selectedIds.has(a.id!));
 
-      // Construire les données d'impression pour tous les formulaires sélectionnés
-      const printDataList: PrintAssignmentData[] = selected.map(assignment => ({
-        soldierName: assignment.soldierName,
-        soldierPersonalNumber: assignment.soldierPersonalNumber,
-        soldierPhone: assignment.soldierPhone,
-        soldierCompany: assignment.soldierCompany,
-        items: assignment.items || [],
-        signature: assignment.signature || '',
-        operatorSignature: undefined,
-        operatorName: assignment.assignedByName || assignment.assignedByEmail || '',
-        operatorRank: assignment.assignedByRank || '',
-        operatorPersonalNumber: (assignment as any).assignedByPersonalNumber || '',
-        timestamp:
-          assignment.timestamp instanceof Date
-            ? assignment.timestamp
-            : new Date(assignment.timestamp),
-        assignmentId: assignment.id,
-      }));
+      // Regrouper par soldierId — un seul formulaire par soldat (même nom = même feuille)
+      const bySoldier = new Map<string, {
+        latestAssignment: Assignment;
+        ids: string[];
+      }>();
+
+      selected.forEach(assignment => {
+        const existing = bySoldier.get(assignment.soldierId);
+        if (existing) {
+          // Garder l'assignment le plus récent pour la signature et les métadonnées
+          const existingTime = existing.latestAssignment.timestamp instanceof Date
+            ? existing.latestAssignment.timestamp.getTime()
+            : new Date(existing.latestAssignment.timestamp).getTime();
+          const assignmentTime = assignment.timestamp instanceof Date
+            ? assignment.timestamp.getTime()
+            : new Date(assignment.timestamp).getTime();
+          if (assignmentTime > existingTime) {
+            existing.latestAssignment = assignment;
+          }
+          existing.ids.push(assignment.id!);
+        } else {
+          bySoldier.set(assignment.soldierId, {
+            latestAssignment: assignment,
+            ids: [assignment.id!],
+          });
+        }
+      });
+
+      // Pour chaque soldat, récupérer TOUT son équipement actuel (y compris les anciennes attributions)
+      const printDataList: PrintAssignmentData[] = [];
+
+      for (const [soldierId, data] of bySoldier.entries()) {
+        const { latestAssignment } = data;
+
+        // Récupérer tout l'équipement actuellement détenu par ce soldat
+        let itemsForPrint: any[];
+        try {
+          const currentHoldings = await calculateCurrentHoldings(soldierId, 'combat');
+          if (currentHoldings.length > 0) {
+            itemsForPrint = currentHoldings.map(item => ({
+              equipmentName: item.equipmentName,
+              quantity: item.quantity,
+              serial: item.serial || '',
+            }));
+          } else {
+            // Fallback: items de l'assignment sélectionné
+            itemsForPrint = latestAssignment.items || [];
+          }
+        } catch {
+          // En cas d'erreur réseau, utiliser les items de l'assignment
+          itemsForPrint = latestAssignment.items || [];
+        }
+
+        printDataList.push({
+          soldierName: latestAssignment.soldierName,
+          soldierPersonalNumber: latestAssignment.soldierPersonalNumber,
+          soldierPhone: latestAssignment.soldierPhone,
+          soldierCompany: latestAssignment.soldierCompany,
+          items: itemsForPrint,
+          signature: latestAssignment.signature || '',
+          operatorSignature: undefined,
+          operatorName: latestAssignment.assignedByName || latestAssignment.assignedByEmail || '',
+          operatorRank: latestAssignment.assignedByRank || '',
+          operatorPersonalNumber: (latestAssignment as any).assignedByPersonalNumber || '',
+          timestamp:
+            latestAssignment.timestamp instanceof Date
+              ? latestAssignment.timestamp
+              : new Date(latestAssignment.timestamp),
+          assignmentId: latestAssignment.id,
+        });
+      }
 
       // Un seul appel Print.printAsync avec toutes les pages — fonctionne sur iOS et Android
       await generateAndPrintMultiPDF(printDataList);
@@ -150,7 +211,7 @@ const UnprintedSignaturesScreen: React.FC = () => {
       );
       setSelectedIds(new Set());
 
-      showModal('success', 'הצלחה!', `${idsToMark.length} טפסים נשלחו להדפסה בהצלחה.`);
+      showModal('success', 'הצלחה!', `${printDataList.length} טפסים נשלחו להדפסה בהצלחה.`);
     } catch (error) {
       console.error('[UnprintedSignatures] Print error:', error);
       showModal('error', 'שגיאה', 'אירעה שגיאה במהלך ההדפסה.');
@@ -306,7 +367,7 @@ const UnprintedSignaturesScreen: React.FC = () => {
               <>
                 <Ionicons name="print" size={22} color={Colors.textWhite} />
                 <Text style={styles.printBtnText}>
-                  הדפס {selectedIds.size} טפסים
+                  הדפס {uniqueSoldiersSelectedCount} {uniqueSoldiersSelectedCount !== selectedIds.size ? `טפסים (${selectedIds.size} רשומות)` : 'טפסים'}
                 </Text>
               </>
             )}
