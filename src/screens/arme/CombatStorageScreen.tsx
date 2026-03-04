@@ -167,8 +167,19 @@ const CombatStorageScreen: React.FC = () => {
 
       setSoldier(soldierData);
 
+      console.log(`[CombatStorage] getCurrentHoldings: ${currentItems.length} items`);
+      currentItems.forEach((item: any) => {
+        console.log(`  • ${item.equipmentName} | qty:${item.quantity} | serials:[${(item.serials || []).join(',')}] | status:${item.status}`);
+      });
+
       const storageItems: StorageItem[] = currentItems
-        .filter((item: any) => item.status !== 'stored')
+        .filter((item: any) => {
+          const isStored = item.status === 'stored' || item.status === 'storage';
+          const hasQty = (item.quantity || 0) > 0;
+          if (isStored) console.log(`[CombatStorage] skip stored: ${item.equipmentName}`);
+          if (!hasQty) console.log(`[CombatStorage] skip qty=0: ${item.equipmentName}`);
+          return !isStored && hasQty;
+        })
         .map((item: any) => ({
           itemKey: `${item.equipmentId}_${item.status || 'assigned'}`,
           equipmentId: item.equipmentId,
@@ -181,6 +192,7 @@ const CombatStorageScreen: React.FC = () => {
           selectedSerials: [],
         }));
 
+      console.log(`[CombatStorage] Displaying ${storageItems.length} items`);
       setItems(storageItems);
     } catch (error) {
       console.error('Error loading data:', error);
