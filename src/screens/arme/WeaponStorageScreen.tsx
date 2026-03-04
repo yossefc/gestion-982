@@ -112,6 +112,7 @@ const WeaponStorageScreen: React.FC = () => {
       const pdfData: StoragePDFData = {
         ownerName: firstWeapon.assignedTo?.soldierName || '',
         ownerPersonalNumber: firstWeapon.assignedTo?.soldierPersonalNumber || '',
+        voucherNumber: firstWeapon.assignedTo?.voucherNumber,
         // rank / company not available in WeaponInventoryItem.assignedTo
         depositorName: formData.depositor?.name,
         depositorPersonalNumber: formData.depositor?.personalNumber,

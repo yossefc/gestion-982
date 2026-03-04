@@ -30,6 +30,8 @@ export interface StoragePDFData {
   // Dates
   storageDate: Date;
   plannedReturnDate: Date;
+  // Original voucher number from the weapon's assignment
+  voucherNumber?: string;
   // Weapons selected for storage
   weapons: StorageWeaponItem[];
 }
@@ -95,6 +97,16 @@ export function generateStorageHTML(data: StoragePDFData): string {
     font-weight: bold;
     text-decoration: underline;
     margin-bottom: 7px;
+  }
+  .voucher-box {
+    text-align: right;
+    font-size: 10px;
+    margin-bottom: 5px;
+  }
+  .voucher-val {
+    font-weight: bold;
+    text-decoration: underline;
+    letter-spacing: 0.5px;
   }
   .dates-row {
     display: flex;
@@ -166,6 +178,8 @@ export function generateStorageHTML(data: StoragePDFData): string {
 </style>
 </head>
 <body>
+
+<div class="voucher-box">מספר שובר: <span class="voucher-val">${data.voucherNumber || '___________'}</span></div>
 
 <h1>אישור על אפסון ארמו"י (במקום ט' 1082)</h1>
 
