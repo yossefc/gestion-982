@@ -232,6 +232,7 @@ const AddWeaponToInventoryScreen: React.FC = () => {
                   placeholderTextColor={Colors.textLight}
                   textAlign="right"
                   autoCapitalize="characters"
+                  keyboardType="numeric"
                 />
                 <Ionicons name="barcode-outline" size={20} color={Colors.textSecondary} />
               </View>

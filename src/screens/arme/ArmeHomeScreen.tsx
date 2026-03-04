@@ -237,9 +237,16 @@ const ArmeHomeScreen: React.FC = () => {
           <Text style={styles.headerTitle}>נשקייה</Text>
           <Text style={styles.headerSubtitle}>מערכת ניהול ציוד לחימה</Text>
         </View>
-        <View style={styles.headerIcon}>
-          <Text style={styles.headerIconText}>🔫</Text>
-        </View>
+        <TouchableOpacity
+          style={styles.headerIcon}
+          onPress={() => navigation.navigate('UserProfile')}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="person-circle-outline" size={26} color={Colors.textWhite} />
+          {(!user?.signature || !user?.personalNumber) && (
+            <View style={styles.profileWarningBadge} />
+          )}
+        </TouchableOpacity>
       </View>
 
       <ScrollView
@@ -505,9 +512,18 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
     justifyContent: 'center',
     alignItems: 'center',
+    position: 'relative',
   },
-  headerIconText: {
-    fontSize: 20,
+  profileWarningBadge: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: Colors.warning,
+    borderWidth: 1.5,
+    borderColor: Colors.arme,
   },
 
   // Content

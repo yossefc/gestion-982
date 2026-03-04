@@ -1018,6 +1018,7 @@ const CombatAssignmentScreen: React.FC = () => {
                                                 editable={true}
                                                 autoCorrect={false}
                                                 autoCapitalize="characters"
+                                                keyboardType="numeric"
                                               />
                                             </View>
                                           );
@@ -1257,6 +1258,7 @@ const CombatAssignmentScreen: React.FC = () => {
                 textAlign="right"
                 autoCapitalize="characters"
                 autoFocus={true}
+                keyboardType="numeric"
               />
               {serialSearchText.length > 0 && (
                 <TouchableOpacity onPress={() => setSerialSearchText('')}>
