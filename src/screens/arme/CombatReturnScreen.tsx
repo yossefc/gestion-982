@@ -11,8 +11,7 @@ import {
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { RootStackParamList, Soldier, AssignmentItem } from '../../types';
-import { soldierService, combatEquipmentService } from '../../services/firebaseService';
-import { assignmentService } from '../../services/assignmentService';
+import { soldierService, combatEquipmentService, assignmentService } from '../../services/firebaseService';
 import { transactionalAssignmentService } from '../../services/transactionalAssignmentService';
 import { useAuth } from '../../contexts/AuthContext';
 import { Colors, Shadows } from '../../theme/Colors';
@@ -333,7 +332,7 @@ const CombatReturnScreen: React.FC = () => {
     try {
       // Find the last assignment to get a signature if possible
       const assignments = await assignmentService.getAssignmentsBySoldier(soldierId, 'combat');
-      const latestAssignmentWithSignature = assignments.find(a => a.signature);
+      const latestAssignmentWithSignature = assignments.find((a: any) => a.signature);
 
       const printItems = items.map(item => ({
         equipmentId: item.equipmentId,

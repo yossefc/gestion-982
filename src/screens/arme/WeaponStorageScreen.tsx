@@ -133,7 +133,8 @@ const WeaponStorageScreen: React.FC = () => {
       setFormModalVisible(false);
       setSelectedIds(new Set());
       setViewerVisible(true);
-      loadAssignedWeapons();
+      // loadAssignedWeapons is called when the viewer closes to avoid
+      // setting loading=true while the modal is visible (which would hide it)
     } catch (error) {
       console.error('Error during storage:', error);
       setFormModalVisible(false);
@@ -278,7 +279,10 @@ const WeaponStorageScreen: React.FC = () => {
           visible={viewerVisible}
           html={viewerHTML}
           pdfData={viewerPdfData}
-          onClose={() => setViewerVisible(false)}
+          onClose={() => {
+            setViewerVisible(false);
+            loadAssignedWeapons();
+          }}
         />
       )}
 

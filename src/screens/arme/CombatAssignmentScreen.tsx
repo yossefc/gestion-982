@@ -467,6 +467,30 @@ const CombatAssignmentScreen: React.FC = () => {
 
       console.log('[CombatAssignment] Transactional assignment created:', assignmentId);
 
+      // Fetch original voucher number if adding to existing holdings
+      let originalVoucherNumber = assignmentId;
+      if (hasExistingHoldings) {
+        try {
+          const pastAssignments = await assignmentService.getAssignmentsBySoldier(soldier.id, 'combat');
+          if (pastAssignments && pastAssignments.length > 0) {
+            // Sort by timestamp ascending to get the oldest (original) assignment
+            const sortedAssignments = [...pastAssignments].sort((a, b) => {
+              const dateA = a.timestamp instanceof Date ? a.timestamp.getTime() : new Date(a.timestamp).getTime();
+              const dateB = b.timestamp instanceof Date ? b.timestamp.getTime() : new Date(b.timestamp).getTime();
+              return dateA - dateB;
+            });
+            // Try to find the first 'issue' action, otherwise just take the oldest
+            const originalIssue = sortedAssignments.find(a => a.action === 'issue') || sortedAssignments[0];
+            if (originalIssue && originalIssue.id) {
+              originalVoucherNumber = originalIssue.id;
+              console.log(`[CombatAssignment] Found original voucher number: ${originalVoucherNumber} (current is ${assignmentId})`);
+            }
+          }
+        } catch (error) {
+          console.warn('[CombatAssignment] Failed to fetch past assignments for original voucher number:', error);
+        }
+      }
+
       // Update weapon inventory status for each weapon with serial number
       const weaponUpdatePromises: Promise<any>[] = [];
 
@@ -491,7 +515,7 @@ const CombatAssignmentScreen: React.FC = () => {
                     soldierId: soldier.id,
                     soldierName: soldier.name,
                     soldierPersonalNumber: soldier.personalNumber,
-                    voucherNumber: assignmentId,
+                    voucherNumber: originalVoucherNumber,
                   })
                 );
               } else {
@@ -524,20 +548,58 @@ const CombatAssignmentScreen: React.FC = () => {
       }, false);
       */
 
+      // Calculate all items for print (existing + new) to show complete inventory on the receipt
+      const combinedItemsMap = new Map<string, any>();
+
+      // First add existing holdings
+      existingAssignments.forEach(holding => {
+        if (holding?.quantity > 0) {
+          const key = holding.equipmentName;
+          combinedItemsMap.set(key, {
+            equipmentName: holding.equipmentName,
+            quantity: holding.quantity,
+            serial: holding.serials ? holding.serials.filter((s: string) => s.trim()).join(', ') : ''
+          });
+        }
+      });
+
+      // Then add or merge newly assigned items
+      items.forEach(newItem => {
+        const key = newItem.equipmentName;
+        const existing = combinedItemsMap.get(key);
+        if (existing) {
+          existing.quantity += newItem.quantity;
+          const newSerials = newItem.serial ? newItem.serial.split(',').map((s: string) => s.trim()).filter(Boolean) : [];
+          const existingSerials = existing.serial ? existing.serial.split(',').map((s: string) => s.trim()).filter(Boolean) : [];
+
+          // Merge serials avoiding duplicates
+          const allSerials = Array.from(new Set([...existingSerials, ...newSerials]));
+          existing.serial = allSerials.join(', ');
+        } else {
+          combinedItemsMap.set(key, {
+            equipmentName: newItem.equipmentName,
+            quantity: newItem.quantity,
+            serial: newItem.serial
+          });
+        }
+      });
+
+      const allItemsForPrint = Array.from(combinedItemsMap.values());
+
       // Envoyer à la file d'attente EN ARRIÈRE-PLAN (ne bloque pas l'affichage)
       sendToPrintQueue({
         soldierName: soldier.name,
         soldierPersonalNumber: soldier.personalNumber,
         soldierPhone: soldier.phone,
         soldierCompany: soldier.company,
-        items,
+        items: allItemsForPrint,
         signature: signatureData,
         operatorSignature: user?.signature || undefined,
         operatorName: user?.displayName || user?.name || user?.email || '',
         operatorRank: user?.rank || '',
         operatorPersonalNumber: user?.personalNumber || '',
         timestamp: new Date(),
-        assignmentId,
+        assignmentId: originalVoucherNumber,
       }).then(() => {
         console.log('[CombatAssignment] Print queue sent successfully (background)');
       }).catch((printError) => {
@@ -554,7 +616,7 @@ const CombatAssignmentScreen: React.FC = () => {
         }
         whatsappMessage += '\n';
       }
-      whatsappMessage += `\nמספר שובר: ${String(assignmentId).slice(-6).padStart(6, '0')}`;
+      whatsappMessage += `\nמספר שובר: ${String(originalVoucherNumber).slice(-6).padStart(6, '0')}`;
       whatsappMessage += `\nהציוד רשום על שמך ובאחריותך.\nתודה,\nגדוד 982`;
 
       // Store assignment data for potential reprint
@@ -563,14 +625,14 @@ const CombatAssignmentScreen: React.FC = () => {
         soldierPersonalNumber: soldier.personalNumber,
         soldierPhone: soldier.phone,
         soldierCompany: soldier.company,
-        items,
+        items: allItemsForPrint,
         signature: signatureData,
         operatorSignature: user?.signature || undefined,
         operatorName: user?.displayName || user?.name || '',
         operatorRank: user?.rank || '',
         operatorPersonalNumber: user?.personalNumber || '',
         timestamp: new Date(),
-        assignmentId,
+        assignmentId: originalVoucherNumber,
       };
 
       // Show success with WhatsApp and Print options
@@ -631,7 +693,7 @@ const CombatAssignmentScreen: React.FC = () => {
       setSuccessModalData({
         assignmentForPrint,
         whatsappMessage,
-        assignmentId,
+        assignmentId: originalVoucherNumber,
       });
       setShowSuccessModal(true);
     } catch (error: any) {

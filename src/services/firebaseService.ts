@@ -260,8 +260,10 @@ export const soldierService = {
 
       // Recherche avec terme normalisé
       const normalizedTerm = normalizeText(searchTerm);
+      const isNumeric = /^\d+$/.test(searchTerm.trim());
 
-      let q = query(
+      // Query 1: recherche par searchKey (préfixe sur nom/clé composite)
+      const nameQuery = query(
         collection(db, COLLECTIONS.SOLDIERS),
         orderBy('searchKey'),
         where('searchKey', '>=', normalizedTerm),
@@ -269,29 +271,47 @@ export const soldierService = {
         firestoreLimit(limitCount)
       );
 
-      // Note: impossible de combiner where avec filtre company ET orderBy/startAt sur searchKey
-      // Il faudrait un index composite ou filtrer côté client
+      const promises: Promise<any>[] = [getDocs(nameQuery)];
 
-      if (options?.lastDoc) {
-        q = query(q, startAfter(options.lastDoc));
+      // Query 2: si la saisie est numérique, recherche directe par personalNumber
+      if (isNumeric) {
+        const pnQuery = query(
+          collection(db, COLLECTIONS.SOLDIERS),
+          orderBy('personalNumber'),
+          where('personalNumber', '>=', searchTerm.trim()),
+          where('personalNumber', '<=', searchTerm.trim() + '\uf8ff'),
+          firestoreLimit(limitCount)
+        );
+        promises.push(getDocs(pnQuery));
       }
 
-      const querySnapshot = await getDocs(q);
+      const snapshots = await Promise.all(promises);
 
-      let soldiers = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt?.toDate(),
-      })) as Soldier[];
+      // Fusionner et dédupliquer par id
+      const seenIds = new Set<string>();
+      let soldiers: Soldier[] = [];
+      for (const snap of snapshots) {
+        for (const d of snap.docs) {
+          if (!seenIds.has(d.id)) {
+            seenIds.add(d.id);
+            soldiers.push({
+              id: d.id,
+              ...d.data(),
+              createdAt: d.data().createdAt?.toDate(),
+            } as Soldier);
+          }
+        }
+      }
 
-      // Filtre côté client par company si nécessaire (limité mais fonctionnel)
+      // Filtre côté client par company si nécessaire
       if (options?.company) {
         soldiers = soldiers.filter(s => s.company === options.company);
       }
 
+      const lastSnap = snapshots[0];
       return {
         soldiers,
-        lastDoc: querySnapshot.docs[querySnapshot.docs.length - 1] || null,
+        lastDoc: lastSnap.docs[lastSnap.docs.length - 1] || null,
       };
     } catch (error) {
       logError('soldierService.search', error);

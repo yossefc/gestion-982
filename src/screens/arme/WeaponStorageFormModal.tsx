@@ -1,7 +1,7 @@
 /**
  * WeaponStorageFormModal.tsx
  * Form modal shown before confirming אפסון.
- * Captures: planned return date + optional גורם מאפסן (if different from owner).
+ * Captures: planned return date + גורם מאפסן (required - the soldier doing the storage).
  * Uses a dependency-free custom date spinner (no native modules needed).
  */
 
@@ -16,7 +16,6 @@ import {
   ActivityIndicator,
   StyleSheet,
   Platform,
-  Switch,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
@@ -127,7 +126,6 @@ const WeaponStorageFormModal: React.FC<Props> = ({
   };
 
   const [dateState, setDateState] = useState(initDate);
-  const [isDifferentDepositor, setIsDifferentDepositor] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDepositor, setSelectedDepositor] = useState<Soldier | null>(null);
 
@@ -137,7 +135,6 @@ const WeaponStorageFormModal: React.FC<Props> = ({
   useEffect(() => {
     if (visible) {
       setDateState(initDate());
-      setIsDifferentDepositor(false);
       setSearchQuery('');
       setSelectedDepositor(null);
       reset();
@@ -173,22 +170,14 @@ const WeaponStorageFormModal: React.FC<Props> = ({
     reset();
   };
 
-  const handleToggleDepositor = (value: boolean) => {
-    setIsDifferentDepositor(value);
-    if (!value) {
-      setSelectedDepositor(null);
-      setSearchQuery('');
-      reset();
-    }
-  };
-
-  const isConfirmDisabled = loading || (isDifferentDepositor && !selectedDepositor);
+  // Depositor is optional
+  const isConfirmDisabled = loading;
 
   const handleConfirm = () => {
     const { day, month, year } = dateState;
     onConfirm({
       plannedReturnDate: new Date(year, month - 1, day),
-      depositor: isDifferentDepositor ? selectedDepositor : null,
+      depositor: selectedDepositor,
     });
   };
 
@@ -256,78 +245,70 @@ const WeaponStorageFormModal: React.FC<Props> = ({
               </View>
             </View>
 
-            {/* Depositor toggle */}
-            <View style={styles.toggleRow}>
-              <Text style={styles.toggleLabel}>המאפסן שונה מהחייל</Text>
-              <Switch
-                value={isDifferentDepositor}
-                onValueChange={handleToggleDepositor}
-                trackColor={{ false: '#CBD5E1', true: Colors.arme }}
-                thumbColor="#fff"
-              />
-            </View>
+            {/* Depositor — optional */}
+            <Text style={styles.sectionTitle}>גורם מאפסן (רשות)</Text>
+            <Text style={styles.depositorHint}>
+              החייל המאפסן את הנשק — חפש לפי שם או מספר אישי
+            </Text>
 
-            {/* Depositor search / selected card */}
-            {isDifferentDepositor && (
-              <View style={styles.depositorSection}>
-                {selectedDepositor ? (
-                  <View style={styles.selectedCard}>
-                    <View style={styles.selectedInfo}>
-                      <Text style={styles.selectedName}>{selectedDepositor.name}</Text>
-                      <Text style={styles.selectedDetail}>
-                        מ.א: {selectedDepositor.personalNumber}
-                        {selectedDepositor.company ? `  ·  ${selectedDepositor.company}` : ''}
-                      </Text>
-                      {selectedDepositor.phone ? (
-                        <Text style={styles.selectedDetail}>טל': {selectedDepositor.phone}</Text>
-                      ) : null}
-                    </View>
-                    <TouchableOpacity
-                      onPress={() => setSelectedDepositor(null)}
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                    >
-                      <Ionicons name="close-circle" size={24} color="#EF4444" />
-                    </TouchableOpacity>
+            <View style={styles.depositorSection}>
+              {selectedDepositor ? (
+                <View style={styles.selectedCard}>
+                  <View style={styles.selectedInfo}>
+                    <Text style={styles.selectedName}>{selectedDepositor.name}</Text>
+                    <Text style={styles.selectedDetail}>
+                      מ.א: {selectedDepositor.personalNumber}
+                      {selectedDepositor.company ? `  ·  ${selectedDepositor.company}` : ''}
+                    </Text>
+                    {selectedDepositor.phone ? (
+                      <Text style={styles.selectedDetail}>טל&apos;: {selectedDepositor.phone}</Text>
+                    ) : null}
                   </View>
-                ) : (
-                  <>
-                    <TextInput
-                      style={styles.searchInput}
-                      value={searchQuery}
-                      onChangeText={handleSearchChange}
-                      placeholder="חפש לפי שם או מספר אישי..."
-                      placeholderTextColor="#94A3B8"
-                      textAlign="right"
-                      autoCorrect={false}
+                  <TouchableOpacity
+                    onPress={() => setSelectedDepositor(null)}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Ionicons name="close-circle" size={24} color="#EF4444" />
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <>
+                  <TextInput
+                    style={styles.searchInput}
+                    value={searchQuery}
+                    onChangeText={handleSearchChange}
+                    placeholder="חפש לפי שם או מספר אישי..."
+                    placeholderTextColor="#94A3B8"
+                    textAlign="right"
+                    autoCorrect={false}
+                  />
+                  {searchLoading && (
+                    <ActivityIndicator
+                      size="small"
+                      color={Colors.arme}
+                      style={{ marginVertical: 8 }}
                     />
-                    {searchLoading && (
-                      <ActivityIndicator
-                        size="small"
-                        color={Colors.arme}
-                        style={{ marginVertical: 8 }}
-                      />
-                    )}
-                    {soldiers.slice(0, 6).map((s) => (
-                      <TouchableOpacity
-                        key={s.id}
-                        style={styles.searchResult}
-                        onPress={() => handleSelectDepositor(s)}
-                        activeOpacity={0.7}
-                      >
-                        <Text style={styles.resultName}>{s.name}</Text>
-                        <Text style={styles.resultDetail}>
-                          {s.personalNumber}
-                          {s.company ? `  ·  ${s.company}` : ''}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                    {!searchLoading && searchQuery.length >= 2 && soldiers.length === 0 && (
-                      <Text style={styles.noResults}>לא נמצאו חיילים</Text>
-                    )}
-                  </>
-                )}
-              </View>
-            )}
+                  )}
+                  {soldiers.slice(0, 6).map((s) => (
+                    <TouchableOpacity
+                      key={s.id}
+                      style={styles.searchResult}
+                      onPress={() => handleSelectDepositor(s)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.resultName}>{s.name}</Text>
+                      <Text style={styles.resultDetail}>
+                        {s.personalNumber}
+                        {s.company ? `  ·  ${s.company}` : ''}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                  {!searchLoading && searchQuery.length >= 2 && soldiers.length === 0 && (
+                    <Text style={styles.noResults}>לא נמצאו חיילים</Text>
+                  )}
+                </>
+              )}
+            </View>
           </ScrollView>
 
           {/* Footer */}
@@ -457,27 +438,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#E2E8F0',
     marginHorizontal: 4,
   },
-  // Toggle
-  toggleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#EFF6FF',
-    borderRadius: BorderRadius.md,
-    borderWidth: 1,
-    borderColor: '#BFDBFE',
-    paddingHorizontal: Spacing.md,
-    paddingVertical: 10,
-    marginTop: Spacing.lg,
+  depositorHint: {
+    fontSize: FontSize.xs,
+    color: '#64748B',
+    textAlign: 'right',
+    marginBottom: Spacing.sm,
   },
-  toggleLabel: {
-    fontSize: FontSize.sm,
-    fontWeight: '600',
-    color: '#1E40AF',
-  },
-  // Depositor
+  // Depositor section
   depositorSection: {
-    marginTop: Spacing.md,
     backgroundColor: '#F8FAFC',
     borderRadius: BorderRadius.md,
     borderWidth: 1,
