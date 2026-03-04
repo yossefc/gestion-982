@@ -31,6 +31,7 @@ interface StorageItem extends AssignmentItem {
   selected: boolean;
   storageQuantity: number;
   availableSerials: string[];
+  selectedSerials: string[];
 }
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
@@ -177,6 +178,7 @@ const CombatStorageScreen: React.FC = () => {
           selected: false,
           storageQuantity: 0,
           availableSerials: item.serials || [],
+          selectedSerials: [],
         }));
 
       setItems(storageItems);
@@ -190,34 +192,21 @@ const CombatStorageScreen: React.FC = () => {
 
   // ── Item selection ──────────────────────────────────────────────────────────
 
-  const toggleItem = (equipmentId: string) => {
+  const toggleItem = (itemKey: string) => {
     setItems(prev =>
       prev.map(item =>
-        item.equipmentId === equipmentId
+        item.itemKey === itemKey
           ? { ...item, selected: !item.selected, storageQuantity: !item.selected ? item.quantity : 0, selectedSerials: [] }
           : item
       )
     );
   };
 
-  const updateStorageQuantity = (equipmentId: string, delta: number) => {
+  const updateStorageQuantity = (itemKey: string, delta: number) => {
     setItems(prev =>
       prev.map(item => {
-        if (item.equipmentId !== equipmentId) return item;
+        if (item.itemKey !== itemKey) return item;
         return { ...item, storageQuantity: Math.max(0, Math.min(item.quantity, item.storageQuantity + delta)) };
-      })
-    );
-  };
-
-  const toggleSerial = (equipmentId: string, serial: string) => {
-    setItems(prev =>
-      prev.map(item => {
-        if (item.equipmentId !== equipmentId) return item;
-        const isSelected = item.selectedSerials.includes(serial);
-        const selectedSerials = isSelected
-          ? item.selectedSerials.filter(s => s !== serial)
-          : [...item.selectedSerials, serial];
-        return { ...item, selectedSerials, storageQuantity: selectedSerials.length };
       })
     );
   };
@@ -248,12 +237,6 @@ const CombatStorageScreen: React.FC = () => {
       showModal('error', 'אנא חתום לפני ביצוע האפסון'); return;
     }
 
-    for (const item of selectedItems) {
-      if (item.availableSerials.length > 0 && item.selectedSerials.length !== item.storageQuantity) {
-        showModal('error', `נא לבחור ${item.storageQuantity} מסטבים עבור ${item.equipmentName}`); return;
-      }
-    }
-
     showModal('confirm', `האם אתה בטוח שברצונך לאפסן ${selectedItems.length} פריטים?`, 'אפסון ציוד', [
       { text: 'ביטול', style: 'outline', onPress: () => setModalVisible(false) },
       {
@@ -263,12 +246,15 @@ const CombatStorageScreen: React.FC = () => {
           setProcessing(true);
           try {
             const storageItems = selectedItems.map(item => {
+              const serialsToUse = item.selectedSerials.length > 0
+                ? item.selectedSerials
+                : item.availableSerials.slice(0, item.storageQuantity);
               const d: any = {
                 equipmentId: item.equipmentId,
                 equipmentName: item.equipmentName,
                 quantity: item.storageQuantity,
               };
-              if (item.selectedSerials.length > 0) d.serial = item.selectedSerials.join(', ');
+              if (serialsToUse.length > 0) d.serial = serialsToUse.join(', ');
               return d;
             });
 
@@ -287,7 +273,10 @@ const CombatStorageScreen: React.FC = () => {
             // Mettre à jour weapons_inventory
             const updatePromises: Promise<void>[] = [];
             for (const item of selectedItems) {
-              for (const serial of item.selectedSerials) {
+              const serialsToUse = item.selectedSerials.length > 0
+                ? item.selectedSerials
+                : item.availableSerials.slice(0, item.storageQuantity);
+              for (const serial of serialsToUse) {
                 const s = serial.trim();
                 if (!s) continue;
                 updatePromises.push((async () => {
@@ -512,59 +501,57 @@ const CombatStorageScreen: React.FC = () => {
         ) : (
           <View style={styles.itemsList}>
             {items.map(item => (
-              <View key={item.equipmentId} style={[styles.itemCard, item.selected && styles.itemCardSelected]}>
-                <TouchableOpacity style={styles.itemHeader} onPress={() => toggleItem(item.equipmentId)} disabled={processing}>
-                  <View style={styles.checkbox}>
-                    {item.selected && <Text style={styles.checkmark}>✓</Text>}
-                  </View>
-                  <View style={styles.itemInfo}>
-                    <Text style={styles.itemName}>{item.equipmentName}</Text>
-                    {item.availableSerials.length > 0 && (
-                      <View style={styles.serialDisplayContainer}>
-                        <Text style={styles.serialDisplayLabel}>מסטבים:</Text>
-                        <Text style={styles.serialDisplayValue}>{item.availableSerials.join(', ')}</Text>
+              <View key={item.itemKey} style={[styles.itemCard, item.selected && styles.itemCardSelected]}>
+                {/* ── Row: checkbox + info + quantity inline ── */}
+                <View style={styles.itemRow}>
+                  <TouchableOpacity
+                    style={styles.itemHeaderTouch}
+                    onPress={() => toggleItem(item.itemKey)}
+                    disabled={processing}
+                  >
+                    <View style={styles.checkbox}>
+                      {item.selected && <Text style={styles.checkmark}>✓</Text>}
+                    </View>
+                    <View style={styles.itemInfoItems}>
+                      <View style={styles.itemNameContainer}>
+                        <Text style={styles.itemName} numberOfLines={1}>{item.equipmentName}</Text>
                       </View>
-                    )}
-                    <Text style={styles.itemQuantity}>כמות זמינה: {item.quantity}</Text>
-                  </View>
-                </TouchableOpacity>
+                      {item.availableSerials.length > 0 && (
+                        <View style={styles.serialDisplayContainer}>
+                          <Text style={styles.serialDisplayValue} numberOfLines={1}>
+                            {item.availableSerials.join(', ')}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  </TouchableOpacity>
 
-                {item.selected && (
-                  <View style={styles.itemDetails}>
-                    <View style={styles.quantitySection}>
-                      <Text style={styles.detailLabel}>כמות לאפסון:</Text>
-                      <View style={styles.quantityControls}>
-                        <TouchableOpacity style={styles.quantityButton} onPress={() => updateStorageQuantity(item.equipmentId, -1)} disabled={processing}>
+                  {/* Quantity controls inline */}
+                  <View style={styles.quantityContainerInline}>
+                    {item.selected ? (
+                      <View style={styles.inlineQuantityControls}>
+                        <TouchableOpacity
+                          style={styles.quantityButtonSmall}
+                          onPress={() => updateStorageQuantity(item.itemKey, -1)}
+                          disabled={processing}
+                        >
                           <Text style={styles.quantityButtonText}>-</Text>
                         </TouchableOpacity>
                         <Text style={styles.quantityValue}>{item.storageQuantity}</Text>
-                        <TouchableOpacity style={styles.quantityButton} onPress={() => updateStorageQuantity(item.equipmentId, 1)} disabled={processing}>
+                        <TouchableOpacity
+                          style={styles.quantityButtonSmall}
+                          onPress={() => updateStorageQuantity(item.itemKey, 1)}
+                          disabled={processing}
+                        >
                           <Text style={styles.quantityButtonText}>+</Text>
                         </TouchableOpacity>
                       </View>
-                    </View>
-
-                    {item.availableSerials.length > 0 && (
-                      <View style={styles.serialsSection}>
-                        <Text style={styles.detailLabel}>בחר מסטבים:</Text>
-                        <View style={styles.serialsList}>
-                          {item.availableSerials.map((serial, idx) => (
-                            <TouchableOpacity
-                              key={idx}
-                              style={[styles.serialChip, item.selectedSerials.includes(serial) && styles.serialChipSelected]}
-                              onPress={() => toggleSerial(item.equipmentId, serial)}
-                              disabled={processing}
-                            >
-                              <Text style={[styles.serialChipText, item.selectedSerials.includes(serial) && styles.serialChipTextSelected]}>
-                                {serial}
-                              </Text>
-                            </TouchableOpacity>
-                          ))}
-                        </View>
-                      </View>
+                    ) : (
+                      <Text style={styles.itemQuantity}>כמות: {item.quantity}</Text>
                     )}
                   </View>
-                )}
+                </View>
+
               </View>
             ))}
           </View>
@@ -711,15 +698,17 @@ const styles = StyleSheet.create({
     borderWidth: 2, borderColor: Colors.borderLight, ...Shadows.small,
   },
   itemCardSelected: { borderColor: '#FF6F00', backgroundColor: '#FFF3E0' },
-  itemHeader: { flexDirection: 'row', alignItems: 'center' },
+  itemRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, // Added for inline layout
+  itemHeaderTouch: { flexDirection: 'row', alignItems: 'center', flex: 1 }, // Adjusted for touchable area
   checkbox: {
     width: 28, height: 28, borderRadius: 6, borderWidth: 2,
     borderColor: Colors.borderDark, marginLeft: 12,
     justifyContent: 'center', alignItems: 'center',
   },
   checkmark: { fontSize: 18, color: '#FF6F00', fontWeight: 'bold' },
-  itemInfo: { flex: 1, alignItems: 'flex-end' },
-  itemName: { fontSize: 16, fontWeight: 'bold', color: Colors.text, marginBottom: 4 },
+  itemInfoItems: { flex: 1, alignItems: 'flex-end' }, // Renamed from itemInfo to avoid conflict
+  itemNameContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
+  itemName: { fontSize: 16, fontWeight: 'bold', color: Colors.text, flexShrink: 1 },
   serialDisplayContainer: {
     flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.armeLight,
     paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6,
@@ -731,22 +720,14 @@ const styles = StyleSheet.create({
     fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
   },
   itemQuantity: { fontSize: 13, color: Colors.textSecondary },
-  itemDetails: {
-    marginTop: 16, paddingTop: 16,
-    borderTopWidth: 1, borderTopColor: Colors.borderLight,
+  quantityContainerInline: { flexDirection: 'row', alignItems: 'center', marginLeft: 10 }, // New style for inline quantity
+  inlineQuantityControls: { flexDirection: 'row', alignItems: 'center', gap: 8 }, // New style for inline quantity controls
+  quantityButtonSmall: {
+    backgroundColor: '#FF6F00', width: 32, height: 32,
+    borderRadius: 6, justifyContent: 'center', alignItems: 'center',
   },
-  quantitySection: { marginBottom: 12 },
-  detailLabel: {
-    fontSize: 14, fontWeight: 'bold', color: Colors.text,
-    marginBottom: 8, textAlign: 'right',
-  },
-  quantityControls: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 16 },
-  quantityButton: {
-    backgroundColor: '#FF6F00', width: 40, height: 40,
-    borderRadius: 8, justifyContent: 'center', alignItems: 'center',
-  },
-  quantityButtonText: { fontSize: 24, fontWeight: 'bold', color: Colors.textWhite },
-  quantityValue: { fontSize: 20, fontWeight: 'bold', color: Colors.text, minWidth: 40, textAlign: 'center' },
+  quantityButtonText: { fontSize: 18, fontWeight: 'bold', color: Colors.textWhite },
+  quantityValue: { fontSize: 16, fontWeight: 'bold', color: Colors.text, minWidth: 25, textAlign: 'center' },
   serialsSection: { marginTop: 12 },
   serialsList: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'flex-end' },
   serialChip: {

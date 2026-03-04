@@ -1,7 +1,7 @@
 // Écran d'accueil du module Arme (מנות וציוד לחימה)
 // Design professionnel avec UX améliorée
 // OPTIMISÉ: Utilise le cache centralisé au lieu d'appels Firebase directs
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -10,9 +10,13 @@ import {
   ScrollView,
   ActivityIndicator,
   RefreshControl,
-  Alert,
+  Modal,
+  Pressable,
+  Animated,
+  Easing,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
 import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
 import { AppModal, ModalType } from '../../components';
 import { useAuth } from '../../contexts/AuthContext';
@@ -39,25 +43,77 @@ const ArmeHomeScreen: React.FC = () => {
   const { equipment, loading: equipmentLoading } = useCombatEquipment();
 
   const [refreshing, setRefreshing] = useState(false);
+  const [reportMenuVisible, setReportMenuVisible] = useState(false);
+  const reportSheetAnim = useRef(new Animated.Value(0)).current;
+  const reportBackdropAnim = useRef(new Animated.Value(0)).current;
+  const isClosingReportMenuRef = useRef(false);
 
   // Rapport menu
+  useEffect(() => {
+    if (!reportMenuVisible) {
+      return;
+    }
+
+    isClosingReportMenuRef.current = false;
+    reportSheetAnim.setValue(0);
+    reportBackdropAnim.setValue(0);
+
+    Animated.parallel([
+      Animated.timing(reportBackdropAnim, {
+        toValue: 1,
+        duration: 180,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: true,
+      }),
+      Animated.spring(reportSheetAnim, {
+        toValue: 1,
+        tension: 80,
+        friction: 11,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [reportMenuVisible, reportSheetAnim, reportBackdropAnim]);
+
+  const closeReportMenu = (afterClose?: () => void) => {
+    if (!reportMenuVisible || isClosingReportMenuRef.current) {
+      return;
+    }
+
+    isClosingReportMenuRef.current = true;
+
+    Animated.parallel([
+      Animated.timing(reportBackdropAnim, {
+        toValue: 0,
+        duration: 150,
+        easing: Easing.in(Easing.quad),
+        useNativeDriver: true,
+      }),
+      Animated.timing(reportSheetAnim, {
+        toValue: 0,
+        duration: 220,
+        easing: Easing.inOut(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start(({ finished }) => {
+      isClosingReportMenuRef.current = false;
+      if (finished) {
+        setReportMenuVisible(false);
+        if (afterClose) {
+          afterClose();
+        }
+      }
+    });
+  };
+
+  const openReportScreen = (screen: 'InventoryReport' | 'PlugaReport') => {
+    closeReportMenu(() => navigation.navigate(screen));
+  };
+
   const showReportMenu = () => {
-    Alert.alert(
-      'דוחות',
-      'בחר סוג דוח',
-      [
-        {
-          text: 'דוח מלאי',
-          onPress: () => navigation.navigate('InventoryReport'),
-        },
-        {
-          text: 'דוח ציוד חתום לפי פלוגה',
-          onPress: () => navigation.navigate('PlugaReport'),
-        },
-        { text: 'ביטול', style: 'cancel' as const },
-      ],
-      { cancelable: true }
-    );
+    if (reportMenuVisible || isClosingReportMenuRef.current) {
+      return;
+    }
+    setReportMenuVisible(true);
   };
 
   // Calcul des stats depuis le cache
@@ -294,6 +350,95 @@ const ArmeHomeScreen: React.FC = () => {
 
         <View style={styles.bottomSpacer} />
       </ScrollView>
+
+      <Modal
+        visible={reportMenuVisible}
+        transparent
+        animationType="none"
+        onRequestClose={() => closeReportMenu()}
+      >
+        <View style={styles.reportModalOverlay}>
+          <Pressable style={styles.reportModalBackdrop} onPress={() => closeReportMenu()}>
+            <Animated.View
+              pointerEvents="none"
+              style={[styles.reportModalBackdropTint, { opacity: reportBackdropAnim }]}
+            />
+          </Pressable>
+          <Animated.View
+            style={[
+              styles.reportModalSheet,
+              {
+                opacity: reportSheetAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0.92, 1],
+                }),
+                transform: [
+                  {
+                    translateY: reportSheetAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [280, 0],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          >
+            <View style={styles.reportModalHandle} />
+            <View style={styles.reportHeader}>
+              <Text style={styles.reportTitle}>דוחות</Text>
+              <Text style={styles.reportSubtitle}>בחר סוג דוח להצגה או להדפסה</Text>
+            </View>
+
+            <TouchableOpacity
+              style={styles.reportOptionCard}
+              onPress={() => openReportScreen('InventoryReport')}
+              activeOpacity={0.85}
+            >
+              <View style={[styles.reportOptionIcon, styles.reportOptionIconInventory]}>
+                <Ionicons name="cube-outline" size={20} color={Colors.textWhite} />
+              </View>
+              <View style={styles.reportOptionContent}>
+                <Text style={styles.reportOptionTitle}>דוח מלאי</Text>
+                <Text style={styles.reportOptionDescription}>מצב מחסן לפי פריטים ומלאי</Text>
+              </View>
+              <Ionicons
+                name="chevron-back"
+                size={20}
+                color={Colors.textLight}
+                style={styles.reportOptionChevron}
+              />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.reportOptionCard}
+              onPress={() => openReportScreen('PlugaReport')}
+              activeOpacity={0.85}
+            >
+              <View style={[styles.reportOptionIcon, styles.reportOptionIconCompany]}>
+                <Ionicons name="people-outline" size={20} color={Colors.textWhite} />
+              </View>
+              <View style={styles.reportOptionContent}>
+                <Text style={styles.reportOptionTitle}>דוח ציוד חתום לפי פלוגה</Text>
+                <Text style={styles.reportOptionDescription}>רכזת ציוד חתום לפי שיוך פלוגתי</Text>
+              </View>
+              <Ionicons
+                name="chevron-back"
+                size={20}
+                color={Colors.textLight}
+                style={styles.reportOptionChevron}
+              />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.reportCancelButton}
+              onPress={() => closeReportMenu()}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.reportCancelText}>ביטול</Text>
+            </TouchableOpacity>
+          </Animated.View>
+        </View>
+      </Modal>
 
       {/* App Modal */}
       <AppModal
@@ -610,6 +755,114 @@ const styles = StyleSheet.create({
 
   bottomSpacer: {
     height: Spacing.xxl,
+  },
+
+  // Report menu modal
+  reportModalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'transparent',
+  },
+  reportModalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  reportModalBackdropTint: {
+    flex: 1,
+    backgroundColor: '#0F172A',
+  },
+  reportModalSheet: {
+    backgroundColor: Colors.backgroundCard,
+    borderTopLeftRadius: BorderRadius.xl,
+    borderTopRightRadius: BorderRadius.xl,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+    paddingHorizontal: Spacing.xl,
+    paddingTop: Spacing.md,
+    paddingBottom: Spacing.xxl,
+    ...Shadows.large,
+  },
+  reportModalHandle: {
+    alignSelf: 'center',
+    width: 52,
+    height: 5,
+    borderRadius: BorderRadius.full,
+    backgroundColor: Colors.borderMedium,
+    marginBottom: Spacing.md,
+  },
+  reportHeader: {
+    alignItems: 'flex-end',
+    marginBottom: Spacing.lg,
+  },
+  reportTitle: {
+    fontSize: FontSize.xl,
+    fontWeight: '700',
+    color: Colors.text,
+    textAlign: 'right',
+  },
+  reportSubtitle: {
+    fontSize: FontSize.sm,
+    color: Colors.textSecondary,
+    marginTop: 4,
+    textAlign: 'right',
+  },
+  reportOptionCard: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: BorderRadius.lg,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.md,
+    marginBottom: Spacing.sm,
+  },
+  reportOptionIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: BorderRadius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: Spacing.md,
+  },
+  reportOptionIconInventory: {
+    backgroundColor: Colors.arme,
+  },
+  reportOptionIconCompany: {
+    backgroundColor: Colors.info,
+  },
+  reportOptionContent: {
+    flex: 1,
+    alignItems: 'flex-end',
+  },
+  reportOptionTitle: {
+    fontSize: FontSize.base,
+    fontWeight: '700',
+    color: Colors.text,
+    textAlign: 'right',
+  },
+  reportOptionDescription: {
+    fontSize: FontSize.sm,
+    color: Colors.textSecondary,
+    marginTop: 2,
+    textAlign: 'right',
+  },
+  reportOptionChevron: {
+    marginRight: Spacing.sm,
+  },
+  reportCancelButton: {
+    marginTop: Spacing.sm,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.backgroundCard,
+  },
+  reportCancelText: {
+    fontSize: FontSize.base,
+    fontWeight: '600',
+    color: Colors.textSecondary,
   },
 });
 
