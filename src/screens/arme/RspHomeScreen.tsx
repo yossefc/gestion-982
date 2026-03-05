@@ -10,20 +10,24 @@ import {
     StyleSheet,
     ScrollView,
     TouchableOpacity,
-    Alert,
     Share,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
+import { useAuth } from '../../contexts/AuthContext';
+
+const TICKET_COLOR = Colors.warning; // Orange — couleur du module tickets
 
 const RspHomeScreen: React.FC = () => {
     const navigation = useNavigation<any>();
+    const { user } = useAuth();
+
+    const isAdmin = user?.role === 'admin';
+    const isRsp   = user?.role === 'rsp';
 
     const handleShareLink = async () => {
         try {
-            // Pour l'instant, on partage juste un message placeholder
-            // Dans le futur, cela pourrait être un deep link ou un lien web
             await Share.share({
                 message: 'Lien de consultation רס"פים: [Lien à implémenter]',
                 title: 'Lien רס"פים',
@@ -33,6 +37,7 @@ const RspHomeScreen: React.FC = () => {
         }
     };
 
+    // ─── Menu principal RSP ───────────────────────────────────────────────
     const menuItems = [
         {
             id: 'dashboard',
@@ -80,9 +85,48 @@ const RspHomeScreen: React.FC = () => {
             subtitle: 'שיתוף קישור לרס"פים',
             icon: 'link',
             color: '#9C27B0',
-            action: () => navigation.navigate('RspReadOnly'), // Ou handleShareLink directement
+            action: () => navigation.navigate('RspReadOnly'),
         },
     ];
+
+    // ─── Boutons Ticketing (visibilité selon rôle) ────────────────────────
+    //
+    //  TicketForm  → רס"פ  soumet un ticket
+    //  TicketInbox → האחראי  reçoit et ferme les tickets (tous les rôles)
+    //  TicketAdmin → מנהל  configure les lieux et types (admin uniquement)
+
+    const ticketItems = [
+        // Visible à tous — n'importe quel utilisateur peut être האחראי
+        {
+            id: 'ticket_inbox',
+            title: 'תיבת בקשות / תקלות',
+            subtitle: 'צפייה וטיפול בדיווחים שנשלחו אליך',
+            icon: 'mail',
+            color: TICKET_COLOR,
+            show: true,
+            action: () => navigation.navigate('TicketInbox'),
+        },
+        // Visible aux RSP (role 'rsp') et aux admins
+        {
+            id: 'ticket_form',
+            title: 'דיווח תקלה / בקשה',
+            subtitle: 'הגש דיווח חדש למחסן / לאחראי',
+            icon: 'alert-circle',
+            color: Colors.danger,
+            show: isRsp || isAdmin,
+            action: () => navigation.navigate('TicketForm'),
+        },
+        // Visible aux admins uniquement
+        {
+            id: 'ticket_admin',
+            title: 'הגדרות מערכת דיווח',
+            subtitle: 'ניהול מוצבים וסוגי תקלות',
+            icon: 'settings',
+            color: Colors.accent,
+            show: isAdmin,
+            action: () => navigation.navigate('TicketAdmin'),
+        },
+    ].filter(i => i.show);
 
     return (
         <View style={styles.container}>
@@ -101,6 +145,8 @@ const RspHomeScreen: React.FC = () => {
             </View>
 
             <ScrollView style={styles.content} contentContainerStyle={styles.scrollContent}>
+
+                {/* ─── Section principale RSP ─────────────────────────────── */}
                 <View style={styles.menuContainer}>
                     {menuItems.map((item) => (
                         <TouchableOpacity
@@ -120,6 +166,41 @@ const RspHomeScreen: React.FC = () => {
                         </TouchableOpacity>
                     ))}
                 </View>
+
+                {/* ─── Section Ticketing / Signalement ────────────────────── */}
+                {ticketItems.length > 0 && (
+                    <>
+                        {/* Séparateur avec titre */}
+                        <View style={styles.sectionDivider}>
+                            <View style={styles.sectionDividerLine} />
+                            <View style={styles.sectionDividerLabel}>
+                                <Ionicons name="construct-outline" size={14} color={TICKET_COLOR} />
+                                <Text style={styles.sectionDividerText}>בקשות ותקלות</Text>
+                            </View>
+                            <View style={styles.sectionDividerLine} />
+                        </View>
+
+                        <View style={[styles.menuContainer, styles.ticketSection]}>
+                            {ticketItems.map((item) => (
+                                <TouchableOpacity
+                                    key={item.id}
+                                    style={[styles.menuCard, styles.ticketCard]}
+                                    onPress={item.action}
+                                    activeOpacity={0.7}
+                                >
+                                    <View style={[styles.menuIcon, { backgroundColor: item.color + '18' }]}>
+                                        <Ionicons name={item.icon as any} size={26} color={item.color} />
+                                    </View>
+                                    <View style={styles.menuInfo}>
+                                        <Text style={styles.menuTitle}>{item.title}</Text>
+                                        <Text style={styles.menuSubtitle}>{item.subtitle}</Text>
+                                    </View>
+                                    <Ionicons name="chevron-back" size={20} color={Colors.textLight} />
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                    </>
+                )}
 
                 {/* Info Card */}
                 <View style={styles.infoCard}>
@@ -229,7 +310,44 @@ const styles = StyleSheet.create({
         flex: 1,
         color: '#F57F17',
         fontSize: FontSize.sm,
-        textAlign: 'right', // RTL
+        textAlign: 'right',
+    },
+
+    // ─── Section Ticketing ───────────────────────────────────────────────
+    sectionDivider: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: Spacing.xl,
+        marginBottom: Spacing.md,
+        gap: Spacing.sm,
+    },
+    sectionDividerLine: {
+        flex: 1,
+        height: 1,
+        backgroundColor: Colors.border,
+    },
+    sectionDividerLabel: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: Spacing.xs,
+        backgroundColor: Colors.warningLight,
+        borderRadius: BorderRadius.full,
+        paddingHorizontal: Spacing.md,
+        paddingVertical: Spacing.xs,
+        borderWidth: 1,
+        borderColor: Colors.warning + '40',
+    },
+    sectionDividerText: {
+        fontSize: FontSize.sm,
+        fontWeight: '700',
+        color: Colors.warningDark,
+    },
+    ticketSection: {
+        marginTop: 0,
+    },
+    ticketCard: {
+        borderLeftWidth: 3,
+        borderLeftColor: TICKET_COLOR,
     },
 });
 
