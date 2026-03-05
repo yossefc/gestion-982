@@ -247,9 +247,9 @@ const LoginScreen: React.FC = () => {
 
             {/* Google Sign In Button */}
             <TouchableOpacity
-              style={[styles.socialButton, (googleLoading || !googleReady) && styles.socialButtonDisabled]}
+              style={[styles.socialButton, googleLoading && styles.socialButtonDisabled]}
               onPress={signInWithGoogle}
-              disabled={googleLoading || !googleReady}
+              disabled={googleLoading}
               activeOpacity={0.8}
             >
               {googleLoading ? (

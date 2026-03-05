@@ -3,6 +3,7 @@ import React, { createContext, useContext, useState, useEffect, useMemo, useCall
 import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
   signOut as firebaseSignOut,
   User as FirebaseUser
 } from 'firebase/auth';
@@ -99,7 +100,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     return unsubscribe;
   }, []);
 
-  const signIn = async (email: string, password: string) => {
+  const signIn = useCallback(async (email: string, password: string) => {
     try {
       await signInWithEmailAndPassword(auth, email, password);
     } catch (error: any) {
@@ -113,11 +114,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
       throw new Error(message);
     }
-  };
+  }, []);
 
-  const signUp = async (email: string, password: string, name: string) => {
+  const signUp = useCallback(async (email: string, password: string, name: string) => {
     try {
-      const { createUserWithEmailAndPassword } = await import('firebase/auth');
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const fbUser = userCredential.user;
 
@@ -147,7 +147,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
       throw new Error(message);
     }
-  };
+  }, []);
 
   const refreshUser = useCallback(async () => {
     const fbUser = auth.currentUser;
@@ -175,13 +175,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   }, []);
 
-  const signOut = async () => {
+  const signOut = useCallback(async () => {
     try {
       await firebaseSignOut(auth);
     } catch (error) {
       throw error;
     }
-  };
+  }, []);
 
   // Vérifier les permissions selon le rôle
   const hasPermission = useCallback((module: 'arme' | 'vetement' | 'admin' | 'rsp'): boolean => {

@@ -28,6 +28,35 @@ const DATA_CELL_WIDTH = 46;
 const ROW_HEIGHT = 40;
 const HEADER_HEIGHT = 40;
 
+const PRIORITY_EQUIPMENT_ORDER = [
+  'רוס"ק M-16',
+  'מטול M-203',
+  'קלע A-3',
+  'טלסקופ טריגיקון',
+  'אקילע X4',
+  'אמרל עכבר',
+  'משקפת 8X30',
+  'משקפת 7X50',
+  'מצפן',
+  'רינגו M-203',
+  'מטול עצמאי',
+  'מקלע מאג',
+  'רוס"ר M-16',
+];
+
+function normalizeEquipmentName(value: string): string {
+  return (value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/["'`\u05F3\u05F4]/g, '')
+    .replace(/[-\u05BE]/g, '')
+    .replace(/\s+/g, '');
+}
+
+const PRIORITY_ORDER_INDEX = new Map(
+  PRIORITY_EQUIPMENT_ORDER.map((name, index) => [normalizeEquipmentName(name), index])
+);
+
 // Columns ordered RTL: scroll left reveals less-important cols; תקן is rightmost (closest to fixed col)
 const COLUMNS = [
   { key: 'total', label: 'סה"כ', width: DATA_CELL_WIDTH },
@@ -90,12 +119,27 @@ const CombatStockScreen: React.FC = () => {
           .filter((e: any) => e.requiresSerial || e.requiresManualSerial)
           .map((e: any) => e.id)
       );
-      setStocks(
-        data.filter(s =>
-          (s.equipmentId.startsWith('WEAPON_') || serialGearIds.has(s.equipmentId)) &&
-          s.total > 0
-        )
+      const filteredStocks = data.filter(s =>
+        (s.equipmentId.startsWith('WEAPON_') || serialGearIds.has(s.equipmentId)) &&
+        s.total > 0
       );
+
+      const sortedStocks = [...filteredStocks].sort((a, b) => {
+        const aRank = PRIORITY_ORDER_INDEX.get(normalizeEquipmentName(a.equipmentName));
+        const bRank = PRIORITY_ORDER_INDEX.get(normalizeEquipmentName(b.equipmentName));
+        const aHasPriority = aRank !== undefined;
+        const bHasPriority = bRank !== undefined;
+
+        if (aHasPriority && bHasPriority) {
+          return (aRank as number) - (bRank as number);
+        }
+        if (aHasPriority) return -1;
+        if (bHasPriority) return 1;
+
+        return a.equipmentName.localeCompare(b.equipmentName, 'he');
+      });
+
+      setStocks(sortedStocks);
     } catch (error) {
       console.error('Error loading stocks:', error);
       Alert.alert('שגיאה', 'לא ניתן לטעון את נתוני המלאי');

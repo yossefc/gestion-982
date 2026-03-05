@@ -17,7 +17,7 @@ module.exports = {
       bundleIdentifier: "com.gestion982.app",
       googleServicesFile: process.env.GOOGLE_SERVICES_PLIST || "./GoogleService-Info.plist",
       entitlements: {
-        "com.apple.developer.authentication": true
+        "com.apple.developer.applesignin": ["Default"]
       },
       infoPlist: {
         NSLocalNetworkUsageDescription: "האפליקציה זקוקה לגישה לרשת המקומית לצורך זיהוי חיבור האינטרנט.",
