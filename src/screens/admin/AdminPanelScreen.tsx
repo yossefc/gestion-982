@@ -77,11 +77,11 @@ const AdminPanelScreen: React.FC = () => {
   const executeCategoryDeletion = async () => {
     if (!selectedCategory || !categoryStats) return;
 
-    // Check if there are weapons to delete
+    // Check how many serial-number records can be deleted
     const weaponsToDelete = categoryStats.total - categoryStats.assigned;
     if (weaponsToDelete <= 0) {
       setModalType('info');
-      setModalMessage('אין נשקים זמינים למחיקה בקטגוריה זו (כל הנשקים מוקצים)');
+      setModalMessage('אין מסט"בים זמינים למחיקה בקטגוריה זו (כל הנשקים מוקצים)');
       setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
       setDeleteCategoryModalVisible(false);
       setModalVisible(true);
@@ -89,12 +89,16 @@ const AdminPanelScreen: React.FC = () => {
     }
 
     setModalType('warning');
-    setModalTitle('אישור מחיקה');
-    setModalMessage(`האם אתה בטוח שברצונך למחוק ${weaponsToDelete} נשקים מהקטגוריה ${selectedCategory}? \n\n${categoryStats.assigned} נשקים מוקצים לחיילים ולא ימחקו.`);
+    setModalTitle('אישור מחיקת מסט"בים');
+    setModalMessage(
+      `האם אתה בטוח שברצונך למחוק ${weaponsToDelete} מסט"בים מהקטגוריה ${selectedCategory}? \n\n` +
+      `${categoryStats.assigned} נשקים מוקצים לחיילים ולא ימחקו.\n` +
+      'הקטגוריה עצמה לא תימחק.'
+    );
     setModalButtons([
       { text: 'ביטול', style: 'outline', onPress: () => setModalVisible(false) },
       {
-        text: 'מחק',
+        text: 'מחק מסט"בים',
         style: 'destructive',
         onPress: async () => {
           setModalVisible(false); // Close confirmation modal
@@ -106,13 +110,13 @@ const AdminPanelScreen: React.FC = () => {
 
             setModalType('success');
             setModalTitle('הצלחה');
-            setModalMessage(`נמחקו ${deletedCount} נשקים בהצלחה.`);
+            setModalMessage(`נמחקו ${deletedCount} מסט"בים בהצלחה. הקטגוריה עצמה לא נמחקה.`);
             setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
             setModalVisible(true);
           } catch (error) {
             console.error('Error deleting weapons:', error);
             setModalType('error');
-            setModalMessage('שגיאה במחיקת הנשקים');
+            setModalMessage('שגיאה במחיקת המסט"בים');
             setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
             setModalVisible(true);
           } finally {
@@ -412,8 +416,8 @@ const AdminPanelScreen: React.FC = () => {
         {/* New Section: Weapon Inventory Management */}
         <Text style={styles.sectionTitle}>ניהול מלאי נשק</Text>
         <ActionCard
-          title="מחיקת קטגוריה"
-          subtitle="מחק את הנשקים הלא מוקצים בקטגוריה"
+          title='מחיקת מסט"בים לפי קטגוריה'
+          subtitle='מחק את כל המסט"בים הלא מוקצים בקטגוריה (הקטגוריה לא נמחקת)'
           icon="trash"
           color={Colors.danger}
           onPress={handleOpenDeleteCategoryModal}
@@ -491,7 +495,7 @@ const AdminPanelScreen: React.FC = () => {
         >
           <View style={styles.modalContent} onStartShouldSetResponder={() => true}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>בחר קטגוריה למחיקה</Text>
+              <Text style={styles.modalTitle}>בחר קטגוריה למחיקת מסט"בים</Text>
               <TouchableOpacity onPress={() => setDeleteCategoryModalVisible(false)}>
                 <Ionicons name="close" size={24} color={Colors.textSecondary} />
               </TouchableOpacity>
@@ -534,7 +538,7 @@ const AdminPanelScreen: React.FC = () => {
                   style={styles.deleteButton}
                   onPress={executeCategoryDeletion}
                 >
-                  <Text style={styles.deleteButtonText}>מחק קטגוריה</Text>
+                  <Text style={styles.deleteButtonText}>מחק מסט"בים</Text>
                 </TouchableOpacity>
               </View>
             )}

@@ -361,6 +361,33 @@ export const soldierService = {
       // Invalider le cache
       soldiersCache = null;
       soldiersCacheTime = 0;
+
+      // Mettre à jour les assignations si des données pertinentes ont changé
+      if (data.name || data.personalNumber || data.phone || data.company) {
+        try {
+          const assignmentsQuery = query(
+            collection(db, COLLECTIONS.ASSIGNMENTS),
+            where('soldierId', '==', id)
+          );
+          const assignmentsSnap = await getDocs(assignmentsQuery);
+
+          if (!assignmentsSnap.empty) {
+            const batchPromises = assignmentsSnap.docs.map(assignmentDoc => {
+              const assignmentUpdate: any = {};
+              if (data.name) assignmentUpdate.soldierName = data.name;
+              if (data.personalNumber) assignmentUpdate.soldierPersonalNumber = data.personalNumber;
+              if (data.phone) assignmentUpdate.soldierPhone = data.phone;
+              if (data.company) assignmentUpdate.soldierCompany = data.company;
+
+              return updateDoc(doc(db, COLLECTIONS.ASSIGNMENTS, assignmentDoc.id), assignmentUpdate);
+            });
+            await Promise.all(batchPromises);
+          }
+        } catch (assignmentError) {
+          console.error('Erreur lors de la mise à jour des assignations du soldat:', assignmentError);
+          // On ne jette pas l'erreur pour ne pas bloquer la mise à jour principale du soldat
+        }
+      }
     } catch (error) {
       logError('soldierService.update', error);
       throw mapFirebaseError(error);

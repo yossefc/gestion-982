@@ -61,6 +61,8 @@ const generateInventoryReportHTML = (data: InventoryReportData): string => {
       box-sizing: border-box;
       margin: 0;
       padding: 0;
+      color: #000;
+      background: #fff;
     }
     html, body {
       width: 100%;
@@ -86,8 +88,8 @@ const generateInventoryReportHTML = (data: InventoryReportData): string => {
       align-items: center;
       border-bottom: 3px solid #000;
       padding: 6px 10px;
-      background: #1a1a2e;
-      color: #fff;
+      background: #fff;
+      color: #000;
     }
     .header-side {
       font-size: 12px;
@@ -103,7 +105,7 @@ const generateInventoryReportHTML = (data: InventoryReportData): string => {
     .doc-subtitle {
       font-size: 11px;
       text-align: center;
-      opacity: 0.8;
+      color: #000;
     }
 
     /* ── Inventory table ── */
@@ -119,8 +121,8 @@ const generateInventoryReportHTML = (data: InventoryReportData): string => {
       flex: 1;
     }
     .inventory-table thead th {
-      background-color: #2c3e50;
-      color: #fff;
+      background-color: #fff;
+      color: #000;
       border: 1px solid #000;
       padding: 7px 3px;
       font-weight: bold;
@@ -128,19 +130,21 @@ const generateInventoryReportHTML = (data: InventoryReportData): string => {
       text-align: center;
     }
     .inventory-table tbody tr:nth-child(even) {
-      background-color: #f0f0f0;
+      background-color: #fff;
     }
     .inventory-table tbody tr:nth-child(odd) {
       background-color: #fff;
     }
     .cell {
-      border: 1px solid #555;
+      border: 1px solid #000;
       padding: 6px 3px;
       font-size: 13px;
+      color: #000;
+      background: #fff;
     }
     .cell-center { text-align: center; }
     .cell-right  { text-align: right; padding-right: 5px; }
-    .grey-cell   { background-color: #b8c6d0 !important; font-weight: bold; }
+    .grey-cell   { background-color: #fff !important; font-weight: bold; color: #000; }
 
     /* ── Signature table ── */
     .sig-section {
@@ -158,14 +162,15 @@ const generateInventoryReportHTML = (data: InventoryReportData): string => {
       vertical-align: middle;
     }
     .sig-header {
-      background-color: #2c3e50;
-      color: #fff;
+      background-color: #fff;
+      color: #000;
       font-weight: bold;
       text-align: center;
       font-size: 14px;
     }
     .sig-label {
-      background-color: #dde4ea;
+      background-color: #fff;
+      color: #000;
       font-weight: bold;
       text-align: right;
       white-space: nowrap;
