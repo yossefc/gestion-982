@@ -83,6 +83,7 @@ const TicketAdminScreen: React.FC = () => {
   // Modal "Ajouter מוצב"
   const [showAddMozav, setShowAddMozav]   = useState(false);
   const [newMozavName, setNewMozavName]   = useState('');
+  const [newMozavPluga, setNewMozavPluga] = useState('');
   const [savingMozav, setSavingMozav]     = useState(false);
 
   // Modal "Ajouter Type"
@@ -122,11 +123,13 @@ const TicketAdminScreen: React.FC = () => {
   // ─── Actions Mozav ───────────────────────────────────────────────────────
 
   const handleAddMozav = async () => {
-    if (!newMozavName.trim()) return;
+    if (!newMozavName.trim()) { Alert.alert('שגיאה', 'הכנס שם למוצב'); return; }
+    if (!newMozavPluga.trim()) { Alert.alert('שגיאה', 'הכנס פלוגה למוצב'); return; }
     setSavingMozav(true);
     try {
-      await ticketService.addMozav(newMozavName.trim());
+      await ticketService.addMozav(newMozavName.trim(), newMozavPluga.trim());
       setNewMozavName('');
+      setNewMozavPluga('');
       setShowAddMozav(false);
       await load();
       setModalType('success'); setModalMsg('המוצב נוסף בהצלחה'); setModalVisible(true);
@@ -243,8 +246,16 @@ const TicketAdminScreen: React.FC = () => {
                   <Ionicons name="trash-outline" size={18} color={Colors.danger} />
                 </TouchableOpacity>
                 <View style={styles.listItemContent}>
-                  <Ionicons name="location" size={16} color={TICKET_COLOR} />
-                  <Text style={styles.listItemText}>{m.name}</Text>
+                  <View style={{ flex: 1, alignItems: 'flex-end' }}>
+                    <Text style={styles.listItemText}>{m.name}</Text>
+                    {m.pluga ? (
+                      <View style={styles.assignedRow}>
+                        <Text style={styles.assignedText}>{m.pluga}</Text>
+                        <Ionicons name="people-outline" size={14} color={Colors.textSecondary} />
+                      </View>
+                    ) : null}
+                  </View>
+                  <Ionicons name="location" size={16} color={TICKET_COLOR} style={{ marginRight: Spacing.xs }} />
                 </View>
               </View>
             ))
@@ -306,14 +317,25 @@ const TicketAdminScreen: React.FC = () => {
               <Text style={styles.modalTitle}>הוספת מוצב</Text>
             </View>
 
+            <Text style={styles.modalLabel}>שם המוצב</Text>
             <TextInput
               style={styles.modalInput}
-              placeholder="שם המוצב..."
+              placeholder="לדוגמה: מוצב צפון..."
               placeholderTextColor={Colors.placeholder}
               value={newMozavName}
               onChangeText={setNewMozavName}
               textAlign="right"
               autoFocus
+            />
+
+            <Text style={styles.modalLabel}>פלוגה</Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="לדוגמה: פלוגה א..."
+              placeholderTextColor={Colors.placeholder}
+              value={newMozavPluga}
+              onChangeText={setNewMozavPluga}
+              textAlign="right"
             />
 
             <TouchableOpacity

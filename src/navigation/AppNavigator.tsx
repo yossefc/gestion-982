@@ -67,6 +67,7 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 
 const AppNavigator: React.FC = () => {
   const { user, loading } = useAuth();
+  const isRsp = user?.role === 'rsp';
 
   // Écran de chargement
   if (loading) {
@@ -93,8 +94,11 @@ const AppNavigator: React.FC = () => {
           ) : (
             // Écrans authentifiés
             <>
-              {/* Écran principal */}
-              <Stack.Screen name="Home" component={HomeScreen} />
+              {/* Écran principal — RSP atterrit directement sur RspHome */}
+              {isRsp
+                ? <Stack.Screen name="RspHome" component={RspHomeScreen} />
+                : <Stack.Screen name="Home" component={HomeScreen} />
+              }
 
               {/* Écrans communs */}
               <Stack.Screen name="SoldierSearch" component={SoldierSearchScreen} />

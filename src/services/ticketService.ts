@@ -41,6 +41,7 @@ function docToMozav(id: string, data: DocumentData): Mozav {
   return {
     id,
     name: data.name || '',
+    pluga: data.pluga || '',
     createdAt: data.createdAt instanceof Timestamp
       ? data.createdAt.toDate()
       : new Date(data.createdAt || Date.now()),
@@ -95,9 +96,10 @@ export async function getMozavim(): Promise<Mozav[]> {
 }
 
 /** Ajoute un מוצב */
-export async function addMozav(name: string): Promise<string> {
+export async function addMozav(name: string, pluga: string): Promise<string> {
   const ref = await addDoc(collection(db, MOZAVIM_COL), {
     name: name.trim(),
+    pluga: pluga.trim(),
     createdAt: serverTimestamp(),
   });
   return ref.id;

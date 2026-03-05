@@ -256,6 +256,7 @@ export type RootStackParamList = {
 export interface Mozav {
   id: string;
   name: string;
+  pluga: string;   // פלוגה associée au מוצב
   createdAt: Date;
 }
 

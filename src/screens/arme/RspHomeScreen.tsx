@@ -1,6 +1,8 @@
 /**
  * RspHomeScreen.tsx
- * Menu principal pour la gestion des רס"פים (RSP)
+ * Menu principal — deux vues selon le rôle :
+ *   • RSP  → 4 raccourcis personnels (tickets + dashboard + tableau)
+ *   • Admin → menu complet de gestion רס"פים
  */
 
 import React from 'react';
@@ -10,35 +12,67 @@ import {
     StyleSheet,
     ScrollView,
     TouchableOpacity,
-    Share,
+    Alert,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
 import { useAuth } from '../../contexts/AuthContext';
 
-const TICKET_COLOR = Colors.warning; // Orange — couleur du module tickets
+const TICKET_COLOR = Colors.warning;
 
 const RspHomeScreen: React.FC = () => {
     const navigation = useNavigation<any>();
-    const { user } = useAuth();
+    const { user, signOut } = useAuth();
 
     const isAdmin = user?.role === 'admin';
     const isRsp   = user?.role === 'rsp';
 
-    const handleShareLink = async () => {
-        try {
-            await Share.share({
-                message: 'Lien de consultation רס"פים: [Lien à implémenter]',
-                title: 'Lien רס"פים',
-            });
-        } catch (error) {
-            console.error(error);
-        }
+    const handleLogout = () => {
+        Alert.alert('יציאה', 'האם אתה בטוח שברצונך להתנתק?', [
+            { text: 'ביטול', style: 'cancel' },
+            { text: 'התנתק', style: 'destructive', onPress: () => signOut() },
+        ]);
     };
 
-    // ─── Menu principal RSP ───────────────────────────────────────────────
-    const menuItems = [
+    // ─── תפריט לרס"פ (4 פריטים בלבד) ────────────────────────────────────
+    const rspMenuItems = [
+        {
+            id: 'ticket_inbox',
+            title: 'תיבת בקשות / תקלות',
+            subtitle: 'צפייה וטיפול בדיווחים שנשלחו אליך',
+            icon: 'mail',
+            color: TICKET_COLOR,
+            action: () => navigation.navigate('TicketInbox'),
+        },
+        {
+            id: 'ticket_form',
+            title: 'דיווח תקלה / בקשה',
+            subtitle: 'הגש דיווח חדש למחסן / לאחראי',
+            icon: 'alert-circle',
+            color: Colors.danger,
+            action: () => navigation.navigate('TicketForm'),
+        },
+        {
+            id: 'dashboard',
+            title: 'דשבורד הפלוגה',
+            subtitle: 'צפייה בציוד חיילי הפלוגה שלך',
+            icon: 'eye',
+            color: Colors.primary,
+            action: () => navigation.navigate('RspDashboard', {}),
+        },
+        {
+            id: 'table',
+            title: 'טבלת רס"פים לפי פלוגה',
+            subtitle: 'סקירת כל רס"פי הפלוגה וציודם',
+            icon: 'grid',
+            color: Colors.info,
+            action: () => navigation.navigate('RspTable'),
+        },
+    ];
+
+    // ─── Menu complet Admin ───────────────────────────────────────────────
+    const adminMenuItems = [
         {
             id: 'dashboard',
             title: 'דאשבורד רס"פ',
@@ -89,48 +123,80 @@ const RspHomeScreen: React.FC = () => {
         },
     ];
 
-    // ─── Boutons Ticketing (visibilité selon rôle) ────────────────────────
-    //
-    //  TicketForm  → רס"פ  soumet un ticket
-    //  TicketInbox → האחראי  reçoit et ferme les tickets (tous les rôles)
-    //  TicketAdmin → מנהל  configure les lieux et types (admin uniquement)
-
-    const ticketItems = [
-        // Visible à tous — n'importe quel utilisateur peut être האחראי
+    const adminTicketItems = [
         {
             id: 'ticket_inbox',
             title: 'תיבת בקשות / תקלות',
             subtitle: 'צפייה וטיפול בדיווחים שנשלחו אליך',
             icon: 'mail',
             color: TICKET_COLOR,
-            show: true,
             action: () => navigation.navigate('TicketInbox'),
         },
-        // Visible aux RSP (role 'rsp') et aux admins
         {
             id: 'ticket_form',
             title: 'דיווח תקלה / בקשה',
             subtitle: 'הגש דיווח חדש למחסן / לאחראי',
             icon: 'alert-circle',
             color: Colors.danger,
-            show: isRsp || isAdmin,
             action: () => navigation.navigate('TicketForm'),
         },
-        // Visible aux admins uniquement
         {
             id: 'ticket_admin',
             title: 'הגדרות מערכת דיווח',
             subtitle: 'ניהול מוצבים וסוגי תקלות',
             icon: 'settings',
             color: Colors.accent,
-            show: isAdmin,
             action: () => navigation.navigate('TicketAdmin'),
         },
-    ].filter(i => i.show);
+    ];
 
+    // ─── RSP VIEW ─────────────────────────────────────────────────────────
+    if (isRsp) {
+        return (
+            <View style={styles.container}>
+                {/* Header RSP — bouton logout à gauche */}
+                <View style={[styles.header, styles.headerRsp]}>
+                    <TouchableOpacity style={styles.backButton} onPress={handleLogout}>
+                        <Ionicons name="log-out-outline" size={22} color="#FFF" />
+                    </TouchableOpacity>
+                    <View style={styles.headerCenter}>
+                        <Text style={styles.headerTitle}>שלום, {user?.name || 'רס"פ'}</Text>
+                        <Text style={styles.headerSubtitle}>מה תרצה לעשות היום?</Text>
+                    </View>
+                    <View style={styles.headerIcon}>
+                        <Ionicons name="person-circle" size={28} color="#FFF" />
+                    </View>
+                </View>
+
+                <ScrollView style={styles.content} contentContainerStyle={styles.scrollContent}>
+                    <View style={styles.menuContainer}>
+                        {rspMenuItems.map((item) => (
+                            <TouchableOpacity
+                                key={item.id}
+                                style={[styles.menuCard, { borderRightWidth: 4, borderRightColor: item.color }]}
+                                onPress={item.action}
+                                activeOpacity={0.7}
+                            >
+                                <View style={[styles.menuIcon, { backgroundColor: item.color + '18' }]}>
+                                    <Ionicons name={item.icon as any} size={28} color={item.color} />
+                                </View>
+                                <View style={styles.menuInfo}>
+                                    <Text style={styles.menuTitle}>{item.title}</Text>
+                                    <Text style={styles.menuSubtitle}>{item.subtitle}</Text>
+                                </View>
+                                <Ionicons name="chevron-back" size={20} color={Colors.textLight} />
+                            </TouchableOpacity>
+                        ))}
+                    </View>
+                </ScrollView>
+            </View>
+        );
+    }
+
+    // ─── ADMIN VIEW ───────────────────────────────────────────────────────
     return (
         <View style={styles.container}>
-            {/* Header */}
+            {/* Header Admin — bouton retour */}
             <View style={styles.header}>
                 <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
                     <Ionicons name="arrow-forward" size={24} color="#FFF" />
@@ -146,9 +212,9 @@ const RspHomeScreen: React.FC = () => {
 
             <ScrollView style={styles.content} contentContainerStyle={styles.scrollContent}>
 
-                {/* ─── Section principale RSP ─────────────────────────────── */}
+                {/* Section principale */}
                 <View style={styles.menuContainer}>
-                    {menuItems.map((item) => (
+                    {adminMenuItems.map((item) => (
                         <TouchableOpacity
                             key={item.id}
                             style={styles.menuCard}
@@ -167,40 +233,35 @@ const RspHomeScreen: React.FC = () => {
                     ))}
                 </View>
 
-                {/* ─── Section Ticketing / Signalement ────────────────────── */}
-                {ticketItems.length > 0 && (
-                    <>
-                        {/* Séparateur avec titre */}
-                        <View style={styles.sectionDivider}>
-                            <View style={styles.sectionDividerLine} />
-                            <View style={styles.sectionDividerLabel}>
-                                <Ionicons name="construct-outline" size={14} color={TICKET_COLOR} />
-                                <Text style={styles.sectionDividerText}>בקשות ותקלות</Text>
-                            </View>
-                            <View style={styles.sectionDividerLine} />
-                        </View>
+                {/* Section Ticketing */}
+                <View style={styles.sectionDivider}>
+                    <View style={styles.sectionDividerLine} />
+                    <View style={styles.sectionDividerLabel}>
+                        <Ionicons name="construct-outline" size={14} color={TICKET_COLOR} />
+                        <Text style={styles.sectionDividerText}>בקשות ותקלות</Text>
+                    </View>
+                    <View style={styles.sectionDividerLine} />
+                </View>
 
-                        <View style={[styles.menuContainer, styles.ticketSection]}>
-                            {ticketItems.map((item) => (
-                                <TouchableOpacity
-                                    key={item.id}
-                                    style={[styles.menuCard, styles.ticketCard]}
-                                    onPress={item.action}
-                                    activeOpacity={0.7}
-                                >
-                                    <View style={[styles.menuIcon, { backgroundColor: item.color + '18' }]}>
-                                        <Ionicons name={item.icon as any} size={26} color={item.color} />
-                                    </View>
-                                    <View style={styles.menuInfo}>
-                                        <Text style={styles.menuTitle}>{item.title}</Text>
-                                        <Text style={styles.menuSubtitle}>{item.subtitle}</Text>
-                                    </View>
-                                    <Ionicons name="chevron-back" size={20} color={Colors.textLight} />
-                                </TouchableOpacity>
-                            ))}
-                        </View>
-                    </>
-                )}
+                <View style={[styles.menuContainer, styles.ticketSection]}>
+                    {adminTicketItems.map((item) => (
+                        <TouchableOpacity
+                            key={item.id}
+                            style={[styles.menuCard, styles.ticketCard]}
+                            onPress={item.action}
+                            activeOpacity={0.7}
+                        >
+                            <View style={[styles.menuIcon, { backgroundColor: item.color + '18' }]}>
+                                <Ionicons name={item.icon as any} size={26} color={item.color} />
+                            </View>
+                            <View style={styles.menuInfo}>
+                                <Text style={styles.menuTitle}>{item.title}</Text>
+                                <Text style={styles.menuSubtitle}>{item.subtitle}</Text>
+                            </View>
+                            <Ionicons name="chevron-back" size={20} color={Colors.textLight} />
+                        </TouchableOpacity>
+                    ))}
+                </View>
 
                 {/* Info Card */}
                 <View style={styles.infoCard}>
@@ -220,13 +281,16 @@ const styles = StyleSheet.create({
         backgroundColor: Colors.background,
     },
     header: {
-        backgroundColor: Colors.primary, // Ou une couleur spécifique pour RSP ?
+        backgroundColor: Colors.primary,
         paddingTop: 50,
         paddingBottom: 24,
         paddingHorizontal: Spacing.xl,
         flexDirection: 'row',
         alignItems: 'center',
         ...Shadows.medium,
+    },
+    headerRsp: {
+        backgroundColor: '#F59E0B', // Orange for RSP identity
     },
     backButton: {
         width: 40,
@@ -283,7 +347,7 @@ const styles = StyleSheet.create({
     },
     menuInfo: {
         flex: 1,
-        alignItems: 'flex-end', // RTL
+        alignItems: 'flex-end',
     },
     menuTitle: {
         fontSize: FontSize.base,
@@ -312,8 +376,6 @@ const styles = StyleSheet.create({
         fontSize: FontSize.sm,
         textAlign: 'right',
     },
-
-    // ─── Section Ticketing ───────────────────────────────────────────────
     sectionDivider: {
         flexDirection: 'row',
         alignItems: 'center',

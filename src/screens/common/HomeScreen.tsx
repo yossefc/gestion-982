@@ -3,7 +3,7 @@
  * Design militaire moderne - équilibré et plaisant
  */
 
-import React, { useState, useEffect, useMemo, useLayoutEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -19,7 +19,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation, CommonActions } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import { Colors, Spacing, BorderRadius } from '../../theme/Colors';
 import { useAuth } from '../../contexts/AuthContext';
 import { soldierService } from '../../services/soldierService';
@@ -37,23 +37,11 @@ const HomeScreen: React.FC = () => {
     byCompany: {} as Record<string, { recruited: number; released: number }>,
   });
 
-  // Rediriger les utilisateurs RSP vers leur dashboard
-  useLayoutEffect(() => {
-    if (userRole === 'rsp') {
-      navigation.dispatch(
-        CommonActions.reset({
-          index: 0,
-          routes: [{ name: 'RspDashboard' }],
-        })
-      );
-    }
-  }, [userRole, navigation]);
-
   useEffect(() => {
-    if (user && userRole !== 'rsp') {
+    if (user) {
       loadStats();
     }
-  }, [user, userRole]);
+  }, [user]);
 
   const loadStats = async () => {
     try {
@@ -124,16 +112,6 @@ const HomeScreen: React.FC = () => {
     };
     return config[userRole || ''] || { label: 'משתמש', color: '#64748B' };
   }, [userRole]);
-
-  // Si RSP, ne pas afficher ce screen (redirection en cours)
-  if (userRole === 'rsp') {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="small" color="#F59E0B" />
-        <Text style={styles.loadingText}>מעבר לדאשבורד רס"פ...</Text>
-      </View>
-    );
-  }
 
   // Couleurs pour les compagnies
   const companyColors = useMemo(() => ['#10B981', '#3B82F6', '#F59E0B', '#8B5CF6', '#EC4899', '#14B8A6'], []);
