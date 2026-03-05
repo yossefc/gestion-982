@@ -148,7 +148,8 @@ const AppNavigator: React.FC = () => {
               <Stack.Screen name="ShlishutHome" component={ShlishutHomeScreen} />
 
               {/* Module RSP */}
-              <Stack.Screen name="RspHome" component={RspHomeScreen} />
+              {/* RspHome déjà enregistré comme premier écran pour les RSP — évite le doublon */}
+              {!isRsp && <Stack.Screen name="RspHome" component={RspHomeScreen} />}
               <Stack.Screen name="RspEquipment" component={RspEquipmentScreen} />
               <Stack.Screen name="RspAssignment" component={RspAssignmentScreen} />
               <Stack.Screen name="RspTable" component={RspTableScreen} />
