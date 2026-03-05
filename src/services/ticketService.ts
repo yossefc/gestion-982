@@ -30,6 +30,11 @@ const MOZAVIM_COL     = 'mozavim';
 const ISSUE_TYPES_COL = 'issue_types';
 const TICKETS_COL     = 'tickets';
 
+/** Tri client-side : tickets du plus récent au plus ancien */
+function sortByCreatedAtDesc(tickets: Ticket[]): Ticket[] {
+  return tickets.slice().sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+}
+
 // ─── Convertisseurs ──────────────────────────────────────────────────────────
 
 function docToMozav(id: string, data: DocumentData): Mozav {
@@ -195,35 +200,35 @@ export async function closeTicket(ticketId: string): Promise<void> {
 
 /**
  * Tickets créés par un utilisateur (vue du רס"פ)
+ * Tri par createdAt effectué côté client pour éviter un index composite Firestore.
  */
 export async function getMyTickets(reporterUserId: string): Promise<Ticket[]> {
   const snap = await getDocs(
     query(
       collection(db, TICKETS_COL),
-      where('reporterUserId', '==', reporterUserId),
-      orderBy('createdAt', 'desc')
+      where('reporterUserId', '==', reporterUserId)
     )
   );
-  return snap.docs.map(d => docToTicket(d.id, d.data()));
+  return sortByCreatedAtDesc(snap.docs.map(d => docToTicket(d.id, d.data())));
 }
 
 /**
  * Tickets assignés à un utilisateur (vue de l'האחראי)
- * Filtre uniquement les tickets dont assignedUserId correspond
+ * Tri par createdAt effectué côté client pour éviter un index composite Firestore.
  */
 export async function getTicketsForUser(assignedUserId: string): Promise<Ticket[]> {
   const snap = await getDocs(
     query(
       collection(db, TICKETS_COL),
-      where('assignedUserId', '==', assignedUserId),
-      orderBy('createdAt', 'desc')
+      where('assignedUserId', '==', assignedUserId)
     )
   );
-  return snap.docs.map(d => docToTicket(d.id, d.data()));
+  return sortByCreatedAtDesc(snap.docs.map(d => docToTicket(d.id, d.data())));
 }
 
 /**
  * Écoute en temps réel les tickets d'un responsable (האחראי)
+ * Tri par createdAt effectué côté client pour éviter un index composite Firestore.
  * Retourne un unsubscribe à appeler dans le cleanup du useEffect
  */
 export function subscribeToUserTickets(
@@ -232,18 +237,18 @@ export function subscribeToUserTickets(
 ): () => void {
   const q = query(
     collection(db, TICKETS_COL),
-    where('assignedUserId', '==', assignedUserId),
-    orderBy('createdAt', 'desc')
+    where('assignedUserId', '==', assignedUserId)
   );
 
   return onSnapshot(q, (snap: QuerySnapshot<DocumentData>) => {
-    const tickets = snap.docs.map(d => docToTicket(d.id, d.data()));
+    const tickets = sortByCreatedAtDesc(snap.docs.map(d => docToTicket(d.id, d.data())));
     callback(tickets);
   });
 }
 
 /**
  * Écoute en temps réel les tickets d'un רס"פ
+ * Tri par createdAt effectué côté client pour éviter un index composite Firestore.
  */
 export function subscribeToMyTickets(
   reporterUserId: string,
@@ -251,12 +256,11 @@ export function subscribeToMyTickets(
 ): () => void {
   const q = query(
     collection(db, TICKETS_COL),
-    where('reporterUserId', '==', reporterUserId),
-    orderBy('createdAt', 'desc')
+    where('reporterUserId', '==', reporterUserId)
   );
 
   return onSnapshot(q, (snap: QuerySnapshot<DocumentData>) => {
-    const tickets = snap.docs.map(d => docToTicket(d.id, d.data()));
+    const tickets = sortByCreatedAtDesc(snap.docs.map(d => docToTicket(d.id, d.data())));
     callback(tickets);
   });
 }

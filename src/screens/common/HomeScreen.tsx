@@ -296,7 +296,7 @@ const HomeScreen: React.FC = () => {
           {canAccessAdmin && (
             <TouchableOpacity
               style={styles.moduleCard}
-              onPress={() => (navigation as any).navigate('RspDashboard', {})}
+              onPress={() => (navigation as any).navigate('RspHome')}
               activeOpacity={0.7}
             >
               <LinearGradient
