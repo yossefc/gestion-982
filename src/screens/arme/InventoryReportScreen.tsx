@@ -14,6 +14,7 @@ import { useCombatEquipment } from '../../contexts/DataContext';
 import { getAllEquipmentStocks, EquipmentStock } from '../../services/combatStockService';
 import { printInventoryReport } from '../../services/inventoryReportService';
 import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
+import { sortByArmoryEquipmentPriority } from '../../config/armoryEquipmentOrder';
 
 const InventoryReportScreen: React.FC = () => {
   const navigation = useNavigation<any>();
@@ -42,12 +43,11 @@ const InventoryReportScreen: React.FC = () => {
           .filter(e => e.requiresSerial || e.requiresManualSerial)
           .map(e => e.id)
       );
-      setStocks(
-        data.filter(s =>
-          (s.equipmentId.startsWith('WEAPON_') || serialGearIds.has(s.equipmentId)) &&
-          s.total > 0
-        )
+      const filteredStocks = data.filter(s =>
+        (s.equipmentId.startsWith('WEAPON_') || serialGearIds.has(s.equipmentId)) &&
+        s.total > 0
       );
+      setStocks(sortByArmoryEquipmentPriority(filteredStocks));
     } catch (err) {
       console.error('[InventoryReport] Failed to load stocks:', err);
       setError('לא ניתן לטעון את נתוני המלאי');
