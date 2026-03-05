@@ -19,7 +19,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
 import { assignmentService, calculateCurrentHoldings } from '../../services/assignmentService';
-import { Assignment } from '../../types';
+import { getAllUsers } from '../../services/userService';
+import { Assignment, User } from '../../types';
 import { generateAndPrintMultiPDF, PrintAssignmentData } from '../../utils/printUtils';
 import { AppModal } from '../../components';
 
@@ -154,11 +155,26 @@ const UnprintedSignaturesScreen: React.FC = () => {
         }
       });
 
+      // Récupérer les profils des opérateurs pour obtenir leur signature
+      const uniqueOperatorIds = new Set(
+        Array.from(bySoldier.values()).map(d => d.latestAssignment.assignedBy).filter(Boolean)
+      );
+      const operatorMap = new Map<string, User>();
+      if (uniqueOperatorIds.size > 0) {
+        try {
+          const allUsers = await getAllUsers();
+          allUsers.forEach(u => { if (uniqueOperatorIds.has(u.id)) operatorMap.set(u.id, u); });
+        } catch {
+          // Si la récupération échoue, on continue sans signature opérateur
+        }
+      }
+
       // Pour chaque soldat, récupérer TOUT son équipement actuel (y compris les anciennes attributions)
       const printDataList: PrintAssignmentData[] = [];
 
       for (const [soldierId, data] of bySoldier.entries()) {
         const { latestAssignment } = data;
+        const operator = operatorMap.get(latestAssignment.assignedBy);
 
         // Récupérer tout l'équipement actuellement détenu par ce soldat
         let itemsForPrint: any[];
@@ -186,10 +202,10 @@ const UnprintedSignaturesScreen: React.FC = () => {
           soldierCompany: latestAssignment.soldierCompany,
           items: itemsForPrint,
           signature: latestAssignment.signature || '',
-          operatorSignature: undefined,
-          operatorName: latestAssignment.assignedByName || latestAssignment.assignedByEmail || '',
-          operatorRank: latestAssignment.assignedByRank || '',
-          operatorPersonalNumber: (latestAssignment as any).assignedByPersonalNumber || '',
+          operatorSignature: operator?.signature || undefined,
+          operatorName: latestAssignment.assignedByName || latestAssignment.assignedByEmail || operator?.name || '',
+          operatorRank: latestAssignment.assignedByRank || operator?.rank || '',
+          operatorPersonalNumber: latestAssignment.assignedByPersonalNumber || operator?.personalNumber || '',
           timestamp:
             latestAssignment.timestamp instanceof Date
               ? latestAssignment.timestamp

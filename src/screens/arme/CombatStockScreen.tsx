@@ -136,7 +136,7 @@ const CombatStockScreen: React.FC = () => {
 
   const getCompanyValue = (stock: EquipmentStock, companyName: string): number => {
     const company = stock.byCompany.find(c => c.company === companyName);
-    return company ? company.issued : 0;
+    return company ? company.issued + (company.stored || 0) : 0;
   };
 
   const getRowValues = (stock: EquipmentStock) => {
@@ -146,7 +146,7 @@ const CombatStockScreen: React.FC = () => {
     const compD = getCompanyValue(stock, 'פלוגה ד');
     const hq = getCompanyValue(stock, 'מפקדה/אגמ') + getCompanyValue(stock, 'מפקדה');
     const niud = getCompanyValue(stock, 'ניוד');
-    const loans = compA + compB + compC + compD + hq + niud + stock.stored;
+    const loans = compA + compB + compC + compD + hq + niud;
     const totalCalc = stock.available + stock.stored;
     return {
       standard: stock.total > 0 ? stock.total : '-',

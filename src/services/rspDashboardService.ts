@@ -70,22 +70,37 @@ export const rspDashboardService = {
         return [];
       }
 
-      // 2. Récupérer holdings + assignments vêtements (fallback si holdings vide)
-      const [combatHoldingsSnap, clothingHoldingsSnap, clothingAssignmentsSnap] = await Promise.all([
-        getDocs(query(collection(db, 'soldier_holdings'), where('type', '==', 'combat'))),
-        getDocs(query(collection(db, 'soldier_holdings'), where('type', '==', 'clothing'))),
-        getDocs(query(collection(db, 'assignments'), where('type', '==', 'clothing'))),
+      // Helper : découpe en lots de 30 (limite Firestore 'in')
+      const chunkArray = <T>(arr: T[], size: number): T[][] => {
+        const out: T[][] = [];
+        for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+        return out;
+      };
+      const idChunks = chunkArray(soldierIds, 30);
+
+      // 2. Holdings + assignments filtrés par soldierIds (plus de scan complet)
+      const [holdingSnapsArr, assignmentSnapsArr] = await Promise.all([
+        Promise.all(idChunks.map(chunk =>
+          getDocs(query(collection(db, 'soldier_holdings'), where('soldierId', 'in', chunk)))
+        )),
+        Promise.all(idChunks.map(chunk =>
+          getDocs(query(collection(db, 'assignments'), where('soldierId', 'in', chunk)))
+        )),
       ]);
 
-      // 3. Récupérer les assignments RSP de la compagnie
-      const rspAssignmentsSnap = await getDocs(
-        query(collection(db, 'rsp_assignments'), where('company', 'in', getCompanyVariants(company)))
-      );
+      // Aplatir et séparer par type côté client
+      const allHoldingsDocs    = holdingSnapsArr.flatMap(s => s.docs);
+      const allAssignmentsDocs = assignmentSnapsArr.flatMap(s => s.docs);
 
-      // --- NOUVEAU: Récupérer les armes assignées depuis l'armurerie ---
-      const weaponsSnap = await getDocs(
-        query(collection(db, 'weapons_inventory'), where('status', 'in', ['assigned', 'stored', 'storage']))
-      );
+      const combatHoldingsSnap     = { docs: allHoldingsDocs.filter(d => d.data().type === 'combat') };
+      const clothingHoldingsSnap   = { docs: allHoldingsDocs.filter(d => d.data().type === 'clothing') };
+      const clothingAssignmentsSnap = { docs: allAssignmentsDocs.filter(d => d.data().type === 'clothing') };
+
+      // 3. RSP assignments + armes (collections légères, filtres existants conservés)
+      const [rspAssignmentsSnap, weaponsSnap] = await Promise.all([
+        getDocs(query(collection(db, 'rsp_assignments'), where('company', 'in', getCompanyVariants(company)))),
+        getDocs(query(collection(db, 'weapons_inventory'), where('status', 'in', ['assigned', 'stored', 'storage']))),
+      ]);
 
       // 4. Mapper les holdings par soldat
       const combatMap = new Map<string, HoldingItem[]>();

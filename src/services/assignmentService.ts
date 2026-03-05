@@ -254,6 +254,12 @@ export const createAssignment = async (
     if (assignment.assignedByEmail) {
       data.assignedByEmail = assignment.assignedByEmail;
     }
+    if (assignment.assignedByRank) {
+      data.assignedByRank = assignment.assignedByRank;
+    }
+    if (assignment.assignedByPersonalNumber) {
+      data.assignedByPersonalNumber = assignment.assignedByPersonalNumber;
+    }
     if (signatureBase64) {
       // Stocker la signature directement en base64 (pas de Storage upload)
       data.signature = signatureBase64;
