@@ -95,7 +95,12 @@ service cloud.firestore {
                        request.resource.data.keys().hasAll(['soldierId', 'type', 'action', 'items', 'status']);
 
       // Update: Admin ou créateur (pour corrections)
-      allow update: if isAdmin() || resource.data.assignedBy == request.auth.uid;
+      allow update: if isAdmin() ||
+                       resource.data.assignedBy == request.auth.uid ||
+                       (isAuthenticated() &&
+                        request.resource.data.diff(resource.data).affectedKeys().hasOnly(
+                          ['soldierName', 'soldierPersonalNumber', 'soldierPhone', 'soldierCompany', 'updatedAt']
+                        ));
 
       // Delete: Admin seulement
       allow delete: if isAdmin();

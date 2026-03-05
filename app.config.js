@@ -22,7 +22,9 @@ module.exports = {
       infoPlist: {
         NSLocalNetworkUsageDescription: "האפליקציה זקוקה לגישה לרשת המקומית לצורך זיהוי חיבור האינטרנט.",
         NSBonjourServices: ["_http._tcp"],
-        LSApplicationQueriesSchemes: ["whatsapp"]
+        LSApplicationQueriesSchemes: ["whatsapp"],
+        NSPhotoLibraryUsageDescription: "האפליקציה צריכה גישה לגלריה כדי לצרף תמונה לדיווח תקלה.",
+        NSCameraUsageDescription: "האפליקציה צריכה גישה למצלמה כדי לצלם תמונה לדיווח תקלה."
       }
     },
     android: {
@@ -51,7 +53,14 @@ module.exports = {
     plugins: [
       "expo-font",
       "expo-updates",
-      "expo-apple-authentication"
+      "expo-apple-authentication",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "האפליקציה צריכה גישה לגלריה כדי לצרף תמונה לדיווח תקלה.",
+          "cameraPermission": "האפליקציה צריכה גישה למצלמה כדי לצלם תמונה לדיווח תקלה."
+        }
+      ]
     ],
     jsEngine: "hermes",
     packagerOpts: {

@@ -480,6 +480,112 @@ const MigrationScreen: React.FC = () => {
     setModalVisible(true);
   };
 
+  // Migration 7: Synchroniser les champs soldat dans assignments (inclut la compagnie / פלוגה)
+  const syncSoldierMetadataInAssignments = async () => {
+    setModalType('warning');
+    setModalTitle('Synchroniser Assignments');
+    setModalMessage('Cette action met a jour nom, numero personnel, telephone et compagnie dans tous les assignments depuis la collection soldiers. Continuer ?');
+    setModalButtons([
+      { text: 'ביטול', style: 'outline', onPress: () => setModalVisible(false) },
+      {
+        text: 'אשר',
+        style: 'primary',
+        onPress: async () => {
+          setModalVisible(false);
+          setLoading(true);
+          setResults([]);
+          addResult('info', 'Chargement des soldats...');
+
+          try {
+            const soldiersSnapshot = await getDocsFromServer(collection(db, 'soldiers'));
+            const soldiersMap = new Map<string, {
+              name: string;
+              personalNumber: string;
+              phone: string;
+              company: string;
+            }>();
+
+            soldiersSnapshot.docs.forEach(soldierDoc => {
+              const soldier = soldierDoc.data();
+              soldiersMap.set(soldierDoc.id, {
+                name: soldier.name || '',
+                personalNumber: soldier.personalNumber || '',
+                phone: soldier.phone || '',
+                company: soldier.company || '',
+              });
+            });
+
+            addResult('info', `${soldiersMap.size} soldats charges`);
+
+            const assignmentsSnapshot = await getDocsFromServer(collection(db, 'assignments'));
+            addResult('info', `${assignmentsSnapshot.docs.length} assignments a verifier`);
+
+            let updated = 0;
+            let alreadySynced = 0;
+            let missingSoldier = 0;
+
+            for (const assignmentDoc of assignmentsSnapshot.docs) {
+              const assignment = assignmentDoc.data();
+              const soldierId: string = assignment.soldierId;
+              const soldier = soldiersMap.get(soldierId);
+
+              if (!soldier) {
+                missingSoldier++;
+                continue;
+              }
+
+              const patch: any = {};
+              if ((assignment.soldierName || '') !== soldier.name) {
+                patch.soldierName = soldier.name;
+              }
+              if ((assignment.soldierPersonalNumber || '') !== soldier.personalNumber) {
+                patch.soldierPersonalNumber = soldier.personalNumber;
+              }
+              if ((assignment.soldierPhone || '') !== soldier.phone) {
+                patch.soldierPhone = soldier.phone;
+              }
+              if ((assignment.soldierCompany || '') !== soldier.company) {
+                patch.soldierCompany = soldier.company;
+              }
+
+              if (Object.keys(patch).length === 0) {
+                alreadySynced++;
+                continue;
+              }
+
+              patch.updatedAt = Timestamp.now();
+              await updateDoc(doc(db, 'assignments', assignmentDoc.id), patch);
+              updated++;
+
+              if (updated % 100 === 0) {
+                addResult('info', `${updated} assignments mis a jour...`);
+              }
+            }
+
+            addResult('success', `Assignments mis a jour: ${updated}`);
+            addResult('info', `Deja synchronises: ${alreadySynced}`);
+            if (missingSoldier > 0) {
+              addResult('error', `Sans soldat correspondant: ${missingSoldier}`);
+            }
+
+            setTimeout(() => {
+              setModalType('success');
+              setModalTitle('הצלחה');
+              setModalMessage(`Synchronisation terminee. ${updated} assignments ont ete corriges.`);
+              setModalButtons([{ text: 'אישור', style: 'primary', onPress: () => setModalVisible(false) }]);
+              setModalVisible(true);
+            }, 500);
+          } catch (error: any) {
+            addResult('error', `Erreur: ${error.message}`);
+          } finally {
+            setLoading(false);
+          }
+        },
+      },
+    ]);
+    setModalVisible(true);
+  };
+
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -548,6 +654,15 @@ const MigrationScreen: React.FC = () => {
           >
             <Text style={styles.buttonText}>6. הוסף מספר שובר למלאי נשק</Text>
             <Text style={styles.buttonSubtext}>מחפש שובר תואם בהיסטוריית ההחתמות ומעדכן במלאי הנשק</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.button, { backgroundColor: '#0EA5E9' }, loading && styles.buttonDisabled]}
+            onPress={syncSoldierMetadataInAssignments}
+            disabled={loading}
+          >
+            <Text style={styles.buttonText}>7. Synchroniser soldats vers assignments</Text>
+            <Text style={styles.buttonSubtext}>Corrige nom / numero / telephone / compagnie depuis la fiche soldat</Text>
           </TouchableOpacity>
         </View>
 

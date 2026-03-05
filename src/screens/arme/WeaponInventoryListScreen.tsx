@@ -67,6 +67,17 @@ const WeaponInventoryListScreen: React.FC = () => {
   const [appModalTitle, setAppModalTitle] = useState<string | undefined>(undefined);
   const [appModalButtons, setAppModalButtons] = useState<any[]>([]);
 
+  // Shelf verification flow (מדף)
+  const [verifyCategoryModalVisible, setVerifyCategoryModalVisible] = useState(false);
+  const [verifyListModalVisible, setVerifyListModalVisible] = useState(false);
+  const [verifyCategoryGroups, setVerifyCategoryGroups] = useState<Array<{
+    category: string;
+    weapons: WeaponInventoryItem[];
+  }>>([]);
+  const [verifySelectedCategory, setVerifySelectedCategory] = useState<string | null>(null);
+  const [verifySelectedWeapons, setVerifySelectedWeapons] = useState<WeaponInventoryItem[]>([]);
+  const [verifiedWeaponIds, setVerifiedWeaponIds] = useState<Set<string>>(new Set());
+
   useFocusEffect(
     useCallback(() => {
       loadWeapons();
@@ -276,6 +287,96 @@ const WeaponInventoryListScreen: React.FC = () => {
       }
       return newSet;
     });
+  };
+
+  const buildAvailableCategoryGroups = () => {
+    const byCategory = new Map<string, WeaponInventoryItem[]>();
+
+    weapons
+      .filter((w) => w.status === 'available')
+      .forEach((weapon) => {
+        if (!byCategory.has(weapon.category)) {
+          byCategory.set(weapon.category, []);
+        }
+        byCategory.get(weapon.category)!.push(weapon);
+      });
+
+    return Array.from(byCategory.entries())
+      .map(([category, categoryWeapons]) => ({
+        category,
+        weapons: [...categoryWeapons].sort((a, b) => a.serialNumber.localeCompare(b.serialNumber)),
+      }))
+      .sort((a, b) => a.category.localeCompare(b.category));
+  };
+
+  const handleOpenShelfVerification = () => {
+    const groups = buildAvailableCategoryGroups();
+    if (groups.length === 0) {
+      setAppModalType('info');
+      setAppModalTitle('בדיקת מדף');
+      setAppModalMessage('אין מסט"בים זמינים לבדיקה כרגע.');
+      setAppModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setAppModalVisible(false) }]);
+      setAppModalVisible(true);
+      return;
+    }
+
+    setVerifyCategoryGroups(groups);
+    setVerifyCategoryModalVisible(true);
+  };
+
+  const handleSelectVerifyCategory = (category: string) => {
+    const group = verifyCategoryGroups.find((g) => g.category === category);
+    if (!group) return;
+
+    setVerifySelectedCategory(category);
+    setVerifySelectedWeapons(group.weapons);
+    setVerifiedWeaponIds(new Set());
+    setVerifyCategoryModalVisible(false);
+    setVerifyListModalVisible(true);
+  };
+
+  const closeVerifyListModal = () => {
+    setVerifyListModalVisible(false);
+    setVerifySelectedCategory(null);
+    setVerifySelectedWeapons([]);
+    setVerifiedWeaponIds(new Set());
+  };
+
+  const toggleVerifiedWeapon = (weaponId: string) => {
+    setVerifiedWeaponIds((prev) => {
+      const updated = new Set(prev);
+      if (updated.has(weaponId)) {
+        updated.delete(weaponId);
+      } else {
+        updated.add(weaponId);
+      }
+      return updated;
+    });
+  };
+
+  const markAllVerifiedWeapons = () => {
+    setVerifiedWeaponIds(new Set(verifySelectedWeapons.map((w) => w.id)));
+  };
+
+  const clearAllVerifiedWeapons = () => {
+    setVerifiedWeaponIds(new Set());
+  };
+
+  const finishShelfVerification = () => {
+    const category = verifySelectedCategory;
+    const checked = verifiedWeaponIds.size;
+    const total = verifySelectedWeapons.length;
+    closeVerifyListModal();
+
+    setAppModalType('info');
+    setAppModalTitle('בדיקת מדף הסתיימה');
+    setAppModalMessage(
+      category
+        ? `בקטגוריה ${category} סומנו ${checked} מתוך ${total} מסט"בים כמאומתים במדף.`
+        : `סומנו ${checked} מתוך ${total} מסט"בים כמאומתים במדף.`
+    );
+    setAppModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setAppModalVisible(false) }]);
+    setAppModalVisible(true);
   };
 
   const openWeaponModal = (weapon: WeaponInventoryItem) => {
@@ -704,6 +805,16 @@ const WeaponInventoryListScreen: React.FC = () => {
         <Text style={styles.importButtonText}>ייבוא מסטבים מ-Excel</Text>
       </TouchableOpacity>
 
+      {/* Shelf Verification Button */}
+      <TouchableOpacity
+        style={styles.verifyShelfButton}
+        onPress={handleOpenShelfVerification}
+        activeOpacity={0.7}
+      >
+        <Ionicons name="checkbox-outline" size={20} color={Colors.success} />
+        <Text style={styles.verifyShelfButtonText}>בדיקת מדף לפי קטגוריה</Text>
+      </TouchableOpacity>
+
       {/* Filter Tabs */}
       <View style={styles.filterContainer}>
         <TouchableOpacity
@@ -804,6 +915,119 @@ const WeaponInventoryListScreen: React.FC = () => {
             .map(([category, weaponsList]) => renderCategoryGroup(category, weaponsList))
         )}
       </ScrollView>
+
+      {/* Shelf Verification - Category Selection Modal */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={verifyCategoryModalVisible}
+        onRequestClose={() => setVerifyCategoryModalVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setVerifyCategoryModalVisible(false)}
+        >
+          <View style={styles.verifyModalContent} onStartShouldSetResponder={() => true}>
+            <View style={styles.modalHeader}>
+              <TouchableOpacity
+                onPress={() => setVerifyCategoryModalVisible(false)}
+                style={styles.modalCloseButton}
+              >
+                <Ionicons name="close" size={24} color={Colors.textSecondary} />
+              </TouchableOpacity>
+              <View style={styles.modalHeaderInfo}>
+                <Text style={styles.modalTitle}>בדיקת מדף</Text>
+                <Text style={styles.modalSubtitle}>בחר קטגוריה לבדיקה</Text>
+              </View>
+            </View>
+
+            <ScrollView style={styles.verifyListScroll} showsVerticalScrollIndicator={false}>
+              {verifyCategoryGroups.map((group) => (
+                <TouchableOpacity
+                  key={group.category}
+                  style={styles.verifyCategoryRow}
+                  onPress={() => handleSelectVerifyCategory(group.category)}
+                >
+                  <View style={styles.verifyCategoryBadge}>
+                    <Text style={styles.verifyCategoryBadgeText}>{group.weapons.length}</Text>
+                  </View>
+                  <View style={styles.verifyCategoryInfo}>
+                    <Text style={styles.verifyCategoryName}>{group.category}</Text>
+                    <Text style={styles.verifyCategorySubtitle}>מסט"בים זמינים לבדיקה</Text>
+                  </View>
+                  <Ionicons name="chevron-back" size={20} color={Colors.textSecondary} />
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Shelf Verification - Serial Checklist Modal */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={verifyListModalVisible}
+        onRequestClose={closeVerifyListModal}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={closeVerifyListModal}
+        >
+          <View style={styles.verifyModalContent} onStartShouldSetResponder={() => true}>
+            <View style={styles.modalHeader}>
+              <TouchableOpacity onPress={closeVerifyListModal} style={styles.modalCloseButton}>
+                <Ionicons name="close" size={24} color={Colors.textSecondary} />
+              </TouchableOpacity>
+              <View style={styles.modalHeaderInfo}>
+                <Text style={styles.modalTitle}>{verifySelectedCategory || 'בדיקת מדף'}</Text>
+                <Text style={styles.modalSubtitle}>
+                  {verifiedWeaponIds.size} / {verifySelectedWeapons.length} אומתו במדף
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.verifyToolbar}>
+              <TouchableOpacity style={styles.verifyToolbarButton} onPress={markAllVerifiedWeapons}>
+                <Text style={styles.verifyToolbarButtonText}>סמן הכל</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.verifyToolbarButton} onPress={clearAllVerifiedWeapons}>
+                <Text style={styles.verifyToolbarButtonText}>נקה הכל</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.verifyListScroll} showsVerticalScrollIndicator={false}>
+              {verifySelectedWeapons.map((weapon) => {
+                const checked = verifiedWeaponIds.has(weapon.id);
+                return (
+                  <TouchableOpacity
+                    key={weapon.id}
+                    style={styles.verifySerialRow}
+                    onPress={() => toggleVerifiedWeapon(weapon.id)}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons
+                      name={checked ? 'checkbox' : 'square-outline'}
+                      size={24}
+                      color={checked ? Colors.success : Colors.textSecondary}
+                    />
+                    <View style={styles.verifySerialInfo}>
+                      <Text style={styles.verifySerialNumber}>{weapon.serialNumber}</Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            <TouchableOpacity style={styles.verifyDoneButton} onPress={finishShelfVerification}>
+              <Ionicons name="checkmark-done-outline" size={20} color={Colors.textWhite} />
+              <Text style={styles.verifyDoneButtonText}>סיום בדיקה</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
 
       {/* Weapon Actions Modal */}
       <Modal
@@ -1058,6 +1282,27 @@ const styles = StyleSheet.create({
     color: Colors.arme,
   },
 
+  verifyShelfButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.backgroundCard,
+    marginHorizontal: Spacing.lg,
+    marginBottom: Spacing.md,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.lg,
+    gap: Spacing.sm,
+    borderWidth: 1,
+    borderColor: Colors.success,
+    ...Shadows.small,
+  },
+
+  verifyShelfButtonText: {
+    fontSize: FontSize.base,
+    fontWeight: '600',
+    color: Colors.success,
+  },
+
   // Search Bar
   searchContainer: {
     flexDirection: 'row',
@@ -1288,6 +1533,16 @@ const styles = StyleSheet.create({
     ...Shadows.large,
   },
 
+  verifyModalContent: {
+    backgroundColor: Colors.backgroundCard,
+    borderRadius: BorderRadius.xl,
+    width: '100%',
+    maxWidth: 440,
+    maxHeight: '85%',
+    padding: Spacing.xl,
+    ...Shadows.large,
+  },
+
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1378,6 +1633,116 @@ const styles = StyleSheet.create({
     fontSize: FontSize.base,
     fontWeight: '600',
     color: Colors.text,
+  },
+
+  verifyListScroll: {
+    maxHeight: 380,
+  },
+
+  verifyCategoryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.backgroundInput,
+    borderRadius: BorderRadius.md,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.md,
+    marginBottom: Spacing.sm,
+    gap: Spacing.sm,
+  },
+
+  verifyCategoryInfo: {
+    flex: 1,
+    alignItems: 'flex-end',
+  },
+
+  verifyCategoryName: {
+    fontSize: FontSize.base,
+    fontWeight: '700',
+    color: Colors.text,
+  },
+
+  verifyCategorySubtitle: {
+    fontSize: FontSize.xs,
+    color: Colors.textSecondary,
+    marginTop: 2,
+  },
+
+  verifyCategoryBadge: {
+    minWidth: 34,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 4,
+    borderRadius: BorderRadius.full,
+    backgroundColor: Colors.arme + '20',
+    alignItems: 'center',
+  },
+
+  verifyCategoryBadgeText: {
+    fontSize: FontSize.sm,
+    fontWeight: '700',
+    color: Colors.arme,
+  },
+
+  verifyToolbar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: Spacing.sm,
+    marginBottom: Spacing.md,
+  },
+
+  verifyToolbarButton: {
+    flex: 1,
+    backgroundColor: Colors.backgroundInput,
+    borderRadius: BorderRadius.md,
+    paddingVertical: Spacing.sm,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+
+  verifyToolbarButtonText: {
+    fontSize: FontSize.sm,
+    fontWeight: '600',
+    color: Colors.textSecondary,
+  },
+
+  verifySerialRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.backgroundInput,
+    borderRadius: BorderRadius.md,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.md,
+    marginBottom: Spacing.xs,
+    gap: Spacing.sm,
+  },
+
+  verifySerialInfo: {
+    flex: 1,
+    alignItems: 'flex-end',
+  },
+
+  verifySerialNumber: {
+    fontSize: FontSize.base,
+    fontWeight: '700',
+    color: Colors.arme,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+  },
+
+  verifyDoneButton: {
+    marginTop: Spacing.md,
+    backgroundColor: Colors.success,
+    borderRadius: BorderRadius.md,
+    paddingVertical: Spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.sm,
+  },
+
+  verifyDoneButtonText: {
+    fontSize: FontSize.base,
+    fontWeight: '700',
+    color: Colors.textWhite,
   },
 
   modalActions: {

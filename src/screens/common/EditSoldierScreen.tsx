@@ -21,7 +21,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
 import { soldierService } from '../../services/firebaseService';
-import { useSoldiers } from '../../contexts/DataContext';
+import { useData } from '../../contexts/DataContext';
 import { AppModal, ModalType } from '../../components';
 
 const COMPANIES = ['פלוגה א', 'פלוגה ב', 'פלוגה ג', 'פלוגה ד', 'מפקדה/אגמ', 'מפקדה', 'ניוד'];
@@ -85,7 +85,7 @@ const EditSoldierScreen: React.FC = () => {
   const navigation = useNavigation();
   const route = useRoute();
   const { soldierId } = (route.params as { soldierId: string }) || {};
-  const { refreshSoldiers } = useSoldiers();
+  const { refreshSoldiers, refreshCombatAssignments, refreshClothingAssignments } = useData();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -176,7 +176,11 @@ const EditSoldierScreen: React.FC = () => {
       await soldierService.update(soldierId, formData);
 
       // Rafraîchir le cache des soldats après modification
-      await refreshSoldiers();
+      await Promise.all([
+        refreshSoldiers(),
+        refreshCombatAssignments(),
+        refreshClothingAssignments(),
+      ]);
 
       setModalType('success');
       setModalMessage('פרטי החייל עודכנו בהצלחה');

@@ -39,6 +39,7 @@ import { mapFirebaseError, createAppError, ErrorCodes, logError } from './errors
 import { buildSoldierSearchKey, buildNameLower, normalizeText } from '../utils/normalize';
 import { logService } from './logService';
 import { auth } from '../config/firebase';
+import cacheService from './cacheService';
 
 const db = getFirestore(app);
 
@@ -114,7 +115,6 @@ export const soldierService = {
       // Invalider le cache
       soldiersCache = null;
       soldiersCacheTime = 0;
-
       return docRef.id;
     } catch (error) {
       logError('soldierService.create', error);
@@ -326,18 +326,27 @@ export const soldierService = {
 
       // Récupérer les données avant modification (pour l'audit log)
       const before = await this.getById(id);
+      const hasNameField = Object.prototype.hasOwnProperty.call(data, 'name');
+      const hasPersonalNumberField = Object.prototype.hasOwnProperty.call(data, 'personalNumber');
+      const hasPhoneField = Object.prototype.hasOwnProperty.call(data, 'phone');
+      const hasCompanyField = Object.prototype.hasOwnProperty.call(data, 'company');
+      const hasIdentityField =
+        hasNameField ||
+        hasPersonalNumberField ||
+        hasPhoneField ||
+        hasCompanyField;
 
       // Recalculer searchKey si nécessaire
       const updateData: any = { ...data, updatedAt: Timestamp.now() };
 
-      if (data.name || data.personalNumber || data.phone || data.company) {
+      if (hasIdentityField) {
         // Récupérer les données actuelles pour reconstruire searchKey
         const current = before;
         if (current) {
           const updatedSoldier = { ...current, ...data };
           updateData.searchKey = buildSoldierSearchKey(updatedSoldier);
-          if (data.name) {
-            updateData.nameLower = buildNameLower(data.name);
+          if (hasNameField) {
+            updateData.nameLower = buildNameLower(updatedSoldier.name || '');
           }
         }
       }
@@ -361,10 +370,37 @@ export const soldierService = {
       // Invalider le cache
       soldiersCache = null;
       soldiersCacheTime = 0;
+      const identityChanged = !!before && (
+        (hasNameField && (data.name ?? '') !== (before.name ?? '')) ||
+        (hasPersonalNumberField && (data.personalNumber ?? '') !== (before.personalNumber ?? '')) ||
+        (hasPhoneField && (data.phone ?? '') !== (before.phone ?? '')) ||
+        (hasCompanyField && (data.company ?? '') !== (before.company ?? ''))
+      );
 
       // Mettre à jour les assignations si des données pertinentes ont changé
-      if (data.name || data.personalNumber || data.phone || data.company) {
+      if (identityChanged) {
         try {
+          const assignmentUpdate: any = {
+            updatedAt: Timestamp.now(),
+          };
+          const assignmentCacheUpdate: any = {};
+          if (hasNameField) {
+            assignmentUpdate.soldierName = data.name ?? '';
+            assignmentCacheUpdate.soldierName = data.name ?? '';
+          }
+          if (hasPersonalNumberField) {
+            assignmentUpdate.soldierPersonalNumber = data.personalNumber ?? '';
+            assignmentCacheUpdate.soldierPersonalNumber = data.personalNumber ?? '';
+          }
+          if (hasPhoneField) {
+            assignmentUpdate.soldierPhone = data.phone ?? '';
+            assignmentCacheUpdate.soldierPhone = data.phone ?? '';
+          }
+          if (hasCompanyField) {
+            assignmentUpdate.soldierCompany = data.company ?? '';
+            assignmentCacheUpdate.soldierCompany = data.company ?? '';
+          }
+
           const assignmentsQuery = query(
             collection(db, COLLECTIONS.ASSIGNMENTS),
             where('soldierId', '==', id)
@@ -372,16 +408,42 @@ export const soldierService = {
           const assignmentsSnap = await getDocs(assignmentsQuery);
 
           if (!assignmentsSnap.empty) {
-            const batchPromises = assignmentsSnap.docs.map(assignmentDoc => {
-              const assignmentUpdate: any = {};
-              if (data.name) assignmentUpdate.soldierName = data.name;
-              if (data.personalNumber) assignmentUpdate.soldierPersonalNumber = data.personalNumber;
-              if (data.phone) assignmentUpdate.soldierPhone = data.phone;
-              if (data.company) assignmentUpdate.soldierCompany = data.company;
-
-              return updateDoc(doc(db, COLLECTIONS.ASSIGNMENTS, assignmentDoc.id), assignmentUpdate);
+            const updatePromises = assignmentsSnap.docs.map(assignmentDoc => {
+              const assignmentId = assignmentDoc.id;
+              cacheService.update('combatAssignments', 'update', {
+                id: assignmentId,
+                ...assignmentCacheUpdate,
+              });
+              cacheService.update('clothingAssignments', 'update', {
+                id: assignmentId,
+                ...assignmentCacheUpdate,
+              });
+              return updateDoc(doc(db, COLLECTIONS.ASSIGNMENTS, assignmentId), assignmentUpdate);
             });
-            await Promise.all(batchPromises);
+            await Promise.all(updatePromises);
+          }
+
+          // Maintenir soldier_holdings cohérent pour les vues basées sur l'état courant
+          if (hasNameField || hasPersonalNumberField) {
+            const holdingsUpdate: any = { lastUpdated: Timestamp.now() };
+            if (hasNameField) {
+              holdingsUpdate.soldierName = data.name ?? '';
+            }
+            if (hasPersonalNumberField) {
+              holdingsUpdate.soldierPersonalNumber = data.personalNumber ?? '';
+            }
+
+            const holdingsQuery = query(
+              collection(db, COLLECTIONS.SOLDIER_HOLDINGS),
+              where('soldierId', '==', id)
+            );
+            const holdingsSnap = await getDocs(holdingsQuery);
+            if (!holdingsSnap.empty) {
+              const holdingsPromises = holdingsSnap.docs.map(holdingDoc =>
+                updateDoc(doc(db, COLLECTIONS.SOLDIER_HOLDINGS, holdingDoc.id), holdingsUpdate)
+              );
+              await Promise.all(holdingsPromises);
+            }
           }
         } catch (assignmentError) {
           console.error('Erreur lors de la mise à jour des assignations du soldat:', assignmentError);

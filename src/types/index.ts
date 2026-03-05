@@ -242,7 +242,49 @@ export type RootStackParamList = {
   // Module Shlishut
   ShlishutHome: undefined;
   ShlishutAddSoldier: undefined;
+  // Module Tickets / Signalement
+  TicketForm: undefined;
+  TicketAdmin: undefined;
+  TicketInbox: undefined;
 };
+
+// ============================================
+// SYSTÈME DE TICKETS / SIGNALEMENT (בקשות ותקלות)
+// ============================================
+
+/** מוצב — Lieu/Poste défini par l'admin */
+export interface Mozav {
+  id: string;
+  name: string;
+  createdAt: Date;
+}
+
+/** סוג פער/תקלה — Type de problème avec utilisateur responsable */
+export interface IssueType {
+  id: string;
+  name: string;
+  assignedUserId: string;   // L'utilisateur chargé de traiter ce type
+  assignedUserName?: string; // Nom mis en cache pour l'affichage
+  createdAt: Date;
+}
+
+/** Ticket / Demande créée par un רס"פ */
+export interface Ticket {
+  id: string;
+  reporterName: string;       // שם הרושם (auto depuis l'utilisateur connecté)
+  reporterUserId: string;
+  pluga: string;              // פלוגה (auto depuis l'utilisateur connecté)
+  mozavId: string;
+  mozavName: string;          // Copie dénormalisée pour affichage sans jointure
+  issueTypeId: string;
+  issueTypeName: string;      // Copie dénormalisée
+  assignedUserId: string;     // ID de l'האחראי qui doit traiter ce ticket
+  description?: string;       // תיאור חופשי (optionnel)
+  photoUrl?: string;          // URL Firebase Storage (optionnel)
+  status: 'open' | 'closed';
+  createdAt: Date;
+  closedAt?: Date | null;     // Rempli par closeTicket()
+}
 
 export interface HoldingItem {
   equipmentId: string;

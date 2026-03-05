@@ -59,6 +59,9 @@ import RspTableScreen from '../screens/arme/RspTableScreen';
 import RspReadOnlyScreen from '../screens/arme/RspReadOnlyScreen';
 import RspDashboardScreen from '../screens/rsp/RspDashboardScreen';
 import RspSoldierDetailScreen from '../screens/rsp/RspSoldierDetailScreen';
+import TicketFormScreen from '../screens/rsp/TicketFormScreen';
+import TicketAdminScreen from '../screens/rsp/TicketAdminScreen';
+import TicketInboxScreen from '../screens/rsp/TicketInboxScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -148,6 +151,11 @@ const AppNavigator: React.FC = () => {
               <Stack.Screen name="RspReadOnly" component={RspReadOnlyScreen} />
               <Stack.Screen name="RspDashboard" component={RspDashboardScreen} />
               <Stack.Screen name="RspSoldierDetail" component={RspSoldierDetailScreen} />
+
+              {/* Module Tickets / Signalement */}
+              <Stack.Screen name="TicketForm" component={TicketFormScreen} />
+              <Stack.Screen name="TicketAdmin" component={TicketAdminScreen} />
+              <Stack.Screen name="TicketInbox" component={TicketInboxScreen} />
 
               {/* Signature commune */}
               <Stack.Screen name="SignatureScreen" component={ClothingSignatureScreen} />
