@@ -39,6 +39,7 @@ const ROLES = [
   { value: 'vetement', label: 'אפסנאות', color: Colors.vetementDark, bg: Colors.vetementLight },
   { value: 'rsp', label: 'רס"פ', color: Colors.warningDark, bg: Colors.warningLight },
   { value: 'shlishut', label: 'שלישות', color: Colors.infoDark, bg: Colors.infoLight },
+  { value: 'technician', label: 'אחראי תקלות', color: '#075985', bg: '#F0F9FF' },
 ];
 
 const COMPANIES = ['פלוגה א', 'פלוגה ב', 'פלוגה ג', 'פלוגה ד', 'מפקדה', 'ניוד'];

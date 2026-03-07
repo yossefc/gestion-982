@@ -68,6 +68,8 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 const AppNavigator: React.FC = () => {
   const { user, loading } = useAuth();
   const isRsp = user?.role === 'rsp';
+  const isTechnician = user?.role === 'technician';
+  const isRestrictedRole = isRsp || isTechnician; // Roles that land on RspHome, not Home
 
   // Écran de chargement
   if (loading) {
@@ -94,8 +96,8 @@ const AppNavigator: React.FC = () => {
           ) : (
             // Écrans authentifiés
             <>
-              {/* Écran principal — RSP atterrit directement sur RspHome */}
-              {isRsp
+              {/* Écran principal — RSP et Technicien atterrissent directement sur RspHome */}
+              {isRestrictedRole
                 ? <Stack.Screen name="RspHome" component={RspHomeScreen} />
                 : <Stack.Screen name="Home" component={HomeScreen} />
               }
@@ -148,8 +150,8 @@ const AppNavigator: React.FC = () => {
               <Stack.Screen name="ShlishutHome" component={ShlishutHomeScreen} />
 
               {/* Module RSP */}
-              {/* RspHome déjà enregistré comme premier écran pour les RSP — évite le doublon */}
-              {!isRsp && <Stack.Screen name="RspHome" component={RspHomeScreen} />}
+              {/* RspHome déjà enregistré comme premier écran pour RSP/Technicien — évite le doublon */}
+              {!isRestrictedRole && <Stack.Screen name="RspHome" component={RspHomeScreen} />}
               <Stack.Screen name="RspEquipment" component={RspEquipmentScreen} />
               <Stack.Screen name="RspAssignment" component={RspAssignmentScreen} />
               <Stack.Screen name="RspTable" component={RspTableScreen} />

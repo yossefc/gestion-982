@@ -1,12 +1,9 @@
 /**
  * TicketInboxScreen.tsx
- * Boîte de réception pour l'האחראי (responsable assigné)
- *
- * Fonctionnalités :
- *  - Temps réel via subscribeToUserTickets
- *  - Deux onglets : "תקלות פתוחות" / "תקלות שנסגרו"
- *  - Ticket ouvert  : badge vert, bouton "סגור טיפול" avec confirmation
- *  - Ticket fermé   : fond grisé, icône ✓, date/heure de fermeture formatée (he-IL)
+ * Liste unifiée de tickets — ouvert en haut, fermé en bas.
+ * • S'abonne aux tickets assignés ET soumis par l'utilisateur (fusion sans doublon)
+ * • Bouton "סגור" visible uniquement si assignedUserId === user.id
+ * • Tickets fermés : affiche date + heure de clôture
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -31,391 +28,281 @@ import { ticketService } from '../../services/ticketService';
 import { Ticket } from '../../types';
 import { AppModal } from '../../components';
 
-// ─── Constantes ──────────────────────────────────────────────────────────────
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
-const TICKET_COLOR = Colors.warning;
-
-// ─── Helpers de formatage ────────────────────────────────────────────────────
-
-/**
- * Formate une date en hébreu / format israélien : "DD/MM/YYYY בשעה HH:MM"
- */
-function formatClosedAt(date: Date | null | undefined): string {
+function formatDate(date: Date | null | undefined): string {
   if (!date) return '—';
   const d = date instanceof Date ? date : new Date(date);
   if (isNaN(d.getTime())) return '—';
-
-  const day   = String(d.getDate()).padStart(2, '0');
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const year  = d.getFullYear();
-  const hours = String(d.getHours()).padStart(2, '0');
-  const mins  = String(d.getMinutes()).padStart(2, '0');
-
-  return `${day}/${month}/${year} בשעה ${hours}:${mins}`;
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yy = String(d.getFullYear()).slice(2);
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mi = String(d.getMinutes()).padStart(2, '0');
+  return `${dd}/${mm}/${yy} ${hh}:${mi}`;
 }
 
-/**
- * Formate la date de création : "DD/MM/YY HH:MM"
- */
-function formatCreatedAt(date: Date): string {
-  const d = date instanceof Date ? date : new Date(date);
-  if (isNaN(d.getTime())) return '—';
-  const day   = String(d.getDate()).padStart(2, '0');
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const year  = String(d.getFullYear()).slice(2);
-  const hours = String(d.getHours()).padStart(2, '0');
-  const mins  = String(d.getMinutes()).padStart(2, '0');
-  return `${day}/${month}/${year} ${hours}:${mins}`;
-}
-
-// ─── Composant TicketCard ────────────────────────────────────────────────────
+// ─── TicketCard ───────────────────────────────────────────────────────────────
 
 interface TicketCardProps {
   ticket: Ticket;
-  onClose: (ticketId: string) => void;
+  currentUserId: string;
+  onClose: (id: string) => void;
   closing: boolean;
 }
 
-const TicketCard: React.FC<TicketCardProps> = ({ ticket, onClose, closing }) => {
-  const isClosed = ticket.status === 'closed';
+const TicketCard: React.FC<TicketCardProps> = ({ ticket, currentUserId, onClose, closing }) => {
+  const isClosed  = ticket.status === 'closed';
+  const canClose  = !isClosed && ticket.assignedUserId === currentUserId;
+  const isReporter = ticket.reporterUserId === currentUserId;
 
   return (
-    <View style={[card.container, isClosed && card.containerClosed]}>
-      {/* En-tête : badge + date */}
-      <View style={card.topRow}>
-        <Text style={[card.date, isClosed && card.dateClosed]}>
-          {formatCreatedAt(ticket.createdAt)}
-        </Text>
+    <View style={[s.card, isClosed ? s.cardClosed : s.cardOpen]}>
+      {/* En-tête */}
+      <View style={s.cardTop}>
+        <Text style={[s.cardDate, isClosed && s.dimText]}>{formatDate(ticket.createdAt)}</Text>
         {isClosed ? (
-          <View style={card.badgeClosed}>
-            <Ionicons name="checkmark-circle" size={13} color={Colors.success} />
-            <Text style={card.badgeClosedText}>סגור</Text>
+          <View style={s.badgeClosed}>
+            <Ionicons name="checkmark-circle" size={12} color={Colors.success} />
+            <Text style={s.badgeClosedTxt}>סגור</Text>
           </View>
         ) : (
-          <View style={card.badgeOpen}>
-            <View style={card.badgeOpenDot} />
-            <Text style={card.badgeOpenText}>פתוח</Text>
+          <View style={s.badgeOpen}>
+            <View style={s.badgeDot} />
+            <Text style={s.badgeOpenTxt}>פתוח</Text>
           </View>
         )}
       </View>
 
-      {/* Infos principales */}
-      <View style={card.infoGrid}>
-        <InfoRow icon="location-outline" label="מוצב" value={ticket.mozavName} muted={isClosed} />
-        <InfoRow icon="construct-outline" label="סוג תקלה" value={ticket.issueTypeName} muted={isClosed} />
-        <InfoRow icon="person-outline" label="מדווח" value={ticket.reporterName} muted={isClosed} />
-        <InfoRow icon="shield-outline" label="פלוגה" value={ticket.pluga} muted={isClosed} />
+      {/* Grille d'infos */}
+      <View style={s.grid}>
+        <InfoRow icon="location-outline"  label="מוצב"     value={ticket.mozavName}    dim={isClosed} />
+        <InfoRow icon="construct-outline" label="סוג תקלה" value={ticket.issueTypeName} dim={isClosed} />
+        <InfoRow icon="person-outline"    label="מדווח"    value={ticket.reporterName}  dim={isClosed} />
+        <InfoRow icon="shield-outline"    label="פלוגה"    value={ticket.pluga}         dim={isClosed} />
       </View>
+
+      {/* Étiquette "הדיווח שלי" si l'utilisateur est le reporter */}
+      {isReporter && (
+        <View style={s.reporterBadge}>
+          <Ionicons name="send-outline" size={12} color="#0891B2" />
+          <Text style={s.reporterBadgeTxt}>הדיווח שלי</Text>
+        </View>
+      )}
 
       {/* Description */}
       {!!ticket.description && (
-        <View style={[card.descBox, isClosed && card.descBoxClosed]}>
-          <Text style={[card.descText, isClosed && card.descTextClosed]}>{ticket.description}</Text>
+        <View style={[s.descBox, isClosed && s.descBoxClosed]}>
+          <Text style={[s.descTxt, isClosed && s.dimText]}>{ticket.description}</Text>
         </View>
       )}
 
       {/* Photo */}
       {!!ticket.photoUrl && (
         <TouchableOpacity
-          style={card.photoBtn}
+          style={s.photoBtn}
           onPress={() => ticket.photoUrl && Linking.openURL(ticket.photoUrl)}
           activeOpacity={0.8}
         >
-          <Image source={{ uri: ticket.photoUrl }} style={card.photo} resizeMode="cover" />
-          <View style={card.photoOverlay}>
-            <Ionicons name="expand-outline" size={18} color={Colors.textWhite} />
-            <Text style={card.photoOverlayText}>צפה בתמונה</Text>
+          <Image source={{ uri: ticket.photoUrl }} style={s.photo} resizeMode="cover" />
+          <View style={s.photoOverlay}>
+            <Ionicons name="expand-outline" size={18} color="#FFF" />
+            <Text style={s.photoOverlayTxt}>צפה בתמונה</Text>
           </View>
         </TouchableOpacity>
       )}
 
-      {/* Séparateur */}
-      <View style={card.divider} />
+      <View style={s.divider} />
 
-      {/* Pied : action ou date de clôture */}
+      {/* Pied */}
       {isClosed ? (
-        <View style={card.closedFooter}>
-          <Text style={card.closedAtText}>{formatClosedAt(ticket.closedAt)}</Text>
-          <View style={card.closedFooterLabel}>
-            <Ionicons name="checkmark-done-circle" size={16} color={Colors.success} />
-            <Text style={card.closedFooterLabelText}>נסגר בתאריך:</Text>
+        <View style={s.closedFooter}>
+          <Text style={s.closedAt}>{formatDate(ticket.closedAt)}</Text>
+          <View style={s.closedFooterLabel}>
+            <Ionicons name="checkmark-done-circle" size={15} color={Colors.success} />
+            <Text style={s.closedFooterTxt}>נסגר בתאריך:</Text>
           </View>
         </View>
-      ) : (
+      ) : canClose ? (
         <TouchableOpacity
-          style={[card.closeBtn, closing && card.closeBtnDisabled]}
+          style={[s.closeBtn, closing && s.closeBtnDisabled]}
           onPress={() => onClose(ticket.id)}
           disabled={closing}
           activeOpacity={0.8}
         >
-          {closing ? (
-            <ActivityIndicator size="small" color={Colors.textWhite} />
-          ) : (
-            <>
-              <Ionicons name="checkmark-circle-outline" size={18} color={Colors.textWhite} />
-              <Text style={card.closeBtnText}>סגור טיפול / תקלה</Text>
-            </>
-          )}
+          {closing
+            ? <ActivityIndicator size="small" color="#FFF" />
+            : <>
+                <Ionicons name="checkmark-circle-outline" size={18} color="#FFF" />
+                <Text style={s.closeBtnTxt}>סגור טיפול / תקלה</Text>
+              </>
+          }
         </TouchableOpacity>
+      ) : (
+        <View style={s.pendingBadge}>
+          <Ionicons name="time-outline" size={14} color="#0891B2" />
+          <Text style={s.pendingBadgeTxt}>בטיפול — ממתין לאחראי</Text>
+        </View>
       )}
     </View>
   );
 };
 
-const InfoRow: React.FC<{ icon: string; label: string; value: string; muted?: boolean }> = ({
-  icon, label, value, muted
+const InfoRow: React.FC<{ icon: string; label: string; value: string; dim?: boolean }> = ({
+  icon, label, value, dim,
 }) => (
-  <View style={card.infoRow}>
-    <Text style={[card.infoValue, muted && card.infoValueMuted]}>{value || '—'}</Text>
-    <Text style={card.infoLabel}>{label}</Text>
-    <Ionicons name={icon as any} size={14} color={muted ? Colors.textLight : Colors.textSecondary} />
+  <View style={s.infoRow}>
+    <Text style={[s.infoValue, dim && s.dimText]}>{value || '—'}</Text>
+    <Text style={s.infoLabel}>{label}</Text>
+    <Ionicons name={icon as any} size={13} color={dim ? Colors.textLight : Colors.textSecondary} />
   </View>
 );
 
-const card = StyleSheet.create({
-  container: {
-    backgroundColor: Colors.backgroundCard,
-    borderRadius: BorderRadius.lg,
-    padding: Spacing.lg,
-    marginBottom: Spacing.md,
-    borderLeftWidth: 4,
-    borderLeftColor: Colors.warning,
-    ...Shadows.small,
-  },
-  containerClosed: {
-    backgroundColor: '#F9FAFB',
-    borderLeftColor: Colors.success,
-    opacity: 0.85,
-  },
+// ─── Séparateur de section ────────────────────────────────────────────────────
 
-  topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: Spacing.md },
-  date: { fontSize: FontSize.sm, color: Colors.textSecondary },
-  dateClosed: { color: Colors.textLight },
+const SectionSeparator: React.FC<{ label: string }> = ({ label }) => (
+  <View style={s.sectionSep}>
+    <View style={s.sectionLine} />
+    <Text style={s.sectionLabel}>{label}</Text>
+    <View style={s.sectionLine} />
+  </View>
+);
 
-  // Badge ouvert
-  badgeOpen: {
-    flexDirection: 'row', alignItems: 'center', gap: 5,
-    backgroundColor: Colors.warningLight, borderRadius: BorderRadius.full,
-    paddingHorizontal: Spacing.sm, paddingVertical: 3,
-  },
-  badgeOpenDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Colors.warning },
-  badgeOpenText: { fontSize: FontSize.xs, fontWeight: '700', color: Colors.warningDark },
+// ─── Écran principal ──────────────────────────────────────────────────────────
 
-  // Badge fermé
-  badgeClosed: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    backgroundColor: Colors.successLight, borderRadius: BorderRadius.full,
-    paddingHorizontal: Spacing.sm, paddingVertical: 3,
-  },
-  badgeClosedText: { fontSize: FontSize.xs, fontWeight: '700', color: Colors.successDark },
-
-  // Grille d'infos
-  infoGrid: { gap: Spacing.xs, marginBottom: Spacing.sm },
-  infoRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, justifyContent: 'flex-end' },
-  infoLabel: { fontSize: FontSize.sm, color: Colors.textSecondary, minWidth: 60, textAlign: 'right' },
-  infoValue: { fontSize: FontSize.sm, color: Colors.text, fontWeight: '500', flex: 1, textAlign: 'right' },
-  infoValueMuted: { color: Colors.textSecondary },
-
-  // Description
-  descBox: {
-    backgroundColor: Colors.backgroundInput, borderRadius: BorderRadius.sm,
-    padding: Spacing.sm, marginBottom: Spacing.sm, borderWidth: 1, borderColor: Colors.borderLight,
-  },
-  descBoxClosed: { backgroundColor: '#EFEFEF' },
-  descText: { fontSize: FontSize.sm, color: Colors.text, textAlign: 'right', lineHeight: 20 },
-  descTextClosed: { color: Colors.textSecondary },
-
-  // Photo
-  photoBtn: { position: 'relative', marginBottom: Spacing.sm, borderRadius: BorderRadius.md, overflow: 'hidden' },
-  photo: { width: '100%', height: 160 },
-  photoOverlay: {
-    position: 'absolute', bottom: 0, left: 0, right: 0,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    paddingVertical: Spacing.sm, gap: Spacing.sm,
-  },
-  photoOverlayText: { color: Colors.textWhite, fontSize: FontSize.sm, fontWeight: '600' },
-
-  divider: { height: 1, backgroundColor: Colors.borderLight, marginVertical: Spacing.sm },
-
-  // Bouton fermer
-  closeBtn: {
-    backgroundColor: Colors.success, borderRadius: BorderRadius.md,
-    paddingVertical: Spacing.md, flexDirection: 'row',
-    alignItems: 'center', justifyContent: 'center', gap: Spacing.sm,
-  },
-  closeBtnDisabled: { backgroundColor: Colors.disabled },
-  closeBtnText: { fontSize: FontSize.base, fontWeight: '700', color: Colors.textWhite },
-
-  // Footer ticket fermé
-  closedFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: Spacing.sm },
-  closedFooterLabel: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  closedFooterLabelText: { fontSize: FontSize.sm, color: Colors.success, fontWeight: '600' },
-  closedAtText: { fontSize: FontSize.sm, color: Colors.textSecondary, fontWeight: '500' },
-});
-
-// ─── Écran Principal ─────────────────────────────────────────────────────────
-
-type Tab = 'open' | 'closed';
+type ListItem = Ticket | { _separator: true; label: string; _key: string };
 
 const TicketInboxScreen: React.FC = () => {
-  const navigation = useNavigation();
-  const { user } = useAuth();
+  const navigation   = useNavigation();
+  const { user }     = useAuth();
 
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<Tab>('open');
   const [closingId, setClosingId] = useState<string | null>(null);
 
   const [modalVisible, setModalVisible] = useState(false);
   const [modalType, setModalType]       = useState<'success' | 'error'>('success');
   const [modalMsg, setModalMsg]         = useState('');
 
-  // ─── Abonnement temps réel ─────────────────────────────────────────────
+  // ─── Abonnements ────────────────────────────────────────────────────────
 
   useEffect(() => {
     if (!user) return;
     setLoading(true);
 
-    const unsubscribe = ticketService.subscribeToUserTickets(user.id, (data) => {
-      setTickets(data);
-      setLoading(false);
+    // Map pour fusionner sans doublons
+    const map = new Map<string, Ticket>();
+    let assignedReady = false;
+    let mineReady     = false;
+
+    const publish = () => {
+      const all = Array.from(map.values());
+      const open   = all.filter(t => t.status === 'open')
+                        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      const closed = all.filter(t => t.status === 'closed')
+                        .sort((a, b) => {
+                          const ta = a.closedAt ? a.closedAt.getTime() : 0;
+                          const tb = b.closedAt ? b.closedAt.getTime() : 0;
+                          return tb - ta;
+                        });
+      setTickets([...open, ...closed]);
+      if (assignedReady && mineReady) setLoading(false);
+    };
+
+    const unsubAssigned = ticketService.subscribeToUserTickets(user.id, (data) => {
+      data.forEach(t => map.set(t.id, t));
+      assignedReady = true;
+      publish();
     });
 
-    return unsubscribe;
+    const unsubMine = ticketService.subscribeToMyTickets(user.id, (data) => {
+      data.forEach(t => map.set(t.id, t));
+      mineReady = true;
+      publish();
+    });
+
+    return () => { unsubAssigned(); unsubMine(); };
   }, [user]);
 
-  // ─── Filtrage par onglet ───────────────────────────────────────────────
+  // ─── Fermeture ──────────────────────────────────────────────────────────
+
+  const handleClose = useCallback((ticketId: string) => {
+    Alert.alert('סגירת תקלה', 'האם אתה בטוח שברצונך לסגור את התקלה?', [
+      { text: 'ביטול', style: 'cancel' },
+      {
+        text: 'סגור תקלה',
+        onPress: async () => {
+          setClosingId(ticketId);
+          try {
+            await ticketService.closeTicket(ticketId);
+          } catch {
+            setModalType('error');
+            setModalMsg('שגיאה בסגירת התקלה. אנא נסה שנית.');
+            setModalVisible(true);
+          } finally {
+            setClosingId(null);
+          }
+        },
+      },
+    ]);
+  }, []);
+
+  // ─── Construction de la liste avec séparateurs ───────────────────────────
 
   const openTickets   = tickets.filter(t => t.status === 'open');
   const closedTickets = tickets.filter(t => t.status === 'closed');
-  const displayed     = activeTab === 'open' ? openTickets : closedTickets;
 
-  // ─── Fermeture d'un ticket ─────────────────────────────────────────────
+  const listData: ListItem[] = [
+    ...openTickets,
+    ...(closedTickets.length > 0
+      ? [{ _separator: true as const, label: 'תקלות שנסגרו', _key: '__sep_closed__' }]
+      : []),
+    ...closedTickets,
+  ];
 
-  const handleCloseTicket = useCallback((ticketId: string) => {
-    Alert.alert(
-      'סגירת תקלה',
-      'האם אתה בטוח שברצונך לסגור את התקלה?',
-      [
-        { text: 'ביטול', style: 'cancel' },
-        {
-          text: 'סגור תקלה',
-          style: 'default',
-          onPress: async () => {
-            setClosingId(ticketId);
-            try {
-              await ticketService.closeTicket(ticketId);
-              // Le snapshot temps réel met à jour automatiquement la liste
-            } catch (e) {
-              console.error('[TicketInbox] closeTicket error:', e);
-              setModalType('error');
-              setModalMsg('שגיאה בסגירת התקלה. אנא נסה שנית.');
-              setModalVisible(true);
-            } finally {
-              setClosingId(null);
-            }
-          },
-        },
-      ]
+  // ─── Rendu ──────────────────────────────────────────────────────────────
+
+  if (loading) {
+    return (
+      <View style={s.root}>
+        <Header openCount={0} navigation={navigation} />
+        <View style={s.loadingContainer}>
+          <ActivityIndicator size="large" color={Colors.warning} />
+          <Text style={s.loadingTxt}>טוען תקלות...</Text>
+        </View>
+      </View>
     );
-  }, []);
-
-  // ─── Rendu ────────────────────────────────────────────────────────────
-
-  const renderEmpty = () => (
-    <View style={styles.emptyContainer}>
-      <Ionicons
-        name={activeTab === 'open' ? 'checkmark-done-circle-outline' : 'archive-outline'}
-        size={56}
-        color={Colors.textLight}
-      />
-      <Text style={styles.emptyTitle}>
-        {activeTab === 'open' ? 'אין תקלות פתוחות' : 'אין תקלות שנסגרו'}
-      </Text>
-      <Text style={styles.emptySubtitle}>
-        {activeTab === 'open' ? 'כל התקלות שלך טופלו' : 'לא נמצאו תקלות סגורות'}
-      </Text>
-    </View>
-  );
+  }
 
   return (
-    <View style={styles.root}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-forward" size={22} color={Colors.textWhite} />
-        </TouchableOpacity>
-        <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>תיבת בקשות / תקלות</Text>
-          <Text style={styles.headerSubtitle}>
-            {openTickets.length > 0 ? `${openTickets.length} תקלות פתוחות` : 'אין תקלות פתוחות'}
-          </Text>
-        </View>
-        <View style={{ width: 40 }} />
-      </View>
+    <View style={s.root}>
+      <Header openCount={openTickets.length} navigation={navigation} />
 
-      {/* Onglets */}
-      <View style={styles.tabBar}>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'closed' && styles.tabActive]}
-          onPress={() => setActiveTab('closed')}
-        >
-          {closedTickets.length > 0 && (
-            <View style={[styles.tabBadge, styles.tabBadgeClosed]}>
-              <Text style={styles.tabBadgeText}>{closedTickets.length}</Text>
-            </View>
-          )}
-          <Ionicons
-            name="checkmark-done-circle-outline"
-            size={16}
-            color={activeTab === 'closed' ? Colors.success : Colors.textSecondary}
-          />
-          <Text style={[styles.tabText, activeTab === 'closed' && styles.tabTextActiveClosed]}>
-            תקלות שנסגרו
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'open' && styles.tabActive]}
-          onPress={() => setActiveTab('open')}
-        >
-          {openTickets.length > 0 && (
-            <View style={[styles.tabBadge, styles.tabBadgeOpen]}>
-              <Text style={styles.tabBadgeText}>{openTickets.length}</Text>
-            </View>
-          )}
-          <Ionicons
-            name="alert-circle-outline"
-            size={16}
-            color={activeTab === 'open' ? Colors.warning : Colors.textSecondary}
-          />
-          <Text style={[styles.tabText, activeTab === 'open' && styles.tabTextActiveOpen]}>
-            תקלות פתוחות
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Corps */}
-      {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={TICKET_COLOR} />
-          <Text style={styles.loadingText}>טוען תקלות...</Text>
+      {tickets.length === 0 ? (
+        <View style={s.emptyContainer}>
+          <Ionicons name="checkmark-done-circle-outline" size={56} color={Colors.textLight} />
+          <Text style={s.emptyTitle}>אין תקלות</Text>
+          <Text style={s.emptySubtitle}>לא נמצאו תקלות פתוחות או סגורות</Text>
         </View>
       ) : (
         <FlatList
-          data={displayed}
-          keyExtractor={t => t.id}
-          contentContainerStyle={styles.listContent}
+          data={listData}
+          keyExtractor={item => ('_separator' in item ? item._key : item.id)}
+          contentContainerStyle={s.listContent}
           showsVerticalScrollIndicator={false}
-          ListEmptyComponent={renderEmpty}
-          renderItem={({ item }) => (
-            <TicketCard
-              ticket={item}
-              onClose={handleCloseTicket}
-              closing={closingId === item.id}
-            />
-          )}
+          renderItem={({ item }) => {
+            if ('_separator' in item) {
+              return <SectionSeparator label={item.label} />;
+            }
+            return (
+              <TicketCard
+                ticket={item}
+                currentUserId={user?.id || ''}
+                onClose={handleClose}
+                closing={closingId === item.id}
+              />
+            );
+          }}
         />
       )}
 
@@ -430,13 +317,31 @@ const TicketInboxScreen: React.FC = () => {
   );
 };
 
-// ─── Styles ──────────────────────────────────────────────────────────────────
+// ─── Header extrait ───────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
+const Header: React.FC<{ openCount: number; navigation: any }> = ({ openCount, navigation }) => (
+  <View style={s.header}>
+    <TouchableOpacity style={s.backBtn} onPress={() => navigation.goBack()}>
+      <Ionicons name="arrow-forward" size={22} color="#FFF" />
+    </TouchableOpacity>
+    <View style={s.headerCenter}>
+      <Text style={s.headerTitle}>תיבת בקשות / תקלות</Text>
+      <Text style={s.headerSubtitle}>
+        {openCount > 0 ? `${openCount} תקלות פתוחות` : 'אין תקלות פתוחות'}
+      </Text>
+    </View>
+    <View style={{ width: 40 }} />
+  </View>
+);
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
+const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.background },
 
+  // Header
   header: {
-    backgroundColor: TICKET_COLOR,
+    backgroundColor: Colors.warning,
     paddingTop: Platform.OS === 'ios' ? 56 : 44,
     paddingBottom: Spacing.lg,
     paddingHorizontal: Spacing.lg,
@@ -450,52 +355,124 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   headerCenter: { flex: 1, alignItems: 'center' },
-  headerTitle: { fontSize: FontSize.xl, fontWeight: '700', color: Colors.textWhite },
+  headerTitle: { fontSize: FontSize.xl, fontWeight: '700', color: '#FFF' },
   headerSubtitle: { fontSize: FontSize.sm, color: 'rgba(255,255,255,0.85)', marginTop: 2 },
 
-  // Onglets
-  tabBar: {
-    flexDirection: 'row',
-    backgroundColor: Colors.backgroundCard,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-    ...Shadows.xs,
-  },
-  tab: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    paddingVertical: Spacing.md, gap: Spacing.sm, position: 'relative',
-  },
-  tabActive: {
-    borderBottomWidth: 3,
-    borderBottomColor: TICKET_COLOR,
-  },
-  tabText: { fontSize: FontSize.md, fontWeight: '600', color: Colors.textSecondary },
-  tabTextActiveOpen: { color: Colors.warningDark },
-  tabTextActiveClosed: { color: Colors.successDark },
-
-  tabBadge: {
-    position: 'absolute', top: 6, right: 16,
-    minWidth: 18, height: 18, borderRadius: 9,
-    alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4,
-  },
-  tabBadgeOpen: { backgroundColor: Colors.warning },
-  tabBadgeClosed: { backgroundColor: Colors.success },
-  tabBadgeText: { fontSize: 10, fontWeight: '800', color: Colors.textWhite },
-
-  // Loading
+  // Loading / empty
   loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: Spacing.md },
-  loadingText: { color: Colors.textSecondary, fontSize: FontSize.md },
+  loadingTxt: { color: Colors.textSecondary, fontSize: FontSize.md },
+  emptyContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: Spacing.md },
+  emptyTitle: { fontSize: FontSize.lg, fontWeight: '700', color: Colors.textSecondary },
+  emptySubtitle: { fontSize: FontSize.md, color: Colors.textLight },
 
   // Liste
-  listContent: { padding: Spacing.lg, paddingBottom: Spacing.xxxl },
+  listContent: { padding: Spacing.lg, paddingBottom: 60 },
 
-  // Empty state
-  emptyContainer: {
-    flex: 1, alignItems: 'center', justifyContent: 'center',
-    paddingTop: Spacing.xxxl * 2, gap: Spacing.md,
+  // Séparateur de section
+  sectionSep: {
+    flexDirection: 'row', alignItems: 'center',
+    marginVertical: Spacing.lg, gap: Spacing.sm,
   },
-  emptyTitle: { fontSize: FontSize.lg, fontWeight: '700', color: Colors.textSecondary, textAlign: 'center' },
-  emptySubtitle: { fontSize: FontSize.md, color: Colors.textLight, textAlign: 'center' },
+  sectionLine: { flex: 1, height: 1, backgroundColor: Colors.border },
+  sectionLabel: {
+    fontSize: FontSize.sm, fontWeight: '700',
+    color: Colors.textSecondary, paddingHorizontal: Spacing.sm,
+  },
+
+  // Card
+  card: {
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.lg,
+    marginBottom: Spacing.md,
+    borderLeftWidth: 4,
+    ...Shadows.small,
+    backgroundColor: Colors.backgroundCard,
+  },
+  cardOpen:   { borderLeftColor: Colors.warning },
+  cardClosed: { borderLeftColor: Colors.success, backgroundColor: '#F9FAFB', opacity: 0.88 },
+
+  // En-tête de card
+  cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.md },
+  cardDate: { fontSize: FontSize.sm, color: Colors.textSecondary },
+
+  // Badges statut
+  badgeOpen: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: Colors.warningLight, borderRadius: BorderRadius.full,
+    paddingHorizontal: Spacing.sm, paddingVertical: 3,
+  },
+  badgeDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Colors.warning },
+  badgeOpenTxt: { fontSize: FontSize.xs, fontWeight: '700', color: Colors.warningDark },
+
+  badgeClosed: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: Colors.successLight, borderRadius: BorderRadius.full,
+    paddingHorizontal: Spacing.sm, paddingVertical: 3,
+  },
+  badgeClosedTxt: { fontSize: FontSize.xs, fontWeight: '700', color: Colors.successDark },
+
+  // Grille infos
+  grid: { gap: Spacing.xs, marginBottom: Spacing.sm },
+  infoRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, justifyContent: 'flex-end' },
+  infoLabel: { fontSize: FontSize.sm, color: Colors.textSecondary, minWidth: 60, textAlign: 'right' },
+  infoValue: { fontSize: FontSize.sm, color: Colors.text, fontWeight: '500', flex: 1, textAlign: 'right' },
+
+  // Badge reporter
+  reporterBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-end',
+    backgroundColor: '#F0F9FF', borderRadius: BorderRadius.full,
+    paddingHorizontal: Spacing.sm, paddingVertical: 2, marginBottom: Spacing.sm,
+    borderWidth: 1, borderColor: '#BAE6FD',
+  },
+  reporterBadgeTxt: { fontSize: FontSize.xs, fontWeight: '600', color: '#0891B2' },
+
+  // Description
+  descBox: {
+    backgroundColor: Colors.backgroundInput, borderRadius: BorderRadius.sm,
+    padding: Spacing.sm, marginBottom: Spacing.sm, borderWidth: 1, borderColor: Colors.borderLight,
+  },
+  descBoxClosed: { backgroundColor: '#EFEFEF' },
+  descTxt: { fontSize: FontSize.sm, color: Colors.text, textAlign: 'right', lineHeight: 20 },
+
+  // Photo
+  photoBtn: { position: 'relative', marginBottom: Spacing.sm, borderRadius: BorderRadius.md, overflow: 'hidden' },
+  photo: { width: '100%', height: 160 },
+  photoOverlay: {
+    position: 'absolute', bottom: 0, left: 0, right: 0,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    paddingVertical: Spacing.sm, gap: Spacing.sm,
+  },
+  photoOverlayTxt: { color: '#FFF', fontSize: FontSize.sm, fontWeight: '600' },
+
+  divider: { height: 1, backgroundColor: Colors.borderLight, marginVertical: Spacing.sm },
+
+  // Bouton fermer
+  closeBtn: {
+    backgroundColor: Colors.success, borderRadius: BorderRadius.md,
+    paddingVertical: Spacing.md, flexDirection: 'row',
+    alignItems: 'center', justifyContent: 'center', gap: Spacing.sm,
+  },
+  closeBtnDisabled: { backgroundColor: Colors.disabled },
+  closeBtnTxt: { fontSize: FontSize.base, fontWeight: '700', color: '#FFF' },
+
+  // Badge en attente
+  pendingBadge: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: Spacing.sm, backgroundColor: '#F0F9FF',
+    borderRadius: BorderRadius.md, paddingVertical: Spacing.sm,
+    borderWidth: 1, borderColor: '#BAE6FD',
+  },
+  pendingBadgeTxt: { fontSize: FontSize.sm, fontWeight: '600', color: '#075985' },
+
+  // Footer fermé
+  closedFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: Spacing.sm },
+  closedFooterLabel: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  closedFooterTxt: { fontSize: FontSize.sm, color: Colors.success, fontWeight: '600' },
+  closedAt: { fontSize: FontSize.sm, color: Colors.textSecondary, fontWeight: '500' },
+
+  // Texte atténué
+  dimText: { color: Colors.textLight },
 });
 
 export default TicketInboxScreen;

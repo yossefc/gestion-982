@@ -1,7 +1,7 @@
 // Utilitaires d'export Excel/CSV
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
-import { Assignment, Soldier } from '../types';
+import { Assignment, Soldier, WeaponInventoryItem } from '../types';
 
 // Polyfill pour les types manquants
 const FS = FileSystem as any;
@@ -98,10 +98,103 @@ export async function exportSoldiersToCSV(soldiers: Soldier[]): Promise<void> {
     encoding: FS.EncodingType.UTF8,
   });
 
+}
+
+/**
+ * Exporte l'inventaire des armes (נשקייה) en Excel, séparé par פלוגה.
+ * On inclut toutes les armes assignées ou en stockage (status 'assigned' ou 'stored').
+ * Les armes sans מסט"ב (serialNumber) apparaîtront avec une case vide.
+ */
+export async function exportWeaponInventoryByCompanyToExcel(
+  weapons: WeaponInventoryItem[],
+  soldiers: Soldier[]
+): Promise<void> {
+  // 1. Importer XLSX dynamiquement pour éviter d'alourdir le bundle si non utilisé
+  const XLSX = await import('xlsx');
+
+  // 2. Filtrer les armes qui appartiennent actuellement à un soldat (assigned ou stored)
+  const assignedWeapons = weapons.filter(w => w.status === 'assigned' || w.status === 'stored');
+
+  // 3. Regrouper les armes par פלוגה
+  // Structure: Map<Company, Array<{SoldierName, PersonalNumber, WeaponCat, SerialNumber}>>
+  const companyMap = new Map<string, any[]>();
+
+  for (const weapon of assignedWeapons) {
+    if (!weapon.assignedTo) continue;
+
+    const soldierId = weapon.assignedTo.soldierId;
+    const soldier = soldiers.find(s => s.id === soldierId);
+
+    // Si on ne trouve pas le soldat ou sa compagnie, on met 'לא ידוע' (Inconnu)
+    const companyName = soldier?.company || 'לא ידוע';
+
+    if (!companyMap.has(companyName)) {
+      companyMap.set(companyName, []);
+    }
+
+    companyMap.get(companyName)!.push({
+      'שם החייל': weapon.assignedTo.soldierName || (soldier?.name || ''),
+      'מ.א.': weapon.assignedTo.soldierPersonalNumber || (soldier?.personalNumber || ''),
+      'שם פריט': weapon.category || '',
+      'מסט"ב': weapon.serialNumber || '',
+    });
+  }
+
+  // 4. Créer le classeur Excel
+  const wb = XLSX.utils.book_new();
+
+  // 5. Remplir le classeur avec une feuille par פלוגה
+  if (companyMap.size === 0) {
+    // S'il n'y a rien à exporter, on crée une feuille vide pour éviter un fichier corrompu
+    const ws = XLSX.utils.json_to_sheet([{ הודעה: 'אין נתונים לייצוא' }]);
+    ws['!dir'] = 'rtl'; // Right-to-Left
+    XLSX.utils.book_append_sheet(wb, ws, 'ריק');
+  } else {
+    // Trier les compagnies par ordre alphabétique pour un rendu propre
+    const sortedCompanies = Array.from(companyMap.keys()).sort();
+
+    for (const company of sortedCompanies) {
+      const data = companyMap.get(company)!;
+      // Trier les données de la feuille: par nom de soldat puis par catégorie d'arme
+      data.sort((a, b) => {
+        const nameCompare = a['שם החייל'].localeCompare(b['שם החייל']);
+        if (nameCompare !== 0) return nameCompare;
+        return a['שם פריט'].localeCompare(b['שם פריט']);
+      });
+
+      const ws = XLSX.utils.json_to_sheet(data);
+      // Configurer la direction de la feuille (Right-To-Left)
+      ws['!dir'] = 'rtl';
+
+      // Ajuster la largeur des colonnes
+      ws['!cols'] = [
+        { wch: 20 }, // שם החייל
+        { wch: 15 }, // מ.א.
+        { wch: 20 }, // שם פריט
+        { wch: 15 }, // מסט"ב
+      ];
+
+      // On s'assure que le nom de l'onglet est valide (max 31 chars, pas de caractères interdits)
+      const safeSheetName = company.substring(0, 31).replace(/[\\/?*\[\]]/g, '_');
+      XLSX.utils.book_append_sheet(wb, ws, safeSheetName);
+    }
+  }
+
+  // 6. Générer le fichier binaire (base64 pour ReactNative)
+  const wbout = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
+  const fileName = `WeaponInventory_${Date.now()}.xlsx`;
+  const fileUri = FS.documentDirectory + fileName;
+
+  // 7. Sauvegarder localement
+  await FS.writeAsStringAsync(fileUri, wbout, {
+    encoding: FS.EncodingType.Base64
+  });
+
+  // 8. Ouvrir le dialogue de partage
   if (await Sharing.isAvailableAsync()) {
     await Sharing.shareAsync(fileUri, {
-      mimeType: 'text/csv',
-      dialogTitle: 'ייצוא חיילים',
+      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      dialogTitle: 'ייצוא מלאי נשק לאקסל',
     });
   }
 }

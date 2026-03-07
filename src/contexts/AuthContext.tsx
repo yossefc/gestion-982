@@ -198,6 +198,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         return module === 'vetement';
       case 'rsp':
         return module === 'rsp'; // RSP a seulement accès au module RSP (lecture seule)
+      case 'technician':
+        return module === 'rsp'; // Technicien: accès uniquement à la boîte de tickets
       default:
         return false;
     }

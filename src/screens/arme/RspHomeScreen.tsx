@@ -25,8 +25,9 @@ const RspHomeScreen: React.FC = () => {
     const navigation = useNavigation<any>();
     const { user, signOut } = useAuth();
 
-    const isAdmin = user?.role === 'admin';
-    const isRsp   = user?.role === 'rsp';
+    const isAdmin      = user?.role === 'admin';
+    const isRsp        = user?.role === 'rsp';
+    const isTechnician = user?.role === 'technician';
 
     const handleLogout = () => {
         Alert.alert('יציאה', 'האם אתה בטוח שברצונך להתנתק?', [
@@ -193,6 +194,52 @@ const RspHomeScreen: React.FC = () => {
         );
     }
 
+    // ─── TECHNICIAN VIEW (inbox only) ────────────────────────────────────
+    if (isTechnician) {
+        return (
+            <View style={styles.container}>
+                <View style={[styles.header, styles.headerTechnician]}>
+                    <TouchableOpacity style={styles.backButton} onPress={handleLogout}>
+                        <Ionicons name="log-out-outline" size={22} color="#FFF" />
+                    </TouchableOpacity>
+                    <View style={styles.headerCenter}>
+                        <Text style={styles.headerTitle}>שלום, {user?.name || 'טכנאי'}</Text>
+                        <Text style={styles.headerSubtitle}>תיבת הדיווחים שלך</Text>
+                    </View>
+                    <View style={styles.headerIcon}>
+                        <Ionicons name="construct-outline" size={26} color="#FFF" />
+                    </View>
+                </View>
+
+                <ScrollView style={styles.content} contentContainerStyle={styles.scrollContent}>
+                    <View style={styles.menuContainer}>
+                        <TouchableOpacity
+                            style={[styles.menuCard, { borderRightWidth: 4, borderRightColor: '#0891B2' }]}
+                            onPress={() => navigation.navigate('TicketInbox')}
+                            activeOpacity={0.7}
+                        >
+                            <View style={[styles.menuIcon, { backgroundColor: '#0891B218' }]}>
+                                <Ionicons name="mail" size={28} color="#0891B2" />
+                            </View>
+                            <View style={styles.menuInfo}>
+                                <Text style={styles.menuTitle}>תיבת בקשות / תקלות</Text>
+                                <Text style={styles.menuSubtitle}>צפייה וטיפול בדיווחים שנשלחו אליך</Text>
+                            </View>
+                            <Ionicons name="chevron-back" size={20} color={Colors.textLight} />
+                        </TouchableOpacity>
+                    </View>
+
+                    <View style={[styles.infoCard, { borderColor: '#BAE6FD', backgroundColor: '#F0F9FF' }]}>
+                        <Ionicons name="information-circle" size={24} color="#0891B2" />
+                        <Text style={[styles.infoText, { color: '#075985' }]}>
+                            גישה מוגבלת: באפשרותך לצפות ולסגור תקלות שהוקצו אליך בלבד.
+                        </Text>
+                    </View>
+                </ScrollView>
+            </View>
+        );
+    }
+
     // ─── ADMIN VIEW ───────────────────────────────────────────────────────
     return (
         <View style={styles.container}>
@@ -291,6 +338,9 @@ const styles = StyleSheet.create({
     },
     headerRsp: {
         backgroundColor: '#F59E0B', // Orange for RSP identity
+    },
+    headerTechnician: {
+        backgroundColor: '#0891B2', // Teal for technician identity
     },
     backButton: {
         width: 40,

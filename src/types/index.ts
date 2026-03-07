@@ -1,7 +1,7 @@
 // Types pour l'application Gestion 982
 
 // Rôles utilisateur
-export type UserRole = 'admin' | 'both' | 'arme' | 'vetement' | 'rsp' | 'shlishut';
+export type UserRole = 'admin' | 'both' | 'arme' | 'vetement' | 'rsp' | 'shlishut' | 'technician';
 
 // Utilisateur
 export interface User {
