@@ -21,6 +21,10 @@ import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Co
 import { AppModal, ModalType } from '../../components';
 import { useAuth } from '../../contexts/AuthContext';
 import { useData, useCombatStats, useManot, useCombatEquipment } from '../../contexts/DataContext';
+import { weaponInventoryService } from '../../services/weaponInventoryService';
+import { exportWeaponInventoryByCompanyToExcel } from '../../utils/exportExcel';
+import { soldierService } from '../../services/soldierService';
+import { assignmentService } from '../../services/assignmentService';
 
 interface MenuItemProps {
   id: string;
@@ -43,6 +47,7 @@ const ArmeHomeScreen: React.FC = () => {
   const { equipment, loading: equipmentLoading } = useCombatEquipment();
 
   const [refreshing, setRefreshing] = useState(false);
+  const [exportLoading, setExportLoading] = useState(false);
   const [reportMenuVisible, setReportMenuVisible] = useState(false);
   const reportSheetAnim = useRef(new Animated.Value(0)).current;
   const reportBackdropAnim = useRef(new Animated.Value(0)).current;
@@ -103,6 +108,32 @@ const ArmeHomeScreen: React.FC = () => {
         }
       }
     });
+  };
+
+
+  const handleExportExcel = async () => {
+    try {
+      setExportLoading(true);
+      const allWeapons = await weaponInventoryService.getAllWeapons();
+      const allSoldiers = await soldierService.getAll();
+      const combatHoldings = await assignmentService.getSoldiersWithCurrentHoldings('combat');
+
+      await exportWeaponInventoryByCompanyToExcel(allWeapons, allSoldiers, combatHoldings);
+
+      setModalType('success');
+      setModalMessage('קובץ Excel יוצא בהצלחה!');
+      setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalVisible(true);
+    } catch (error) {
+      console.error('Error exporting weapon inventory:', error);
+      setModalType('error');
+      setModalMessage('שגיאה בייצוא לאקסל');
+      setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalVisible(true);
+    } finally {
+      setExportLoading(false);
+      closeReportMenu();
+    }
   };
 
   const openReportScreen = (screen: 'InventoryReport' | 'PlugaReport') => {
@@ -405,7 +436,7 @@ const ArmeHomeScreen: React.FC = () => {
                 <Ionicons name="cube-outline" size={20} color={Colors.textWhite} />
               </View>
               <View style={styles.reportOptionContent}>
-                <Text style={styles.reportOptionTitle}>דוח מלאי</Text>
+                <Text style={styles.reportOptionTitle}>סגירה/פתיחה</Text>
                 <Text style={styles.reportOptionDescription}>מצב מחסן לפי פריטים ומלאי</Text>
               </View>
               <Ionicons
@@ -427,6 +458,33 @@ const ArmeHomeScreen: React.FC = () => {
               <View style={styles.reportOptionContent}>
                 <Text style={styles.reportOptionTitle}>דוח ציוד חתום לפי פלוגה</Text>
                 <Text style={styles.reportOptionDescription}>רכזת ציוד חתום לפי שיוך פלוגתי</Text>
+              </View>
+              <Ionicons
+                name="chevron-back"
+                size={20}
+                color={Colors.textLight}
+                style={styles.reportOptionChevron}
+              />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.reportOptionCard}
+              onPress={handleExportExcel}
+              activeOpacity={0.85}
+              disabled={exportLoading}
+            >
+              <View style={[styles.reportOptionIcon, { backgroundColor: Colors.arme }]}>
+                {exportLoading ? (
+                  <ActivityIndicator size="small" color={Colors.textWhite} />
+                ) : (
+                  <Ionicons name="document-text-outline" size={20} color={Colors.textWhite} />
+                )}
+              </View>
+              <View style={styles.reportOptionContent}>
+                <Text style={styles.reportOptionTitle}>
+                  {exportLoading ? 'מייצא לאקסל...' : 'ייצוא לאקסל (לפי פלוגות)'}
+                </Text>
+                <Text style={styles.reportOptionDescription}>מלאי החתמות כרגע בכל הפלוגות</Text>
               </View>
               <Ionicons
                 name="chevron-back"

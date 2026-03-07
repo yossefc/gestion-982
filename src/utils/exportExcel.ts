@@ -1,7 +1,6 @@
-// Utilitaires d'export Excel/CSV
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
-import { Assignment, Soldier, WeaponInventoryItem } from '../types';
+import { Assignment, AssignmentItem, Soldier, WeaponInventoryItem } from '../types';
 
 // Polyfill pour les types manquants
 const FS = FileSystem as any;
@@ -107,7 +106,8 @@ export async function exportSoldiersToCSV(soldiers: Soldier[]): Promise<void> {
  */
 export async function exportWeaponInventoryByCompanyToExcel(
   weapons: WeaponInventoryItem[],
-  soldiers: Soldier[]
+  soldiers: Soldier[],
+  combatHoldings?: Array<{ soldierId: string; soldierName: string; soldierPersonalNumber: string; items: AssignmentItem[]; }>
 ): Promise<void> {
   // 1. Importer XLSX dynamiquement pour éviter d'alourdir le bundle si non utilisé
   const XLSX = await import('xlsx');
@@ -138,6 +138,30 @@ export async function exportWeaponInventoryByCompanyToExcel(
       'שם פריט': weapon.category || '',
       'מסט"ב': weapon.serialNumber || '',
     });
+  }
+
+  // 3b. Ajouter les équipements réguliers non-sérialisés
+  if (combatHoldings) {
+    for (const holding of combatHoldings) {
+      const soldier = soldiers.find(s => s.id === holding.soldierId);
+      const companyName = soldier?.company || 'לא ידוע';
+
+      if (!companyMap.has(companyName)) {
+        companyMap.set(companyName, []);
+      }
+
+      for (const item of holding.items) {
+        // Optionnel : ne pas exporter les items avec 0 quantité
+        if (item.quantity <= 0) continue;
+
+        companyMap.get(companyName)!.push({
+          'שם החייל': holding.soldierName || (soldier?.name || ''),
+          'מ.א.': holding.soldierPersonalNumber || (soldier?.personalNumber || ''),
+          'שם פריט': item.equipmentName || '',
+          'מסט"ב': '', // Laisser vide pour les équipements non sérialisés
+        });
+      }
+    }
   }
 
   // 4. Créer le classeur Excel
