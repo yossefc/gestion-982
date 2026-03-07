@@ -115,29 +115,51 @@ export async function exportWeaponInventoryByCompanyToExcel(
   // 2. Filtrer les armes qui appartiennent actuellement à un soldat (assigned ou stored)
   const assignedWeapons = weapons.filter(w => w.status === 'assigned' || w.status === 'stored');
 
-  // 3. Regrouper les armes par פלוגה
-  // Structure: Map<Company, Array<{SoldierName, PersonalNumber, WeaponCat, SerialNumber}>>
-  const companyMap = new Map<string, any[]>();
+  // 3. Regrouper par פלוגה puis par soldat
+  // Structure: Map<CompanyName, Map<SoldierId, { SoldierName: string, PersonalNumber: string, EquipmentParts: string[], SerializedItemsCategoryCounts: Map<string, number> }>>
+  const companyMap = new Map<string, Map<string, {
+    'שם החייל': string;
+    'מ.א.': string;
+    EquipmentParts: string[];
+    SerializedItemsCategoryCounts: Map<string, number>;
+  }>>();
 
+  // Fonction pour initialiser un soldat s'il n'existe pas encore
+  const ensureSoldierEntry = (companyName: string, soldierId: string, soldierName: string, personalNumber: string) => {
+    if (!companyMap.has(companyName)) {
+      companyMap.set(companyName, new Map());
+    }
+    const soldiersMap = companyMap.get(companyName)!;
+    if (!soldiersMap.has(soldierId)) {
+      soldiersMap.set(soldierId, {
+        'שם החייל': soldierName,
+        'מ.א.': personalNumber,
+        EquipmentParts: [],
+        SerializedItemsCategoryCounts: new Map()
+      });
+    }
+    return soldiersMap.get(soldierId)!;
+  };
+
+  // Traitement des armes assignées (sérialisées)
   for (const weapon of assignedWeapons) {
     if (!weapon.assignedTo) continue;
 
     const soldierId = weapon.assignedTo.soldierId;
     const soldier = soldiers.find(s => s.id === soldierId);
 
-    // Si on ne trouve pas le soldat ou sa compagnie, on met 'לא ידוע' (Inconnu)
     const companyName = soldier?.company || 'לא ידוע';
+    const sName = weapon.assignedTo.soldierName || (soldier?.name || '');
+    const pNumber = weapon.assignedTo.soldierPersonalNumber || (soldier?.personalNumber || '');
 
-    if (!companyMap.has(companyName)) {
-      companyMap.set(companyName, []);
-    }
+    const entry = ensureSoldierEntry(companyName, soldierId, sName, pNumber);
 
-    companyMap.get(companyName)!.push({
-      'שם החייל': weapon.assignedTo.soldierName || (soldier?.name || ''),
-      'מ.א.': weapon.assignedTo.soldierPersonalNumber || (soldier?.personalNumber || ''),
-      'שם פריט': weapon.category || '',
-      'מסט"ב': weapon.serialNumber || '',
-    });
+    // Format: Nom d'équipement (Serie) ou Nom d'équipement si pas de série
+    const equipText = weapon.serialNumber
+      ? `${weapon.category || 'נֶשֶׁק'} (${weapon.serialNumber})`
+      : (weapon.category || 'נֶשֶׁק');
+
+    entry.EquipmentParts.push(equipText);
   }
 
   // 3b. Ajouter les équipements réguliers non-sérialisés
@@ -146,44 +168,69 @@ export async function exportWeaponInventoryByCompanyToExcel(
       const soldier = soldiers.find(s => s.id === holding.soldierId);
       const companyName = soldier?.company || 'לא ידוע';
 
-      if (!companyMap.has(companyName)) {
-        companyMap.set(companyName, []);
-      }
+      // On utilise le soldierId comme identifiant, ou un fallback s'il manque
+      const soldierId = holding.soldierId || `unknown_${Math.random()}`;
+      const sName = holding.soldierName || (soldier?.name || '');
+      const pNumber = holding.soldierPersonalNumber || (soldier?.personalNumber || '');
+
+      const entry = ensureSoldierEntry(companyName, soldierId, sName, pNumber);
 
       for (const item of holding.items) {
-        // Optionnel : ne pas exporter les items avec 0 quantité
         if (item.quantity <= 0) continue;
 
-        companyMap.get(companyName)!.push({
-          'שם החייל': holding.soldierName || (soldier?.name || ''),
-          'מ.א.': holding.soldierPersonalNumber || (soldier?.personalNumber || ''),
-          'שם פריט': item.equipmentName || '',
-          'מסט"ב': '', // Laisser vide pour les équipements non sérialisés
-        });
+        // Format: Nom d'équipement xQuantité (si quantité > 1) sinon Nom d'équipement
+        const equipText = item.quantity > 1
+          ? `${item.equipmentName} x${item.quantity}`
+          : item.equipmentName;
+
+        entry.EquipmentParts.push(equipText);
       }
     }
+  }
+
+  // Convertir le Map imbriqué en données de tableau pour Excel
+  const flattenedCompanyData = new Map<string, { list: any[], maxItems: number }>();
+
+  for (const [company, soldiersMap] of companyMap.entries()) {
+    let maxItems = 0;
+    const list = Array.from(soldiersMap.values()).map(entry => {
+      const row: any = {
+        'שם החייל': entry['שם החייל'],
+        'מ.א.': entry['מ.א.'],
+      };
+
+      if (entry.EquipmentParts.length > maxItems) {
+        maxItems = entry.EquipmentParts.length;
+      }
+
+      // Distribuer chaque équipement dans sa propre colonne (פריט 1, פריט 2...)
+      entry.EquipmentParts.forEach((part, index) => {
+        row[`פריט ${index + 1}`] = part;
+      });
+
+      return row;
+    });
+    flattenedCompanyData.set(company, { list, maxItems });
   }
 
   // 4. Créer le classeur Excel
   const wb = XLSX.utils.book_new();
 
   // 5. Remplir le classeur avec une feuille par פלוגה
-  if (companyMap.size === 0) {
+  if (flattenedCompanyData.size === 0) {
     // S'il n'y a rien à exporter, on crée une feuille vide pour éviter un fichier corrompu
     const ws = XLSX.utils.json_to_sheet([{ הודעה: 'אין נתונים לייצוא' }]);
     ws['!dir'] = 'rtl'; // Right-to-Left
     XLSX.utils.book_append_sheet(wb, ws, 'ריק');
   } else {
     // Trier les compagnies par ordre alphabétique pour un rendu propre
-    const sortedCompanies = Array.from(companyMap.keys()).sort();
+    const sortedCompanies = Array.from(flattenedCompanyData.keys()).sort();
 
     for (const company of sortedCompanies) {
-      const data = companyMap.get(company)!;
-      // Trier les données de la feuille: par nom de soldat puis par catégorie d'arme
-      data.sort((a, b) => {
-        const nameCompare = a['שם החייל'].localeCompare(b['שם החייל']);
-        if (nameCompare !== 0) return nameCompare;
-        return a['שם פריט'].localeCompare(b['שם פריט']);
+      const { list: data, maxItems } = flattenedCompanyData.get(company)!;
+      // Trier les données de la feuille: par nom de soldat
+      data.sort((a: any, b: any) => {
+        return a['שם החייל'].localeCompare(b['שם החייל']);
       });
 
       const ws = XLSX.utils.json_to_sheet(data);
@@ -191,12 +238,15 @@ export async function exportWeaponInventoryByCompanyToExcel(
       ws['!dir'] = 'rtl';
 
       // Ajuster la largeur des colonnes
-      ws['!cols'] = [
+      const cols = [
         { wch: 20 }, // שם החייל
         { wch: 15 }, // מ.א.
-        { wch: 20 }, // שם פריט
-        { wch: 15 }, // מסט"ב
       ];
+      // Ajouter une colonne de taille 25 pour chaque équipement
+      for (let i = 0; i < maxItems; i++) {
+        cols.push({ wch: 25 });
+      }
+      ws['!cols'] = cols;
 
       // On s'assure que le nom de l'onglet est valide (max 31 chars, pas de caractères interdits)
       const safeSheetName = company.substring(0, 31).replace(/[\\/?*\[\]]/g, '_');

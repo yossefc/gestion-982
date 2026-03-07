@@ -637,14 +637,7 @@ export async function returnEquipment(params: ReturnEquipmentParams): Promise<st
     requestId,
   } = params;
 
-  // Pré-charger les issues avant la transaction (getDocs non compatible avec runTransaction)
-  const issueQuery = query(
-    collection(db, 'assignments'),
-    where('soldierId', '==', soldierId),
-    where('type', '==', type),
-    where('action', '==', 'issue')
-  );
-  const issueDocs = await getDocs(issueQuery);
+  // Transaction append-only: on ecrit un credit dans assignments + mise a jour soldier_holdings uniquement.
 
   const assignmentId = await runTransaction(db, async (transaction: Transaction) => {
     // 0. Idempotence
@@ -658,12 +651,7 @@ export async function returnEquipment(params: ReturnEquipmentParams): Promise<st
     // 1. Lire soldier_holdings (READ)
     const holdingId = `${soldierId}_${type}`;
     const holdingRef = doc(db, 'soldier_holdings', holdingId);
-    const extraRef = doc(db, 'soldier_equipment', soldierId);
-
-    const [holdingSnap, extraSnap] = await Promise.all([
-      transaction.get(holdingRef),
-      transaction.get(extraRef)
-    ]);
+    const holdingSnap = await transaction.get(holdingRef);
 
     // 2. Créer l'assignment (historique - WRITE)
     // action 'credit' + status 'זוכה' : cohérent avec l'UI "זיכוי חייל"
@@ -701,37 +689,8 @@ export async function returnEquipment(params: ReturnEquipmentParams): Promise<st
       status: outstandingCount > 0 ? 'OPEN' : 'CLOSED',
       lastUpdated: Timestamp.now(),
     });
-
-    // 4. Nettoyage automatique: si le solde est à 0, effacer les documents de signature (issue) et l'ancienne collection
-    if (outstandingCount === 0) {
-      issueDocs.forEach(issueDoc => {
-        transaction.delete(issueDoc.ref);
-      });
-
-      // Nettoyer intelligemment la collection soldier_equipment (ancienne redondante)
-      if (extraSnap.exists()) {
-        const extraData = extraSnap.data();
-        const otherItems = (extraData.items || []).filter((it: any) => it.type !== type);
-
-        if (otherItems.length === 0) {
-          transaction.delete(extraRef);
-        } else {
-          // Garder uniquement les items de l'autre type et effacer les champs liés à celui-ci
-          const updates: any = {
-            items: otherItems,
-            lastUpdated: Timestamp.now()
-          };
-          if (type === 'combat') {
-            updates.combatSignature = null;
-            updates.combatPdfUrl = null;
-          } else {
-            updates.clothingSignature = null;
-            updates.clothingPdfUrl = null;
-          }
-          transaction.update(extraRef, updates);
-        }
-      }
-    }
+    // Append-only: conserver l'historique assignments.
+    // Aucun nettoyage/suppression des anciens 'issue' et aucune ecriture legacy soldier_equipment.
 
     return assignmentRef.id;
   });
@@ -864,14 +823,7 @@ export async function creditEquipment(
 ): Promise<string> {
   let returnedHoldings: HoldingItem[] = [];
 
-  // Pré-charger les issues avant la transaction (getDocs non compatible avec runTransaction)
-  const issueQuery = query(
-    collection(db, 'assignments'),
-    where('soldierId', '==', soldierId),
-    where('type', '==', type),
-    where('action', '==', 'issue')
-  );
-  const issueDocs = await getDocs(issueQuery);
+  // Transaction append-only: on ecrit un credit dans assignments + mise a jour soldier_holdings uniquement.
 
   const assignmentId = await runTransaction(db, async (transaction: Transaction) => {
     // 0. Idempotence
@@ -885,12 +837,7 @@ export async function creditEquipment(
     // 1. Lire les holdings actuels (READ)
     const holdingId = `${soldierId}_${type}`;
     const holdingRef = doc(db, 'soldier_holdings', holdingId);
-    const extraRef = doc(db, 'soldier_equipment', soldierId);
-
-    const [holdingSnap, extraSnap] = await Promise.all([
-      transaction.get(holdingRef),
-      transaction.get(extraRef)
-    ]);
+    const holdingSnap = await transaction.get(holdingRef);
 
     if (!holdingSnap.exists() || !holdingSnap.data().items || holdingSnap.data().items.length === 0) {
       throw new Error('No holdings to credit for this soldier');
@@ -926,34 +873,8 @@ export async function creditEquipment(
       status: 'CLOSED',
       lastUpdated: Timestamp.now(),
     });
-
-    // 4. Nettoyage automatique: le crédit remet toujours à 0
-    issueDocs.forEach(issueDoc => {
-      transaction.delete(issueDoc.ref);
-    });
-
-    // Nettoyer intelligemment la collection soldier_equipment
-    if (extraSnap.exists()) {
-      const extraData = extraSnap.data();
-      const otherItems = (extraData.items || []).filter((it: any) => it.type !== type);
-
-      if (otherItems.length === 0) {
-        transaction.delete(extraRef);
-      } else {
-        const updates: any = {
-          items: otherItems,
-          lastUpdated: Timestamp.now()
-        };
-        if (type === 'combat') {
-          updates.combatSignature = null;
-          updates.combatPdfUrl = null;
-        } else {
-          updates.clothingSignature = null;
-          updates.clothingPdfUrl = null;
-        }
-        transaction.update(extraRef, updates);
-      }
-    }
+    // Append-only: conserver l'historique assignments.
+    // Aucun nettoyage/suppression des anciens 'issue' et aucune ecriture legacy soldier_equipment.
 
     return assignmentRef.id;
   });
@@ -1533,4 +1454,3 @@ export const transactionalAssignmentService = {
   recalculateAllSoldiersHoldings,
   repairSoldierHoldings,
 };
-

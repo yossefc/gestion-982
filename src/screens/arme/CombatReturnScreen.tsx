@@ -233,8 +233,29 @@ const CombatReturnScreen: React.FC = () => {
               serial: (i.serials || []).join(','),
             })));
 
-            const hasRemainingItems = remainingItems.length > 0;
+            const totalRemainingQuantity = remainingItems.reduce(
+              (sum, item: any) => sum + Number(item.quantity || 0),
+              0
+            );
+            const hasRemainingItems = totalRemainingQuantity > 0;
+            console.log('[CombatReturn] totalRemainingQuantity:', totalRemainingQuantity);
             console.log('[CombatReturn] hasRemainingItems:', hasRemainingItems);
+
+            if (!hasRemainingItems) {
+              setItems([]);
+            }
+
+            if (isClearance && !hasRemainingItems) {
+              try {
+                await soldierService.updateClearance(soldierId, 'armory', true);
+                console.log('[CombatReturn] Armory clearance auto-validated');
+              } catch (clearanceError) {
+                console.error('[CombatReturn] Armory clearance auto-validation failed:', clearanceError);
+                const clearanceMessage = (clearanceError as any)?.message
+                  || 'הציוד הוחזר, אך עדכון הזיכוי נכשל.';
+                throw new Error(`הציוד הוחזר בהצלחה, אך זיכוי נשקייה אוטומטי נכשל: ${clearanceMessage}`);
+              }
+            }
 
             // Générer message WhatsApp
             let whatsappMessage = `שלום ${soldier?.name},\n\nהזיכוי בוצע בהצלחה.\n\n`;
