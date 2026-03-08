@@ -24,7 +24,6 @@ import { useData, useCombatStats, useManot, useCombatEquipment } from '../../con
 import { weaponInventoryService } from '../../services/weaponInventoryService';
 import { exportWeaponInventoryByCompanyToExcel } from '../../utils/exportExcel';
 import { soldierService } from '../../services/soldierService';
-import { assignmentService } from '../../services/assignmentService';
 
 interface MenuItemProps {
   id: string;
@@ -116,9 +115,10 @@ const ArmeHomeScreen: React.FC = () => {
       setExportLoading(true);
       const allWeapons = await weaponInventoryService.getAllWeapons();
       const allSoldiers = await soldierService.getAll();
-      const combatHoldings = await assignmentService.getSoldiersWithCurrentHoldings('combat');
 
-      await exportWeaponInventoryByCompanyToExcel(allWeapons, allSoldiers, combatHoldings);
+      // Export only soldiers with active weapons (assigned/stored).
+      // Excludes soldiers who already returned all their weapons.
+      await exportWeaponInventoryByCompanyToExcel(allWeapons, allSoldiers);
 
       setModalType('success');
       setModalMessage('קובץ Excel יוצא בהצלחה!');

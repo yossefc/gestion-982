@@ -154,12 +154,22 @@ export async function exportWeaponInventoryByCompanyToExcel(
 
     const entry = ensureSoldierEntry(companyName, soldierId, sName, pNumber);
 
-    // Format: Nom d'équipement (Serie) ou Nom d'équipement si pas de série
-    const equipText = weapon.serialNumber
-      ? `${weapon.category || 'נֶשֶׁק'} (${weapon.serialNumber})`
-      : (weapon.category || 'נֶשֶׁק');
+    const equipmentName = weapon.category || 'נֶשֶׁק';
+    const serialNumber = weapon.serialNumber?.trim();
 
-    entry.EquipmentParts.push(equipText);
+    // Rule: if we have a serialized version "NAME (SERIAL)", do not keep plain "NAME".
+    if (serialNumber) {
+      const withSerial = `${equipmentName} (${serialNumber})`;
+      entry.EquipmentParts = entry.EquipmentParts.filter(part => part !== equipmentName);
+      if (!entry.EquipmentParts.includes(withSerial)) {
+        entry.EquipmentParts.push(withSerial);
+      }
+    } else {
+      const hasSerializedVariant = entry.EquipmentParts.some(part => part.startsWith(`${equipmentName} (`));
+      if (!hasSerializedVariant && !entry.EquipmentParts.includes(equipmentName)) {
+        entry.EquipmentParts.push(equipmentName);
+      }
+    }
   }
 
   // 3b. Ajouter les équipements réguliers non-sérialisés
@@ -178,12 +188,20 @@ export async function exportWeaponInventoryByCompanyToExcel(
       for (const item of holding.items) {
         if (item.quantity <= 0) continue;
 
+        const equipmentName = item.equipmentName;
+        const hasSerializedVariant = entry.EquipmentParts.some(part => part.startsWith(`${equipmentName} (`));
+        if (hasSerializedVariant) {
+          continue;
+        }
+
         // Format: Nom d'équipement xQuantité (si quantité > 1) sinon Nom d'équipement
         const equipText = item.quantity > 1
-          ? `${item.equipmentName} x${item.quantity}`
-          : item.equipmentName;
+          ? `${equipmentName} x${item.quantity}`
+          : equipmentName;
 
-        entry.EquipmentParts.push(equipText);
+        if (!entry.EquipmentParts.includes(equipText)) {
+          entry.EquipmentParts.push(equipText);
+        }
       }
     }
   }
@@ -272,4 +290,3 @@ export async function exportWeaponInventoryByCompanyToExcel(
     });
   }
 }
-
