@@ -64,12 +64,15 @@ export interface RspAssignment {
   equipmentName: string;
   quantity: number;         // Quantité totale agrégée
   status: 'signed' | 'credited' | 'gap'; // הוחתם/זוכה/פער
+  action?: 'add' | 'remove'; // Derniere action appliquee
   lastSignatureDate: Date;
+  signature?: string;       // Base64 de la derniere signature capturee
   notes?: string;
   history: {                // Log des changements
     date: Date;
     quantityChange: number;
     action: 'add' | 'remove';
+    notes?: string;
   }[];
   createdAt: Date;
   updatedAt: Date;

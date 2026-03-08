@@ -222,6 +222,7 @@ const RspAssignmentScreen: React.FC = () => {
                     quantityChange: change,
                     action: action === 'issue' ? 'add' : 'remove',
                     notes: `חתימה דיגיטלית - ${action === 'issue' ? 'הנפקה' : 'זיכוי'}`,
+                    signature: signatureData,
                 });
             });
 

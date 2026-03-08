@@ -1569,6 +1569,7 @@ export const rspAssignmentService = {
       quantityChange: number; // Positif pour ajout, négatif pour retrait
       action: 'add' | 'remove';
       notes?: string;
+      signature?: string;
     }
   ): Promise<void> {
     try {
@@ -1595,14 +1596,22 @@ export const rspAssignmentService = {
         if (newQuantity <= 0) newStatus = 'credited';
         else newStatus = 'signed';
 
-        await updateDoc(docRef, {
+        const updatePayload: any = {
           quantity: newQuantity,
           status: newStatus,
+          action: data.action,
+          notes: data.notes || current.notes || '',
           lastSignatureDate: Timestamp.now(),
           updatedAt: Timestamp.now(),
           // Ajouter à l'historique (arrayUnion pourrait être utilisé mais on veut garder l'ordre)
           history: [...(current.history || []), historyItem]
-        });
+        };
+
+        if (data.signature) {
+          updatePayload.signature = data.signature;
+        }
+
+        await updateDoc(docRef, updatePayload);
       } else {
         // Création nouvelle attribution
         if (data.quantityChange <= 0) {
@@ -1617,6 +1626,9 @@ export const rspAssignmentService = {
           equipmentName: data.equipmentName,
           quantity: data.quantityChange,
           status: 'signed',
+          action: data.action,
+          notes: data.notes || '',
+          signature: data.signature || '',
           lastSignatureDate: Timestamp.now(),
           history: [historyItem],
           createdAt: Timestamp.now(),

@@ -102,6 +102,7 @@ const RspTableScreen: React.FC = () => {
                 <Text style={[styles.headerCell, { flex: 2 }]}>ציוד</Text>
                 <Text style={[styles.headerCell, { flex: 1 }]}>כמות</Text>
                 <Text style={[styles.headerCell, { flex: 1.5 }]}>סטטוס</Text>
+                <Text style={[styles.headerCell, { flex: 1.2 }]}>חתימה</Text>
                 <Text style={[styles.headerCell, { flex: 2 }]}>תאריך</Text>
             </View>
 
@@ -121,6 +122,13 @@ const RspTableScreen: React.FC = () => {
                                         {getStatusText(item.status)}
                                     </Text>
                                 </View>
+                            </View>
+                            <View style={[styles.cellContainer, { flex: 1.2 }]}>
+                                <Ionicons
+                                    name={item.signature ? 'checkmark-circle' : 'close-circle-outline'}
+                                    size={16}
+                                    color={item.signature ? Colors.success : Colors.textLight}
+                                />
                             </View>
                             <Text style={[styles.cell, { flex: 2, fontSize: 10 }]}>
                                 {formatDate(item.lastSignatureDate)}
