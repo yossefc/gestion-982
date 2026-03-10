@@ -15,6 +15,8 @@ import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
+import { collection, getDocs, query, where } from 'firebase/firestore';
+import { db } from '../../config/firebase';
 import { soldierService } from '../../services/firebaseService';
 import { transactionalAssignmentService } from '../../services/transactionalAssignmentService';
 import { Soldier } from '../../types';
@@ -42,6 +44,9 @@ const ShlishutHomeScreen: React.FC = () => {
     const [filteredSoldiers, setFilteredSoldiers] = useState<Soldier[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedStatus, setSelectedStatus] = useState<string>('all');
+
+    // Holdings indicators
+    const [holdingsMap, setHoldingsMap] = useState<Map<string, { hasCombat: boolean; hasClothing: boolean }>>(new Map());
 
     // Modal State
     const [modalVisible, setModalVisible] = useState(false);
@@ -100,6 +105,44 @@ const ShlishutHomeScreen: React.FC = () => {
             setRefreshing(false);
         }
     };
+
+    // Batch-load holdings for all soldiers to show indicators on cards
+    const loadHoldingsForSoldiers = useCallback(async (soldiers: Soldier[]) => {
+        if (soldiers.length === 0) return;
+        const ids = soldiers.map(s => s.id);
+        const chunkArray = <T>(arr: T[], size: number): T[][] => {
+            const out: T[][] = [];
+            for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+            return out;
+        };
+        try {
+            const snapshots = await Promise.all(
+                chunkArray(ids, 30).map(chunk =>
+                    getDocs(query(collection(db, 'soldier_holdings'), where('soldierId', 'in', chunk)))
+                )
+            );
+            const newMap = new Map<string, { hasCombat: boolean; hasClothing: boolean }>();
+            snapshots.flatMap(s => s.docs).forEach(d => {
+                const data = d.data();
+                const { soldierId, type, items } = data;
+                if (!soldierId || !type) return;
+                if (!Array.isArray(items) || items.length === 0) return;
+                const entry = newMap.get(soldierId) || { hasCombat: false, hasClothing: false };
+                if (type === 'combat') entry.hasCombat = true;
+                if (type === 'clothing') entry.hasClothing = true;
+                newMap.set(soldierId, entry);
+            });
+            setHoldingsMap(newMap);
+        } catch (error) {
+            console.error('[ShlishutHome] loadHoldings error:', error);
+        }
+    }, []);
+
+    useEffect(() => {
+        if (isInitialized && cachedSoldiers.length > 0) {
+            loadHoldingsForSoldiers(cachedSoldiers);
+        }
+    }, [isInitialized, cachedSoldiers, loadHoldingsForSoldiers]);
 
     const filterSoldiers = (list: Soldier[], query: string, status: string) => {
         let result = list;
@@ -238,6 +281,27 @@ const ShlishutHomeScreen: React.FC = () => {
                     </View>
                 </View>
 
+
+                {(() => {
+                    const h = holdingsMap.get(item.id);
+                    if (!h) return null;
+                    return (
+                        <View style={styles.holdingIndicators}>
+                            {h.hasClothing && (
+                                <View style={[styles.holdingPill, styles.pillLogistics]}>
+                                    <Ionicons name="shirt-outline" size={11} color="#FFF" />
+                                    <Text style={styles.holdingPillText}>אפסנאות</Text>
+                                </View>
+                            )}
+                            {h.hasCombat && (
+                                <View style={[styles.holdingPill, styles.pillArmory]}>
+                                    <Ionicons name="shield-outline" size={11} color="#FFF" />
+                                    <Text style={styles.holdingPillText}>נשקייה</Text>
+                                </View>
+                            )}
+                        </View>
+                    );
+                })()}
 
                 {status === 'releasing_today' && (
                     <View style={styles.clearanceContainer}>
@@ -604,6 +668,31 @@ const styles = StyleSheet.create({
     },
     statusText: {
         fontSize: 12,
+        fontWeight: '600',
+    },
+    holdingIndicators: {
+        flexDirection: 'row',
+        gap: 6,
+        justifyContent: 'flex-end',
+        marginTop: 8,
+    },
+    holdingPill: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        borderRadius: 10,
+        gap: 3,
+    },
+    pillLogistics: {
+        backgroundColor: '#F59E0B',
+    },
+    pillArmory: {
+        backgroundColor: '#EF4444',
+    },
+    holdingPillText: {
+        fontSize: 10,
+        color: '#FFF',
         fontWeight: '600',
     },
     clearanceContainer: {

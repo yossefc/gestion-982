@@ -21,6 +21,7 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
 import { weaponInventoryService } from '../../services/weaponInventoryService';
 import { WeaponInventoryItem, WeaponStatus } from '../../types';
+import { soldierService } from '../../services/soldierService';
 import { AppModal, ModalType } from '../../components';
 import {
   getFirestore,
@@ -47,6 +48,7 @@ const WeaponInventoryListScreen: React.FC = () => {
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [activeFilter, setActiveFilter] = useState<FilterTab>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [soldierCompanyById, setSoldierCompanyById] = useState<Map<string, string>>(new Map());
   const [stats, setStats] = useState({
     total: 0,
     available: 0,
@@ -171,13 +173,20 @@ const WeaponInventoryListScreen: React.FC = () => {
       setFilteredWeapons([]);
       setGroupedWeapons(new Map());
 
-      const [allWeapons, inventoryStats] = await Promise.all([
+      const [allWeapons, inventoryStats, allSoldiers] = await Promise.all([
         weaponInventoryService.getAllWeapons(),
         weaponInventoryService.getInventoryStats(),
+        soldierService.getAll(),
       ]);
 
       console.log('Weapon Inventory Stats:', inventoryStats);
       console.log('Total weapons loaded:', allWeapons.length);
+
+      const companyMap = new Map<string, string>();
+      allSoldiers.forEach((soldier) => {
+        companyMap.set(soldier.id, soldier.company || '');
+      });
+      setSoldierCompanyById(companyMap);
 
       // Cherche les שוברים manquants dans la collection assignments
       const enrichedWeapons = await enrichWeaponsWithVoucherNumbers(allWeapons);
@@ -203,6 +212,24 @@ const WeaponInventoryListScreen: React.FC = () => {
       setLoading(false);
       setRefreshing(false);
     }
+  };
+
+  const getCompanyLetter = (company?: string): string => {
+    if (!company) return '';
+    const trimmed = company.trim();
+    if (!trimmed) return '';
+
+    // Extract first meaningful letter from values like "פלוגה א", "א", "מפקדה", etc.
+    const prefixed = trimmed.match(/פלוגה\s*([א-תA-Za-z])/);
+    if (prefixed?.[1]) return prefixed[1];
+    return trimmed[0];
+  };
+
+  const getAssignedSoldierLabel = (weapon: WeaponInventoryItem): string => {
+    if (!weapon.assignedTo) return '';
+    const company = soldierCompanyById.get(weapon.assignedTo.soldierId);
+    const letter = getCompanyLetter(company);
+    return letter ? `${weapon.assignedTo.soldierName} (${letter})` : weapon.assignedTo.soldierName;
   };
 
   const applyFilter = (
@@ -721,7 +748,7 @@ const WeaponInventoryListScreen: React.FC = () => {
                       <View style={styles.weaponStatusInfo}>
                         <View style={styles.soldierInfoRow}>
                           <Ionicons name="person-outline" size={12} color={Colors.textSecondary} />
-                          <Text style={styles.soldierNameTable}>{weapon.assignedTo.soldierName}</Text>
+                          <Text style={styles.soldierNameTable}>{getAssignedSoldierLabel(weapon)}</Text>
                         </View>
                         {weapon.assignedTo.voucherNumber ? (
                           <View style={styles.soldierInfoRow}>
@@ -1084,7 +1111,7 @@ const WeaponInventoryListScreen: React.FC = () => {
                   {selectedWeapon.status === 'assigned' && selectedWeapon.assignedTo && (
                     <View style={styles.modalInfoRow}>
                       <Text style={styles.modalInfoValue}>
-                        {selectedWeapon.assignedTo.soldierName}
+                        {getAssignedSoldierLabel(selectedWeapon)}
                       </Text>
                       <Text style={styles.modalInfoLabel}>מוקצה ל:</Text>
                     </View>

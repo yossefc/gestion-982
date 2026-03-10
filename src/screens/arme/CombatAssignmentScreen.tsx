@@ -86,6 +86,7 @@ const CombatAssignmentScreen: React.FC = () => {
     assignmentForPrint: any;
     whatsappMessage: string;
     assignmentId: string;
+    weaponCount: number; // number of weapons updated atomically
   } | null>(null);
 
   // AppModal state
@@ -433,6 +434,65 @@ const CombatAssignmentScreen: React.FC = () => {
       const operation = hasExistingHoldings ? 'add' : 'issue';
       const requestId = `combat_${operation}_${soldier.id}_${Date.now()}`;
 
+      // ── Résoudre les numéros de série → IDs d'armes AVANT la transaction ──
+      // (les requêtes Firestore ne sont pas compatibles avec runTransaction)
+      const weaponBySerial = new Map<string, WeaponInventoryItem>();
+      for (const item of Array.from(selectedItems.values())) {
+        if (item.equipment.requiresSerial && item.serials) {
+          for (const serial of item.serials) {
+            if (!serial.trim()) continue;
+            let weapon: WeaponInventoryItem | undefined | null =
+              availableWeapons.find(w => w.serialNumber === serial.trim());
+            if (!weapon) {
+              weapon = await weaponInventoryService.getWeaponBySerialNumber(serial.trim());
+            }
+            if (weapon) {
+              weaponBySerial.set(serial.trim(), weapon);
+            } else {
+              console.warn(`[CombatAssignment] Weapon not found for serial: ${serial}`);
+            }
+          }
+        }
+      }
+
+      // Déterminer le numéro de bon original pour les armes (pour le cas addEquipment)
+      let voucherForWeapons = requestId;
+      if (hasExistingHoldings && weaponBySerial.size > 0) {
+        try {
+          const pastAssignments = await assignmentService.getAssignmentsBySoldier(soldier.id, 'combat');
+          if (pastAssignments && pastAssignments.length > 0) {
+            const sortedAssignments = [...pastAssignments].sort((a, b) => {
+              const dateA = a.timestamp instanceof Date ? a.timestamp.getTime() : new Date(a.timestamp).getTime();
+              const dateB = b.timestamp instanceof Date ? b.timestamp.getTime() : new Date(b.timestamp).getTime();
+              return dateA - dateB;
+            });
+            const originalIssue = sortedAssignments.find(a => a.action === 'issue') || sortedAssignments[0];
+            if (originalIssue && originalIssue.id) {
+              voucherForWeapons = originalIssue.id;
+              console.log(`[CombatAssignment] Original voucher for weapons: ${voucherForWeapons}`);
+            }
+          }
+        } catch (error) {
+          console.warn('[CombatAssignment] Failed to fetch original voucher for weapons:', error);
+        }
+      }
+
+      // Construire la liste des mises à jour d'armes pour la transaction atomique
+      const weaponUpdates = Array.from(weaponBySerial.values()).map(weapon => ({
+        weaponId: weapon.id,
+        assignedTo: {
+          soldierId: soldier.id,
+          soldierName: soldier.name,
+          soldierPersonalNumber: soldier.personalNumber,
+          voucherNumber: voucherForWeapons,
+        },
+      }));
+
+      if (weaponUpdates.length > 0) {
+        console.log(`[CombatAssignment] ${weaponUpdates.length} weapon(s) will be updated atomically in transaction`);
+      }
+
+      // ── Transaction atomique: assignment + soldier_holdings + weapons_inventory ──
       const assignmentId = hasExistingHoldings
         ? await transactionalAssignmentService.addEquipment({
           soldierId: soldier.id,
@@ -448,6 +508,7 @@ const CombatAssignmentScreen: React.FC = () => {
           addedByRank: user?.rank || '',
           addedByPersonalNumber: user?.personalNumber || '',
           requestId,
+          weaponUpdates,
         })
         : await transactionalAssignmentService.issueEquipment({
           soldierId: soldier.id,
@@ -463,77 +524,10 @@ const CombatAssignmentScreen: React.FC = () => {
           assignedByRank: user?.rank || '',
           assignedByPersonalNumber: user?.personalNumber || '',
           requestId,
+          weaponUpdates,
         });
 
-      console.log('[CombatAssignment] Transactional assignment created:', assignmentId);
-
-      // Fetch original voucher number if adding to existing holdings
-      let originalVoucherNumber = assignmentId;
-      if (hasExistingHoldings) {
-        try {
-          const pastAssignments = await assignmentService.getAssignmentsBySoldier(soldier.id, 'combat');
-          if (pastAssignments && pastAssignments.length > 0) {
-            // Sort by timestamp ascending to get the oldest (original) assignment
-            const sortedAssignments = [...pastAssignments].sort((a, b) => {
-              const dateA = a.timestamp instanceof Date ? a.timestamp.getTime() : new Date(a.timestamp).getTime();
-              const dateB = b.timestamp instanceof Date ? b.timestamp.getTime() : new Date(b.timestamp).getTime();
-              return dateA - dateB;
-            });
-            // Try to find the first 'issue' action, otherwise just take the oldest
-            const originalIssue = sortedAssignments.find(a => a.action === 'issue') || sortedAssignments[0];
-            if (originalIssue && originalIssue.id) {
-              originalVoucherNumber = originalIssue.id;
-              console.log(`[CombatAssignment] Found original voucher number: ${originalVoucherNumber} (current is ${assignmentId})`);
-            }
-          }
-        } catch (error) {
-          console.warn('[CombatAssignment] Failed to fetch past assignments for original voucher number:', error);
-        }
-      }
-
-      // Update weapon inventory status for each weapon with serial number
-      const weaponUpdatePromises: Promise<any>[] = [];
-
-      console.log('[CombatAssignment] Processing weapon status updates...');
-      for (const item of Array.from(selectedItems.values())) {
-        if (item.equipment.requiresSerial && item.serials) {
-          for (const serial of item.serials) {
-            if (serial.trim()) {
-              // 1. Cherche d'abord dans availableWeapons (cache local, rapide)
-              let weapon: WeaponInventoryItem | undefined | null =
-                availableWeapons.find(w => w.serialNumber === serial.trim());
-
-              // 2. Fallback: cherche dans TOUS les nshqim via Firestore (couvre les réassignations)
-              if (!weapon) {
-                weapon = await weaponInventoryService.getWeaponBySerialNumber(serial.trim());
-              }
-
-              if (weapon) {
-                console.log(`[CombatAssignment] Queuing weapon update: ${weapon.serialNumber} (${weapon.id})`);
-                weaponUpdatePromises.push(
-                  weaponInventoryService.setWeaponAssignedStatusOnlyOffline(weapon.id, {
-                    soldierId: soldier.id,
-                    soldierName: soldier.name,
-                    soldierPersonalNumber: soldier.personalNumber,
-                    voucherNumber: originalVoucherNumber,
-                  })
-                );
-              } else {
-                console.warn(`[CombatAssignment] Weapon not found for serial: ${serial}`);
-              }
-            }
-          }
-        }
-      }
-
-      // Wait for all weapon updates
-      if (weaponUpdatePromises.length > 0) {
-        console.log(`[CombatAssignment] Updating ${weaponUpdatePromises.length} weapons...`);
-        await Promise.all(weaponUpdatePromises);
-        console.log(`[CombatAssignment] Updated ${weaponUpdatePromises.length} weapons`);
-      }
-
-      console.log('[CombatAssignment] Save completed successfully');
+      console.log('[CombatAssignment] Atomic transaction completed (assignment + holdings + weapons):', assignmentId);
 
       // Générer et imprimer le PDF automatiquement (Local) - STAND BY
       /*
@@ -599,7 +593,7 @@ const CombatAssignmentScreen: React.FC = () => {
         operatorRank: user?.rank || '',
         operatorPersonalNumber: user?.personalNumber || '',
         timestamp: new Date(),
-        assignmentId: originalVoucherNumber,
+        assignmentId: voucherForWeapons,
       }).then(() => {
         console.log('[CombatAssignment] Print queue sent successfully (background)');
       }).catch((printError) => {
@@ -616,7 +610,7 @@ const CombatAssignmentScreen: React.FC = () => {
         }
         whatsappMessage += '\n';
       }
-      whatsappMessage += `\nמספר שובר: ${String(originalVoucherNumber).slice(-6).padStart(6, '0')}`;
+      whatsappMessage += `\nמספר שובר: ${String(voucherForWeapons).slice(-6).padStart(6, '0')}`;
       whatsappMessage += `\nהציוד רשום על שמך ובאחריותך.\nתודה,\nגדוד 982`;
 
       // Store assignment data for potential reprint
@@ -632,7 +626,7 @@ const CombatAssignmentScreen: React.FC = () => {
         operatorRank: user?.rank || '',
         operatorPersonalNumber: user?.personalNumber || '',
         timestamp: new Date(),
-        assignmentId: originalVoucherNumber,
+        assignmentId: voucherForWeapons,
       };
 
       // Show success with WhatsApp and Print options
@@ -693,7 +687,8 @@ const CombatAssignmentScreen: React.FC = () => {
       setSuccessModalData({
         assignmentForPrint,
         whatsappMessage,
-        assignmentId: originalVoucherNumber,
+        assignmentId: voucherForWeapons,
+        weaponCount: weaponUpdates.length,
       });
       setShowSuccessModal(true);
     } catch (error: any) {
@@ -1328,7 +1323,13 @@ const CombatAssignmentScreen: React.FC = () => {
         visible={showSuccessModal}
         type="success"
         title="הצלחה!"
-        message={`ההחתמה בוצעה בהצלחה והמסמך נשלח למדפסת\n\nמספר שובר: ${successModalData?.assignmentId ? String(successModalData.assignmentId).slice(-6).padStart(6, '0') : ''}`}
+        message={[
+          'ההחתמה בוצעה בהצלחה והמסמך נשלח למדפסת',
+          successModalData?.weaponCount
+            ? `✓ נרשם בו-זמנית: אחזקות חייל + נשקייה (${successModalData.weaponCount} נשק${successModalData.weaponCount > 1 ? 'ים' : ''})`
+            : '✓ נרשם: אחזקות חייל',
+          `\nמספר שובר: ${successModalData?.assignmentId ? String(successModalData.assignmentId).slice(-6).padStart(6, '0') : ''}`,
+        ].join('\n')}
         buttons={[
           {
             text: 'סגור',

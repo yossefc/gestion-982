@@ -17,13 +17,16 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
+import { collection, getDocs, query, where, Timestamp } from 'firebase/firestore';
+import { db } from '../../config/firebase';
 import { Colors, Shadows, Spacing, BorderRadius, FontSize } from '../../theme/Colors';
 import { AppModal, ModalType } from '../../components';
 import { useAuth } from '../../contexts/AuthContext';
 import { useData, useCombatStats, useManot, useCombatEquipment } from '../../contexts/DataContext';
 import { weaponInventoryService } from '../../services/weaponInventoryService';
-import { exportWeaponInventoryByCompanyToExcel } from '../../utils/exportExcel';
+import { exportWeaponInventoryByCompanyToExcel, exportTodaySignaturesToExcel } from '../../utils/exportExcel';
 import { soldierService } from '../../services/soldierService';
+import { Assignment } from '../../types';
 
 interface MenuItemProps {
   id: string;
@@ -47,6 +50,7 @@ const ArmeHomeScreen: React.FC = () => {
 
   const [refreshing, setRefreshing] = useState(false);
   const [exportLoading, setExportLoading] = useState(false);
+  const [todayExportLoading, setTodayExportLoading] = useState(false);
   const [reportMenuVisible, setReportMenuVisible] = useState(false);
   const reportSheetAnim = useRef(new Animated.Value(0)).current;
   const reportBackdropAnim = useRef(new Animated.Value(0)).current;
@@ -132,6 +136,60 @@ const ArmeHomeScreen: React.FC = () => {
       setModalVisible(true);
     } finally {
       setExportLoading(false);
+      closeReportMenu();
+    }
+  };
+
+  const handleExportTodaySignatures = async () => {
+    try {
+      setTodayExportLoading(true);
+
+      const startOfToday = new Date();
+      startOfToday.setHours(0, 0, 0, 0);
+      const startOfTomorrow = new Date(startOfToday);
+      startOfTomorrow.setDate(startOfTomorrow.getDate() + 1);
+
+      const q = query(
+        collection(db, 'assignments'),
+        where('timestamp', '>=', Timestamp.fromDate(startOfToday)),
+        where('timestamp', '<', Timestamp.fromDate(startOfTomorrow))
+      );
+
+      const snapshot = await getDocs(q);
+      const assignments: Assignment[] = snapshot.docs
+        .map(d => ({
+          id: d.id,
+          ...(d.data() as any),
+          timestamp: d.data().timestamp?.toDate() || new Date(),
+        }))
+        .filter((a: Assignment) => a.signature);
+
+      if (assignments.length === 0) {
+        setModalType('info');
+        setModalTitle('אין נתונים');
+        setModalMessage('לא נמצאו חתימות להיום');
+        setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
+        setModalVisible(true);
+        closeReportMenu();
+        return;
+      }
+
+      await exportTodaySignaturesToExcel(assignments);
+
+      setModalType('success');
+      setModalTitle(undefined);
+      setModalMessage(`יוצאו ${assignments.length} חתימות לאקסל`);
+      setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalVisible(true);
+    } catch (error) {
+      console.error('Error exporting today signatures:', error);
+      setModalType('error');
+      setModalTitle(undefined);
+      setModalMessage('שגיאה בייצוא חתימות היום');
+      setModalButtons([{ text: 'סגור', style: 'primary', onPress: () => setModalVisible(false) }]);
+      setModalVisible(true);
+    } finally {
+      setTodayExportLoading(false);
       closeReportMenu();
     }
   };
@@ -485,6 +543,33 @@ const ArmeHomeScreen: React.FC = () => {
                   {exportLoading ? 'מייצא לאקסל...' : 'ייצוא לאקסל (לפי פלוגות)'}
                 </Text>
                 <Text style={styles.reportOptionDescription}>מלאי החתמות כרגע בכל הפלוגות</Text>
+              </View>
+              <Ionicons
+                name="chevron-back"
+                size={20}
+                color={Colors.textLight}
+                style={styles.reportOptionChevron}
+              />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.reportOptionCard}
+              onPress={handleExportTodaySignatures}
+              activeOpacity={0.85}
+              disabled={todayExportLoading}
+            >
+              <View style={[styles.reportOptionIcon, { backgroundColor: Colors.success }]}>
+                {todayExportLoading ? (
+                  <ActivityIndicator size="small" color={Colors.textWhite} />
+                ) : (
+                  <Ionicons name="today-outline" size={20} color={Colors.textWhite} />
+                )}
+              </View>
+              <View style={styles.reportOptionContent}>
+                <Text style={styles.reportOptionTitle}>
+                  {todayExportLoading ? 'מייצא...' : 'חתימות היום לאקסל'}
+                </Text>
+                <Text style={styles.reportOptionDescription}>שם, מ.א., מסטב, שעה, ימים</Text>
               </View>
               <Ionicons
                 name="chevron-back"

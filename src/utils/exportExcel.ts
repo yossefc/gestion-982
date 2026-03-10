@@ -6,6 +6,84 @@ import { Assignment, AssignmentItem, Soldier, WeaponInventoryItem } from '../typ
 const FS = FileSystem as any;
 
 /**
+ * Exporte toutes les signatures du jour en Excel
+ * Colonnes: שם, מספר אישי, מסטב, שעה, ימים
+ */
+export async function exportTodaySignaturesToExcel(assignments: Assignment[]): Promise<void> {
+  const XLSX = await import('xlsx');
+
+  const today = new Date();
+
+  const signed = assignments
+    .filter(a => a.signature)
+    .sort((a, b) => {
+      const ta = a.timestamp instanceof Date ? a.timestamp.getTime() : new Date(a.timestamp as any).getTime();
+      const tb = b.timestamp instanceof Date ? b.timestamp.getTime() : new Date(b.timestamp as any).getTime();
+      return ta - tb;
+    });
+
+  if (signed.length === 0) {
+    throw new Error('לא נמצאו חתימות');
+  }
+
+  const rows = signed.map(a => {
+    const ts = a.timestamp instanceof Date ? a.timestamp : new Date(a.timestamp as any);
+
+    // שעה = HH:MM
+    const shaa = `${String(ts.getHours()).padStart(2, '0')}:${String(ts.getMinutes()).padStart(2, '0')}`;
+
+    // ימים = days elapsed from assignment date to today
+    const startOfToday = new Date(today);
+    startOfToday.setHours(0, 0, 0, 0);
+    const startOfTs = new Date(ts);
+    startOfTs.setHours(0, 0, 0, 0);
+    const yamim = Math.round((startOfToday.getTime() - startOfTs.getTime()) / (1000 * 60 * 60 * 24));
+
+    // מסטב = all serials from items
+    const serials = a.items
+      .filter(item => item.serial && item.serial.trim())
+      .map(item => item.serial!.trim())
+      .join(', ');
+
+    return {
+      'שם': a.soldierName,
+      'מספר אישי': a.soldierPersonalNumber,
+      'מסטב': serials || '',
+      'שעה': shaa,
+      'ימים': yamim,
+    };
+  });
+
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!dir'] = 'rtl';
+  ws['!cols'] = [
+    { wch: 22 }, // שם
+    { wch: 15 }, // מספר אישי
+    { wch: 30 }, // מסטב
+    { wch: 10 }, // שעה
+    { wch: 8 },  // ימים
+  ];
+
+  const wb = XLSX.utils.book_new();
+  const d = today;
+  const dateStr = `${String(d.getDate()).padStart(2, '0')}_${String(d.getMonth() + 1).padStart(2, '0')}_${d.getFullYear()}`;
+  XLSX.utils.book_append_sheet(wb, ws, `חתימות ${dateStr}`.substring(0, 31));
+
+  const wbout = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
+  const fileName = `signatures_${dateStr}.xlsx`;
+  const fileUri = FS.documentDirectory + fileName;
+
+  await FS.writeAsStringAsync(fileUri, wbout, { encoding: FS.EncodingType.Base64 });
+
+  if (await Sharing.isAvailableAsync()) {
+    await Sharing.shareAsync(fileUri, {
+      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      dialogTitle: 'ייצוא חתימות היום לאקסל',
+    });
+  }
+}
+
+/**
  * Convertit un tableau d'objets en CSV
  */
 function convertToCSV(data: any[], headers: string[]): string {

@@ -13,6 +13,7 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { RootStackParamList, Soldier, AssignmentItem } from '../../types';
 import { soldierService, combatEquipmentService, assignmentService } from '../../services/firebaseService';
 import { transactionalAssignmentService } from '../../services/transactionalAssignmentService';
+import { weaponInventoryService } from '../../services/weaponInventoryService';
 import { useAuth } from '../../contexts/AuthContext';
 import { Colors, Shadows } from '../../theme/Colors';
 import { openWhatsAppChat } from '../../services/whatsappService';
@@ -209,6 +210,28 @@ const CombatReturnScreen: React.FC = () => {
 
             const requestId = `combat_return_${soldierId}_${Date.now()}`;
 
+            // ── Résoudre les numéros de série → IDs d'armes AVANT la transaction ──
+            const weaponReleases: string[] = [];
+            for (const ci of creditItems) {
+              const serials = ci.serial
+                ? ci.serial.split(',').map((s: string) => s.trim()).filter(Boolean)
+                : [];
+              for (const serial of serials) {
+                try {
+                  const weapon = await weaponInventoryService.getWeaponBySerialNumber(serial);
+                  if (weapon) weaponReleases.push(weapon.id);
+                  else console.warn(`[CombatReturn] Weapon not found for serial: ${serial}`);
+                } catch (err) {
+                  console.warn(`[CombatReturn] Error resolving serial ${serial}:`, err);
+                }
+              }
+            }
+
+            if (weaponReleases.length > 0) {
+              console.log(`[CombatReturn] ${weaponReleases.length} weapon(s) will be released atomically in transaction`);
+            }
+
+            // ── Transaction atomique: credit + soldier_holdings + weapons_inventory ──
             await transactionalAssignmentService.returnEquipment({
               soldierId,
               soldierName: soldier?.name || '',
@@ -217,6 +240,7 @@ const CombatReturnScreen: React.FC = () => {
               items: creditItems,
               returnedBy: user?.id || '',
               requestId,
+              weaponReleases,
             });
 
             // Recalculer les holdings pour voir s'il reste quelque chose
@@ -290,11 +314,15 @@ const CombatReturnScreen: React.FC = () => {
             // Afficher succès avec options WhatsApp
             const returnedCount = selectedItems.reduce((sum, item) => sum + item.returnQuantity, 0);
 
+            const atomicNote = weaponReleases.length > 0
+              ? `\n✓ נרשם בו-זמנית: אחזקות חייל + נשקייה (${weaponReleases.length} נשק${weaponReleases.length > 1 ? 'ים' : ''})`
+              : '\n✓ נרשם: אחזקות חייל';
+
             setModalType('success');
             setModalTitle('הצלחה');
             setModalMessage(hasRemainingItems
-              ? `הזיכוי בוצע בהצלחה!\n\n${returnedCount} פריטים הוחזרו.\nנותרו ${remainingItems.length} פריטים בידי החייל.`
-              : `הזיכוי בוצע בהצלחה!\n\n${returnedCount} פריטים הוחזרו.\nהחייל החזיר את כל הציוד.`);
+              ? `הזיכוי בוצע בהצלחה!\n\n${returnedCount} פריטים הוחזרו.\nנותרו ${remainingItems.length} פריטים בידי החייל.${atomicNote}`
+              : `הזיכוי בוצע בהצלחה!\n\n${returnedCount} פריטים הוחזרו.\nהחייל החזיר את כל הציוד.${atomicNote}`);
             setModalButtons([
               {
                 text: 'שלח WhatsApp',

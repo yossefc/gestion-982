@@ -26,6 +26,7 @@ import {
   where,
   orderBy,
   setDoc,
+  deleteField,
 } from 'firebase/firestore';
 import { app } from '../config/firebase';
 import { Assignment, AssignmentItem, HoldingItem } from '../types';
@@ -44,6 +45,17 @@ const db = getFirestore(app);
 // TYPES
 // ============================================
 
+// Weapon inventory update to include atomically inside the transaction
+interface WeaponAssignUpdate {
+  weaponId: string;
+  assignedTo: {
+    soldierId: string;
+    soldierName: string;
+    soldierPersonalNumber: string;
+    voucherNumber: string;
+  };
+}
+
 interface IssueEquipmentParams {
   soldierId: string;
   soldierName: string;
@@ -59,6 +71,7 @@ interface IssueEquipmentParams {
   assignedByRank?: string;
   assignedByPersonalNumber?: string;
   requestId: string; // ID stable pour l'idempotence
+  weaponUpdates?: WeaponAssignUpdate[]; // Weapon inventory updates to apply atomically
 }
 
 interface ReturnEquipmentParams {
@@ -69,6 +82,7 @@ interface ReturnEquipmentParams {
   items: AssignmentItem[];
   returnedBy: string;
   requestId: string;
+  weaponReleases?: string[]; // Weapon IDs to release atomically (set back to available)
 }
 
 interface AddEquipmentParams {
@@ -86,6 +100,7 @@ interface AddEquipmentParams {
   addedByRank?: string;
   addedByPersonalNumber?: string;
   requestId: string;
+  weaponUpdates?: WeaponAssignUpdate[]; // Weapon inventory updates to apply atomically
 }
 
 // ============================================
@@ -557,9 +572,12 @@ export async function issueEquipment(params: IssueEquipmentParams): Promise<stri
     assignedByRank,
     assignedByPersonalNumber,
     requestId,
+    weaponUpdates = [],
   } = params;
 
   return await runTransaction(db, async (transaction: Transaction) => {
+    // ── READS FIRST (Firestore constraint) ──────────────────────────────────
+
     // 0. Vérifier l'idempotence (si le requestId a déjà été traité)
     const assignmentRef = doc(db, 'assignments', requestId);
     const assignmentSnap = await transaction.get(assignmentRef);
@@ -568,12 +586,18 @@ export async function issueEquipment(params: IssueEquipmentParams): Promise<stri
       return assignmentRef.id;
     }
 
-    // 1. Lire soldier_holdings (état courant) - DOIT ÊTRE FAIT AVANT LES WRITES
+    // 1. Lire soldier_holdings (état courant)
     const holdingId = `${soldierId}_${type}`;
     const holdingRef = doc(db, 'soldier_holdings', holdingId);
     const holdingSnap = await transaction.get(holdingRef);
 
-    // 2. Créer l'assignment (historique immuable avec ID stable - WRITE)
+    // 2. Lire les documents weapons_inventory concernés (nécessaire avant tout write)
+    const weaponRefs = weaponUpdates.map(wu => doc(db, 'weapons_inventory', wu.weaponId));
+    await Promise.all(weaponRefs.map(ref => transaction.get(ref)));
+
+    // ── WRITES ──────────────────────────────────────────────────────────────
+
+    // 3. Créer l'assignment (historique immuable avec ID stable)
     const assignmentData: any = {
       soldierId,
       soldierName,
@@ -597,12 +621,11 @@ export async function issueEquipment(params: IssueEquipmentParams): Promise<stri
 
     transaction.set(assignmentRef, assignmentData);
 
-    // 3. Mettre à jour soldier_holdings (WRITE)
+    // 4. Mettre à jour soldier_holdings
     const currentHoldings: HoldingItem[] = holdingSnap.exists()
       ? (holdingSnap.data().items || [])
       : [];
 
-    // Appliquer l'opération issue
     const newHoldings = applyOperationToHoldings(currentHoldings, items, 'issue');
     const outstandingCount = newHoldings.reduce((sum, item) => sum + item.quantity, 0);
 
@@ -617,6 +640,21 @@ export async function issueEquipment(params: IssueEquipmentParams): Promise<stri
       lastUpdated: Timestamp.now(),
     });
 
+    // 5. Mettre à jour weapons_inventory atomiquement (même transaction)
+    for (let i = 0; i < weaponUpdates.length; i++) {
+      const wu = weaponUpdates[i];
+      transaction.update(weaponRefs[i], {
+        status: 'assigned',
+        assignedTo: {
+          soldierId: wu.assignedTo.soldierId,
+          soldierName: wu.assignedTo.soldierName,
+          soldierPersonalNumber: wu.assignedTo.soldierPersonalNumber,
+          voucherNumber: wu.assignedTo.voucherNumber,
+          assignedDate: Timestamp.now(),
+        },
+      });
+    }
+
     return assignmentRef.id;
   });
 }
@@ -624,7 +662,7 @@ export async function issueEquipment(params: IssueEquipmentParams): Promise<stri
 /**
  * Return equipment from a soldier (�����)
  * Transaction atomique: assignment + soldier_holdings
- * Puis mise ? jour de l'inventaire des armes (hors transaction - requ?tes Firestore incompatibles)
+ * Transaction atomique: assignment + soldier_holdings + weapons_inventory (via weaponReleases pré-résolus)
  */
 export async function returnEquipment(params: ReturnEquipmentParams): Promise<string> {
   const {
@@ -635,11 +673,12 @@ export async function returnEquipment(params: ReturnEquipmentParams): Promise<st
     items,
     returnedBy,
     requestId,
+    weaponReleases = [],
   } = params;
 
-  // Transaction append-only: on ecrit un credit dans assignments + mise a jour soldier_holdings uniquement.
+  return await runTransaction(db, async (transaction: Transaction) => {
+    // ── READS FIRST (Firestore constraint) ──────────────────────────────────
 
-  const assignmentId = await runTransaction(db, async (transaction: Transaction) => {
     // 0. Idempotence
     const assignmentRef = doc(db, 'assignments', requestId);
     const assignmentSnap = await transaction.get(assignmentRef);
@@ -653,8 +692,13 @@ export async function returnEquipment(params: ReturnEquipmentParams): Promise<st
     const holdingRef = doc(db, 'soldier_holdings', holdingId);
     const holdingSnap = await transaction.get(holdingRef);
 
-    // 2. Créer l'assignment (historique - WRITE)
-    // action 'credit' + status 'זוכה' : cohérent avec l'UI "זיכוי חייל"
+    // 2. Lire les documents weapons_inventory à libérer
+    const weaponRefs = weaponReleases.map(id => doc(db, 'weapons_inventory', id));
+    await Promise.all(weaponRefs.map(ref => transaction.get(ref)));
+
+    // ── WRITES ──────────────────────────────────────────────────────────────
+
+    // 3. Créer l'assignment (historique - action 'credit')
     const assignmentData: any = {
       soldierId,
       soldierName,
@@ -670,7 +714,7 @@ export async function returnEquipment(params: ReturnEquipmentParams): Promise<st
 
     transaction.set(assignmentRef, assignmentData);
 
-    // 3. Mettre à jour soldier_holdings
+    // 4. Mettre à jour soldier_holdings
     if (!holdingSnap.exists()) {
       throw new Error('No holdings found for this soldier');
     }
@@ -689,41 +733,18 @@ export async function returnEquipment(params: ReturnEquipmentParams): Promise<st
       status: outstandingCount > 0 ? 'OPEN' : 'CLOSED',
       lastUpdated: Timestamp.now(),
     });
-    // Append-only: conserver l'historique assignments.
-    // Aucun nettoyage/suppression des anciens 'issue' et aucune ecriture legacy soldier_equipment.
+
+    // 5. Libérer les armes dans weapons_inventory atomiquement
+    for (const weaponRef of weaponRefs) {
+      transaction.update(weaponRef, {
+        status: 'available',
+        assignedTo: deleteField(),
+        storageDate: deleteField(),
+      });
+    }
 
     return assignmentRef.id;
   });
-
-  // Mise à jour de l'inventaire des armes APRÈS la transaction
-  // (les requêtes Firestore ne sont pas compatibles avec runTransaction)
-  // Un échec ici ne remet pas en cause le crédit déjà enregistré, on log et on continue
-  if (type === 'combat') {
-    try {
-      await Promise.all(items.map(async (item) => {
-        const serials = item.serial
-          ? item.serial.split(',').map((s: string) => s.trim()).filter(Boolean)
-          : [];
-
-        await Promise.all(serials.map(async (serial) => {
-          try {
-            const weapon = await weaponInventoryService.getWeaponBySerialNumber(serial);
-            if (weapon) {
-              await weaponInventoryService.setWeaponAvailableStatusOnlyOffline(weapon.id);
-            } else {
-              console.warn(`[ReturnEquipment] Arme introuvable dans l'inventaire pour le : ${serial}`);
-            }
-          } catch (err) {
-            console.warn(`[ReturnEquipment] echec mise à jour inventaire pour ${serial}:`, err);
-          }
-        }));
-      }));
-    } catch (err) {
-      console.error("[ReturnEquipment] Erreur globale lors de la libération des armes:", err);
-    }
-  }
-
-  return assignmentId;
 }
 
 /**
@@ -746,9 +767,12 @@ export async function addEquipment(params: AddEquipmentParams): Promise<string> 
     addedByRank,
     addedByPersonalNumber,
     requestId,
+    weaponUpdates = [],
   } = params;
 
   return await runTransaction(db, async (transaction: Transaction) => {
+    // ── READS FIRST (Firestore constraint) ──────────────────────────────────
+
     // 0. Idempotence
     const assignmentRef = doc(db, 'assignments', requestId);
     const assignmentSnap = await transaction.get(assignmentRef);
@@ -762,7 +786,13 @@ export async function addEquipment(params: AddEquipmentParams): Promise<string> 
     const holdingRef = doc(db, 'soldier_holdings', holdingId);
     const holdingSnap = await transaction.get(holdingRef);
 
-    // 2. Créer l'assignment (historique - WRITE)
+    // 2. Lire les documents weapons_inventory concernés
+    const weaponRefs = weaponUpdates.map(wu => doc(db, 'weapons_inventory', wu.weaponId));
+    await Promise.all(weaponRefs.map(ref => transaction.get(ref)));
+
+    // ── WRITES ──────────────────────────────────────────────────────────────
+
+    // 3. Créer l'assignment (historique)
     const assignmentData: any = {
       soldierId,
       soldierName,
@@ -786,7 +816,7 @@ export async function addEquipment(params: AddEquipmentParams): Promise<string> 
 
     transaction.set(assignmentRef, assignmentData);
 
-    // 3. Mettre à jour soldier_holdings
+    // 4. Mettre à jour soldier_holdings
     const currentHoldings: HoldingItem[] = holdingSnap.exists()
       ? (holdingSnap.data().items || [])
       : [];
@@ -804,6 +834,21 @@ export async function addEquipment(params: AddEquipmentParams): Promise<string> 
       status: 'OPEN',
       lastUpdated: Timestamp.now(),
     });
+
+    // 5. Mettre à jour weapons_inventory atomiquement
+    for (let i = 0; i < weaponUpdates.length; i++) {
+      const wu = weaponUpdates[i];
+      transaction.update(weaponRefs[i], {
+        status: 'assigned',
+        assignedTo: {
+          soldierId: wu.assignedTo.soldierId,
+          soldierName: wu.assignedTo.soldierName,
+          soldierPersonalNumber: wu.assignedTo.soldierPersonalNumber,
+          voucherNumber: wu.assignedTo.voucherNumber,
+          assignedDate: Timestamp.now(),
+        },
+      });
+    }
 
     return assignmentRef.id;
   });
